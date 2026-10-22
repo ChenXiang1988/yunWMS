@@ -158,7 +158,7 @@
 | 工作流 | Flowable | Apache-2.0 | 可选；首版用显式状态机即可，不急于引入 |
 | 认证 | Sa-Token 或 Spring Security | Apache-2.0 | 二选一 |
 | 消息 | RocketMQ 或 Kafka | Apache-2.0 | MVP 可暂不引入 |
-| 前端 | Vue 3 + Element Plus | MIT | 不沿用 GreaterWMS 的 Vue2 前端 |
+| 前端 | Vue 3 + Ant Design Vue 4（迁移中）；PDA 为 Vant 4 | MIT | 选型依据与迁移代价见 `docs/research/frontend-stack.md`；不沿用 GreaterWMS 的 Vue2 前端 |
 | 脚手架 | RuoYi-Vue | MIT | 可选，仅取权限与代码生成；引入前须核查其传递依赖是否带 GPL |
 
 结论：技术选型不存在必须付费的组件，GPL 类依赖（XXL-Job、JeeWMS）全部可替换。
@@ -190,6 +190,8 @@
 ### 6.6 MVP 顺序
 
 仓库主数据 → 库存流水与多口径余额 → 入库 → 出库（不含波次）→ 任务中心 → 波次与策略 → PDA → 设备对接。
+
+> 注：令牌三轴结构（主题 / 密度 / 平台）须先于上述顺序落地。它是横切结构，等 PDA 上线再拆就要重过一遍所有已上线页面。
 
 ## 7. 主要风险
 
