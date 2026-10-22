@@ -175,6 +175,8 @@ export interface ThemeConfig {
 | PDA 一期范围 | **仅商品查询**：扫描 SKU → 展示档案 |
 | 点按区档位 | **56px**（普通作业手套），不设 64px 档 |
 | 真机探针页 | **不做**。按 320×533 推导设计，真机验收时再校准 |
+| `/_tokens` 对照页归属 | 放 `apps/network-console` 的 dev-only 路由。用 `data-platform` 容器并排渲染 Web 与 PDA 两套值，纯 HTML + CSS 变量，不需要任何 UI 库 |
+| Vant 引入方式 | **手动按需 `import` 组件 + 全量引入 Vant CSS**。JS 走 tree-shaking（2GB 设备的瓶颈在 JS），CSS 全量一次引完，避免依赖 `vant/es/<组件>/style` 这类跨版本会变的内部路径。组件数超过 8–10 个时再评估 `unplugin-vue-components` |
 
 一期 Vant 组件清单（随范围收窄到最小）：`Field`（扫码输入）/ `Cell` + `CellGroup`（档案展示）/ `Toast`（扫码结果反馈）。不需要 NumberKeyboard、Picker、Dialog、虚拟列表。
 
