@@ -1,15 +1,31 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { Button, Descriptions, DescriptionsItem, Input, Tag, Tree } from 'ant-design-vue'
 import { PageHeader } from '@yunwms/ui-web'
 
+interface RawNode {
+  label: string
+  children?: RawNode[]
+}
+
 interface TreeNode {
+  key: string
   label: string
   children?: TreeNode[]
 }
 
 const keyword = ref('')
 
-const treeData: TreeNode[] = [
+/** antd 的 Tree 要求每个节点有 key，这里用 label 派生，保持数据源只写一次 */
+function withKey(nodes: RawNode[]): TreeNode[] {
+  return nodes.map((node) => ({
+    key: node.label,
+    label: node.label,
+    children: node.children ? withKey(node.children) : undefined
+  }))
+}
+
+const rawTree: RawNode[] = [
   {
     label: '宝安一号仓（WH0001）',
     children: [
@@ -33,6 +49,13 @@ const treeData: TreeNode[] = [
   }
 ]
 
+const treeData = withKey(rawTree)
+
+/** 数据用 label 作字段名，映射到 antd Tree 的 title */
+const treeFieldNames = {
+  title: 'label'
+}
+
 const profile = [
   { label: '仓库编码', value: 'WH0001' },
   { label: '仓库别名', value: '宝安一号仓' },
@@ -41,37 +64,43 @@ const profile = [
   { label: '时区', value: 'Asia/Shanghai' },
   { label: '状态', value: '启用' }
 ]
+
+const capabilities = ['入库', '出库', '退货', '换标', '贴标', '塑封']
 </script>
 
 <template>
   <div>
     <PageHeader title="仓库网络" description="仓库档案、空间层级与库位">
       <template #actions>
-        <el-button>库位导入</el-button>
-        <el-button type="primary">新建仓库</el-button>
+        <Button>库位导入</Button>
+        <Button type="primary">新建仓库</Button>
       </template>
     </PageHeader>
 
     <div class="warehouse">
       <section class="panel warehouse__tree">
         <h2 class="panel__title">空间树</h2>
-        <el-input v-model="keyword" placeholder="搜索库位编码" clearable size="small" class="warehouse__search" />
-        <el-tree :data="treeData" node-key="label" default-expand-all :expand-on-click-node="false" />
+        <Input
+          v-model:value="keyword"
+          placeholder="搜索库位编码"
+          allow-clear
+          size="small"
+          class="warehouse__search"
+        />
+        <Tree :tree-data="treeData" :field-names="treeFieldNames" default-expand-all />
       </section>
 
       <section class="panel warehouse__detail">
         <h2 class="panel__title">仓库档案</h2>
-        <el-descriptions :column="2" border>
-          <el-descriptions-item v-for="item in profile" :key="item.label" :label="item.label">
+        <Descriptions :column="2" bordered size="small">
+          <DescriptionsItem v-for="item in profile" :key="item.label" :label="item.label">
             {{ item.value }}
-          </el-descriptions-item>
-        </el-descriptions>
+          </DescriptionsItem>
+        </Descriptions>
 
         <h2 class="panel__title warehouse__section">服务能力</h2>
         <div class="warehouse__caps">
-          <el-tag v-for="cap in ['入库', '出库', '退货', '换标', '贴标', '塑封']" :key="cap" type="info">
-            {{ cap }}
-          </el-tag>
+          <Tag v-for="cap in capabilities" :key="cap">{{ cap }}</Tag>
         </div>
       </section>
     </div>
