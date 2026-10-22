@@ -10,13 +10,11 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "@element-plus/icons-vue": "^2.3.2",
+    "@ant-design/icons-vue": "^7.0.1",
     "@yunwms/request": "workspace:*",
     "@yunwms/tokens": "workspace:*",
     "@yunwms/ui-web": "workspace:*",
-    "@ant-design/icons-vue": "^7.0.1",
     "ant-design-vue": "^4.2.6",
-    "element-plus": "^2.9.1",
     "vue": "^3.5.13",
     "vue-i18n": "^11.4.16",
     "vue-router": "^4.5.0"
