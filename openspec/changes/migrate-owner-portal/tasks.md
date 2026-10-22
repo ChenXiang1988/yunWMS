@@ -18,10 +18,12 @@
 
 ## 4. 应用迁移
 
-- [ ] 4.1 `main.ts` 改用 `ant-design-vue` 与 `ant-design-vue/dist/reset.css`，移除 EP 引入，验证：构建产物 CSS 中不再出现 `--el-` 变量
-- [ ] 4.2 `App.vue` 增加 `ConfigProvider` 与 `App` 包裹，新增 `AppBootstrap` 子组件注入 `message` 与 HTTP 错误处理，验证：手动触发一次 401 响应，提示正常弹出且颜色取自令牌而非 antd 默认
-- [ ] 4.3 `BasicLayout.vue` 换成 antd 组件（布局、按钮、下拉、分割线），验证：侧栏为浅色、折叠按钮可用、控制台无 `Failed to resolve component`
-- [ ] 4.4 迁移 3 个页面（登录 / 工作台 / 商品管理），验证：每页可正常渲染与交互，浏览器控制台无报错
+> 顺序说明：移除 Element Plus 的引入必须放在最后。此前把「移除 EP 引入」排在第一位，会让仍在用 `el-*` 的页面直接渲染失败。
+
+- [ ] 4.1 `App.vue` 增加 `ConfigProvider` 与 `App` 包裹，新增 `AppBootstrap` 子组件注入 `message` 与 HTTP 错误处理，验证：`/product` 页的 antd Tag 背景变为 `--color-success-bg` 的值（当前为 antd 默认 `#f6ffed`）
+- [ ] 4.2 `BasicLayout.vue` 换成 antd 组件（布局、按钮、下拉、分割线），验证：侧栏为浅色、折叠按钮可用、控制台无 `Failed to resolve component`
+- [ ] 4.3 迁移 3 个页面（登录 / 工作台 / 商品管理），验证：每页可正常渲染与交互，浏览器控制台无报错
+- [ ] 4.4 `main.ts` 移除 EP 引入与 `app.use(ElementPlus)`，改引 `ant-design-vue/dist/reset.css`，验证：构建产物 CSS 中不再出现 `--el-` 变量，且三个页面仍正常渲染
 
 ## 5. 收尾
 
