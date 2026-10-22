@@ -22,12 +22,12 @@
 
 - [x] 4.1 `App.vue` 增加 `ConfigProvider` 与 `App` 包裹，新增 `AppBootstrap` 子组件注入 `message` 与 HTTP 错误处理，验证：`/product` 页的 antd Tag 背景变为 `--color-success-bg` 的值（当前为 antd 默认 `#f6ffed`）
 - [x] 4.2 `BasicLayout.vue` 换成 antd 组件（菜单、按钮、分割线），菜单为静态两项并显式 import，验证：菜单渲染 2 项、选中态底色等于 `--sidebar-item-active`、点击可跳转、控制台无报错
-- [x] 4.3 迁移 3 个页面（登录 / 工作台 / 商品管理），验证：每页可正常渲染与交互，浏览器控制台无报错
-- [ ] 4.4 `main.ts` 移除 EP 引入与 `app.use(ElementPlus)`，改引 `ant-design-vue/dist/reset.css`，验证：构建产物 CSS 中不再出现 `--el-` 变量，且三个页面仍正常渲染
+- [x] 4.3 迁移页面，验证：每页可正常渲染与交互，浏览器控制台无报错。实际只改了登录与商品管理两页——工作台页原本就只用 ui-web 与令牌，无 EP 组件
+- [x] 4.4 `main.ts` 移除 EP 引入与 `app.use(ElementPlus)`，改引 `ant-design-vue/dist/reset.css`，验证：构建产物 CSS 中不再出现 `--el-` 变量，且三个页面仍正常渲染
 
 ## 5. 收尾
 
-- [ ] 5.1 移除 `owner-portal` 对 `element-plus` 与 `@element-plus/icons-vue` 的依赖，验证：`pnpm --filter @yunwms/owner-portal why element-plus` 输出为空
-- [ ] 5.2 更新 `openspec/config.yaml` 的技术栈行为「Vue 3 + Element Plus（迁移至 Ant Design Vue 4，进行中）」，验证：文件内出现该表述
-- [ ] 5.3 在 `docs/frontend.md` 补记「antd 侧无法用 CSS 变量切换密度」的限制，验证：该文件「已验证与待验证」表内出现对应条目
+- [x] 5.1 移除 `owner-portal` 对 `element-plus` 与 `@element-plus/icons-vue` 的依赖，验证：`pnpm --filter @yunwms/owner-portal why element-plus` 输出为空
+- [x] 5.2 更新 `openspec/config.yaml` 的技术栈行为「Vue 3 + Element Plus（迁移至 Ant Design Vue 4，进行中）」，验证：文件内出现该表述
+- [x] 5.3 在 `docs/frontend.md` 补记「antd 侧无法用 CSS 变量切换密度」的限制，验证：该文件「已验证与待验证」表内出现对应条目
 - [ ] 5.4 人工走查 3 个页面并与 EP 版本对照，记录差异清单，验证：差异项逐条确认可接受或有对应处理

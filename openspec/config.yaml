@@ -6,7 +6,7 @@ context: |
   Keep OpenSpec structural headings and SHALL/MUST keywords in English.
 
   项目：yunWMS，多货主 3PL 云仓储管理系统。由 AI 编写全部代码，人类只做验收。
-  技术栈：Java 21 + Spring Boot 3.x、MyBatis-Plus、PostgreSQL、Valkey、Vue 3 + Element Plus。
+  技术栈：Java 21 + Spring Boot 3.x、MyBatis-Plus、PostgreSQL、Valkey、Vue 3 + Element Plus（Web 端迁移至 Ant Design Vue 4，进行中）。
   业务前提：多货主 3PL，tenant_id（系统租户）与 owner_id（货主）双维度；货位属仓库，库存属货主，同一货位可存放多货主货物。
   许可约束：默认零商业授权预算，GPL/AGPL/SSPL 依赖一律不得引入，包括 XXL-Job、JeeWMS、MySQL、Redis 7.4+。已批准的唯一付费组件为 hiprint 打印客户端（静默打印必需，用户自行采购），其余保持零授权。
   调研门禁：任何新功能域在实现前必须完成开源调研，产物落 docs/research/<主题>.md，并在 proposal 中引用。
