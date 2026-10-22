@@ -40,5 +40,9 @@ jobs:
       - name: 类型检查
         run: pnpm -r typecheck
 
+      # 只有声明了 test 脚本的包会被执行；当前仅 @yunwms/tokens
+      - name: 单元测试
+        run: pnpm -r test
+
       - name: 构建
         run: pnpm -r build
