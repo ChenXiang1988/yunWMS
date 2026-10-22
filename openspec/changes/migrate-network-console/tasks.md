@@ -18,14 +18,14 @@
 
 ## 3. 移除 Element Plus
 
-- [ ] 3.1 `main.ts` 移除 EP 引入与 `app.use(ElementPlus)`，改引 `ant-design-vue/dist/reset.css` 与 antd 中文包，验证：产物 CSS 中 `--el-` 计数为 0
-- [ ] 3.2 移除 `element-plus`、`@element-plus/icons-vue` 依赖，验证：`pnpm --filter @yunwms/network-console why element-plus` 输出为空
-- [ ] 3.3 删除 `packages/ui`（EP 版）及其 `exports`，network-console 不再引用，验证：全仓库 `grep -r "@yunwms/ui\b"` 无结果
-- [ ] 3.4 删除 `packages/tokens/src/element-plus.css` 与 `exports` 的 `./element-plus`，验证：全仓库无 `tokens/element-plus` 引用
+- [x] 3.1 `main.ts` 移除 EP 引入与 `app.use(ElementPlus)`，改引 `ant-design-vue/dist/reset.css` 与 antd 中文包，验证：产物 CSS 中 `--el-` 计数为 0
+- [x] 3.2 移除 `element-plus`、`@element-plus/icons-vue` 依赖，验证：`pnpm --filter @yunwms/network-console why element-plus` 输出为空
+- [x] 3.3 删除 `packages/ui`（EP 版）及其 `exports`，network-console 不再引用，验证：全仓库 `grep -r "@yunwms/ui\b"` 无结果
+- [x] 3.4 删除 `packages/tokens/src/element-plus.css` 与 `exports` 的 `./element-plus`，验证：全仓库无 `tokens/element-plus` 引用
 
 ## 4. 收尾
 
 - [x] 4.1 `openspec/config.yaml` 技术栈行改为 `Vue 3 + Ant Design Vue 4`，去掉"进行中"，验证：文件内无"迁移至"字样
 - [x] 4.2 `docs/frontend.md` 端表改为仓网端 antd、组件包改为 `ui-web`，并移除"待迁移"表述，验证：表格与仓库结构一致
-- [ ] 4.3 两应用并排对比（登录 / 商品 / 工作台），确认菜单与表格观感一致，记录差异清单
-- [ ] 4.4 交付说明：列出改动文件、验证方式、遗留问题
+- [x] 4.3 两应用并排对比（登录 / 商品 / 工作台），确认菜单与表格观感一致，记录差异清单
+- [x] 4.4 交付说明：列出改动文件、验证方式、遗留问题
