@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Table } from 'ant-design-vue'
 import { PageHeader } from '@yunwms/ui-web'
 
 const stats = [
@@ -8,10 +9,24 @@ const stats = [
   { label: '待审核档案', value: '126' }
 ]
 
-const rows = [
+interface Row {
+  warehouse: string
+  owner: string
+  sku: number
+  pending: number
+}
+
+const rows: Row[] = [
   { warehouse: '宝安一号仓', owner: '深圳西之月', sku: 24810, pending: 42 },
   { warehouse: '龙岗二号仓', owner: '广州南风', sku: 18620, pending: 31 },
   { warehouse: '东莞三号仓', owner: '海外代运营', sku: 9320, pending: 53 }
+]
+
+const columns = [
+  { title: '仓库', dataIndex: 'warehouse', key: 'warehouse', width: 200 },
+  { title: '货主', dataIndex: 'owner', key: 'owner', width: 200 },
+  { title: 'SKUID 数', dataIndex: 'sku', key: 'sku', width: 140 },
+  { title: '待审核', dataIndex: 'pending', key: 'pending', width: 120 }
 ]
 </script>
 
@@ -28,12 +43,14 @@ const rows = [
 
     <section class="panel">
       <h2 class="panel__title">各仓商品与待审量</h2>
-      <el-table :data="rows" border>
-        <el-table-column prop="warehouse" label="仓库" min-width="160" />
-        <el-table-column prop="owner" label="货主" min-width="160" />
-        <el-table-column prop="sku" label="SKUID 数" width="140" />
-        <el-table-column prop="pending" label="待审核" width="120" />
-      </el-table>
+      <Table
+        :data-source="rows"
+        :columns="columns"
+        :pagination="false"
+        row-key="warehouse"
+        bordered
+        size="middle"
+      />
     </section>
   </div>
 </template>
