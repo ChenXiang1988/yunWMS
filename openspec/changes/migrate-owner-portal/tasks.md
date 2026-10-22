@@ -22,7 +22,7 @@
 
 - [x] 4.1 `App.vue` 增加 `ConfigProvider` 与 `App` 包裹，新增 `AppBootstrap` 子组件注入 `message` 与 HTTP 错误处理，验证：`/product` 页的 antd Tag 背景变为 `--color-success-bg` 的值（当前为 antd 默认 `#f6ffed`）
 - [x] 4.2 `BasicLayout.vue` 换成 antd 组件（菜单、按钮、分割线），菜单为静态两项并显式 import，验证：菜单渲染 2 项、选中态底色等于 `--sidebar-item-active`、点击可跳转、控制台无报错
-- [ ] 4.3 迁移 3 个页面（登录 / 工作台 / 商品管理），验证：每页可正常渲染与交互，浏览器控制台无报错
+- [x] 4.3 迁移 3 个页面（登录 / 工作台 / 商品管理），验证：每页可正常渲染与交互，浏览器控制台无报错
 - [ ] 4.4 `main.ts` 移除 EP 引入与 `app.use(ElementPlus)`，改引 `ant-design-vue/dist/reset.css`，验证：构建产物 CSS 中不再出现 `--el-` 变量，且三个页面仍正常渲染
 
 ## 5. 收尾

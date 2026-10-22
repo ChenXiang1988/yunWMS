@@ -1,5 +1,15 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import {
+  Button,
+  Form,
+  FormItem,
+  Input,
+  Pagination,
+  Select,
+  SelectOption,
+  Table
+} from 'ant-design-vue'
 import { PageHeader, StatusTag } from '@yunwms/ui-web'
 
 type Status = 'draft' | 'pending' | 'active' | 'disabled' | 'rejected'
@@ -23,7 +33,18 @@ const STATUS_TEXT: Record<Status, string> = {
 }
 
 const keyword = ref('')
-const status = ref('')
+const status = ref<string | undefined>(undefined)
+
+const columns = [
+  { title: 'SKUID', dataIndex: 'skuId', key: 'skuId', width: 135 },
+  { title: '货主商品编码', dataIndex: 'ownerCode', key: 'ownerCode', width: 120 },
+  { title: '商品名称', dataIndex: 'name', key: 'name' },
+  { title: '条码', dataIndex: 'barcode', key: 'barcode', width: 150 },
+  { title: '包装', dataIndex: 'pack', key: 'pack', width: 125 },
+  { title: '状态', key: 'status', width: 90 },
+  { title: '更新时间', dataIndex: 'updatedAt', key: 'updatedAt', width: 155 },
+  { title: '操作', key: 'actions', width: 130 }
+]
 
 const rows = ref<SkuRow[]>([
   {
@@ -63,60 +84,73 @@ const rows = ref<SkuRow[]>([
     updatedAt: '2026-10-19 09:12'
   }
 ])
+
+function statusText(record: SkuRow): string {
+  return STATUS_TEXT[record.status]
+}
 </script>
 
 <template>
   <div>
     <PageHeader title="商品管理" description="SKUID 由系统分配，实物需贴对应标签">
       <template #actions>
-        <el-button>批量导入</el-button>
-        <el-button>打印标签</el-button>
-        <el-button type="primary">新建商品</el-button>
+        <Button>批量导入</Button>
+        <Button>打印标签</Button>
+        <Button type="primary">新建商品</Button>
       </template>
     </PageHeader>
 
     <section class="panel">
-      <el-form inline class="filters">
-        <el-form-item label="关键词">
-          <el-input v-model="keyword" placeholder="SKUID / 编码 / 名称 / 条码" clearable style="width: 260px" />
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="status" placeholder="全部" clearable style="width: 140px">
-            <el-option label="草稿" value="draft" />
-            <el-option label="待审核" value="pending" />
-            <el-option label="已启用" value="active" />
-            <el-option label="已驳回" value="rejected" />
-            <el-option label="已停用" value="disabled" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary">查询</el-button>
-          <el-button>重置</el-button>
-        </el-form-item>
-      </el-form>
+      <Form layout="inline" class="filters">
+        <FormItem label="关键词">
+          <Input
+            v-model:value="keyword"
+            placeholder="SKUID / 编码 / 名称 / 条码"
+            allow-clear
+            style="width: 260px"
+          />
+        </FormItem>
+        <FormItem label="状态">
+          <Select
+            v-model:value="status"
+            placeholder="全部"
+            allow-clear
+            style="width: 140px"
+          >
+            <SelectOption value="draft">草稿</SelectOption>
+            <SelectOption value="pending">待审核</SelectOption>
+            <SelectOption value="active">已启用</SelectOption>
+            <SelectOption value="rejected">已驳回</SelectOption>
+            <SelectOption value="disabled">已停用</SelectOption>
+          </Select>
+        </FormItem>
+        <FormItem>
+          <Button type="primary">查询</Button>
+          <Button class="filters__reset">重置</Button>
+        </FormItem>
+      </Form>
 
-      <el-table :data="rows" border>
-        <el-table-column prop="skuId" label="SKUID" width="135" />
-        <el-table-column prop="ownerCode" label="货主商品编码" width="120" />
-        <el-table-column prop="name" label="商品名称" min-width="150" />
-        <el-table-column prop="barcode" label="条码" width="150" />
-        <el-table-column prop="pack" label="包装" width="125" />
-        <el-table-column label="状态" width="90">
-          <template #default="{ row }">
-            <StatusTag :status="row.status" :text="STATUS_TEXT[row.status as Status]" />
+      <Table
+        :data-source="rows"
+        :columns="columns"
+        :pagination="false"
+        row-key="skuId"
+        bordered
+        size="middle"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'status'">
+            <StatusTag :status="(record as SkuRow).status" :text="statusText(record as SkuRow)" />
           </template>
-        </el-table-column>
-        <el-table-column prop="updatedAt" label="更新时间" width="155" />
-        <el-table-column label="操作" width="130">
-          <template #default>
-            <el-button link type="primary">详情</el-button>
-            <el-button link>打印</el-button>
+          <template v-else-if="column.key === 'actions'">
+            <Button type="link" size="small">详情</Button>
+            <Button type="link" size="small">打印</Button>
           </template>
-        </el-table-column>
-      </el-table>
+        </template>
+      </Table>
 
       <div class="pager">
-        <el-pagination layout="prev, pager, next" :total="1248" :page-size="20" />
+        <Pagination :total="1248" :page-size="20" />
       </div>
     </section>
   </div>
@@ -125,6 +159,10 @@ const rows = ref<SkuRow[]>([
 <style scoped>
 .filters {
   margin-bottom: var(--space-2);
+}
+
+.filters__reset {
+  margin-left: var(--space-2);
 }
 
 .pager {

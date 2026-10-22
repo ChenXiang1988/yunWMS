@@ -137,3 +137,11 @@ Element Plus 通过 `app.use(ElementPlus)` 全局注册，所以原代码里 `<e
 - `Menu` 与原生 `<menu>` 标签同名，本 change 用 `Menu as AntMenu` 别名规避歧义
 
 **教训：迁移 EP → antd 时，"组件没注册"是静默失败，类型检查与构建都发现不了，只能靠运行时看页面。**
+
+## 10. antd 的默认灰需要逐个映射
+
+实测商品管理页：表头底色为 `rgb(250,250,250)`，而令牌 `--color-table-header-bg` 是 `#f7f8fa`。原因是 antd 用 alias token `colorFillAlter` 画表头，未映射时退回自己的默认值。
+
+补齐后：表头 `rgb(247,248,250)` = `#f7f8fa`，表格边框 `rgb(241,243,245)` = `#f1f3f5`（`colorBorderSecondary`），单元格文字 `rgb(20,24,29)` = `#14181d`。
+
+**结论：这类偏差肉眼几乎看不出（#fafafa 与 #f7f8fa 差 3 个色阶），但确实不是令牌值。验收必须抽查计算样式，不能只看截图。**

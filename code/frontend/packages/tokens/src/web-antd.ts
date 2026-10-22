@@ -43,6 +43,9 @@ export const antdTheme = {
     colorBorder: primitives.color.gray[200],
     colorBorderSecondary: primitives.color.gray[100],
 
+    /* 浅填充：antd 用它画表头底色，令牌对应 --color-table-header-bg（gray-50） */
+    colorFillAlter: primitives.color.gray[50],
+
     /* 字体与圆角 */
     fontFamily: primitives.font.family.sans,
     fontSize: primitives.font.size.base,
