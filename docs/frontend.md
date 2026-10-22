@@ -10,7 +10,7 @@
 
 | 端 | 应用 | UI 库 | 组件包 |
 | --- | --- | --- | --- |
-| 仓网端 | `apps/network-console` | Element Plus（待迁移至 Ant Design Vue 4） | `packages/ui`（过渡） |
+| 仓网端 | `apps/network-console` | Ant Design Vue 4 | `packages/ui-web` |
 | 货主端 | `apps/owner-portal` | Ant Design Vue 4 | `packages/ui-web` |
 | PDA | `apps/pda`（待建） | Vant 4 | `packages/ui-pda`（待建） |
 
@@ -27,7 +27,7 @@
 
 跨端通用组件在各自包内分别实现，不做"一套代码两端跑"的抽象。
 
-过渡期：现有 `packages/ui`（Element Plus 版）在 `migrate-network-console` 归档前保留，由未迁应用使用；归档时删除，功能由 `packages/ui-web` 承接。
+两个 Web 端已全部迁至 Ant Design Vue 4，`packages/ui`（Element Plus 版）与 `tokens/element-plus.css` 适配器已删除。
 
 ### 1.3 新增一个端
 
@@ -101,7 +101,7 @@ primitives.ts（原始值，唯一真源）
 
 | 事项 | 状态 |
 | --- | --- |
-| Element Plus 通过 CSS 变量桥接 | 已验证，现有实现 |
+| Element Plus 通过 CSS 变量桥接 | 已废弃：两个 Web 端均迁移完毕，适配器已删除 |
 | antd-vue 4 是否支持 `theme.cssVar` 模式 | **已验证不支持**（4.2.6 的 `ThemeConfig` 无该字段）。Web 端令牌将改为 TS 真源，生成 CSS；`primitive.css` 届时转为生成物，不再手改 |
 | antd-vue 4 的 Menu 组件 token 名 | **已验证**：Menu 为 antd v4 命名（`radiusItem`、`colorItemText*`、`itemMarginInline`）；Button / Table 无组件级 token；菜单项高度来自全局 `controlHeightLG` |
 | antd 侧能否用 CSS 变量切换密度 | **不支持**。`ConfigProvider` 的 theme 是 JS 对象，不随 `data-density` 变化；需要按密度准备两套主题并替换 `ConfigProvider` |
