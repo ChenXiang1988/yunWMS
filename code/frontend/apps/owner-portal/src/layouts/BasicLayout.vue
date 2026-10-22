@@ -2,7 +2,8 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Box, Odometer } from '@element-plus/icons-vue'
+import { AppstoreOutlined, DashboardOutlined } from '@ant-design/icons-vue'
+import { Button, Divider, Menu as AntMenu, MenuItem as AntMenuItem } from 'ant-design-vue'
 import { clearToken } from '@yunwms/request'
 
 const route = useRoute()
@@ -10,15 +11,16 @@ const router = useRouter()
 const { t, locale } = useI18n()
 
 const menuItems = computed(() => [
-  { index: '/dashboard', label: t('menu.dashboard'), icon: Odometer },
-  { index: '/product', label: t('menu.product'), icon: Box }
+  { key: '/dashboard', label: t('menu.dashboard'), icon: DashboardOutlined },
+  { key: '/product', label: t('menu.product'), icon: AppstoreOutlined }
 ])
 
-const activeMenu = computed(() => route.path)
+const selectedKeys = computed(() => [route.path])
 
-function handleSelect(index: string) {
-  if (index !== route.path) {
-    router.push(index)
+function handleMenuClick(info: { key: string | number }) {
+  const key = String(info.key)
+  if (key !== route.path) {
+    void router.push(key)
   }
 }
 
@@ -44,25 +46,30 @@ function logout() {
         </div>
       </div>
 
-      <el-menu :default-active="activeMenu" class="layout__menu" @select="handleSelect">
-        <el-menu-item v-for="item in menuItems" :key="item.index" :index="item.index">
-          <el-icon class="layout__menu-icon">
+      <AntMenu
+        class="layout__menu"
+        mode="inline"
+        :selected-keys="selectedKeys"
+        @click="handleMenuClick"
+      >
+        <AntMenuItem v-for="item in menuItems" :key="item.key">
+          <template #icon>
             <component :is="item.icon" />
-          </el-icon>
-          <span>{{ item.label }}</span>
-        </el-menu-item>
-      </el-menu>
+          </template>
+          {{ item.label }}
+        </AntMenuItem>
+      </AntMenu>
     </aside>
 
     <div class="layout__body">
       <header class="layout__header">
         <div class="layout__crumb">{{ route.meta.title }}</div>
         <div class="layout__tools">
-          <el-button link @click="toggleLocale">
+          <Button type="text" size="small" @click="toggleLocale">
             {{ locale === 'zh-CN' ? 'EN' : '中' }}
-          </el-button>
-          <el-divider direction="vertical" />
-          <el-button link @click="logout">{{ t('common.logout') }}</el-button>
+          </Button>
+          <Divider type="vertical" />
+          <Button type="text" size="small" @click="logout">{{ t('common.logout') }}</Button>
         </div>
       </header>
 
@@ -128,24 +135,21 @@ function logout() {
   color: var(--color-text-tertiary);
 }
 
+/* 菜单配色与间距全部走令牌，覆盖 antd 的默认内边距与分割线 */
 .layout__menu {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   padding: var(--space-2);
-  border-right: none;
   background: transparent;
-  /* 覆盖 Element Plus 的层级缩进计算，统一由本组件的 padding 控制 */
-  --el-menu-base-level-padding: var(--menu-item-padding-x);
-  --el-menu-level-padding: 0px;
+  border-inline-end: none;
 }
 
-.layout__menu :deep(.el-menu-item) {
-  gap: var(--space-2);
+.layout__menu :deep(.ant-menu-item) {
   height: var(--menu-item-height);
   line-height: var(--menu-item-height);
-  padding: 0 var(--menu-item-padding-x);
-  margin: 0 0 2px;
+  margin: 0 0 var(--space-1);
+  padding-inline: var(--menu-item-padding-x);
   border-radius: var(--menu-radius);
   color: var(--sidebar-text);
   font-size: var(--font-size-base);
@@ -154,18 +158,12 @@ function logout() {
     color var(--duration-fast) var(--ease-out);
 }
 
-.layout__menu :deep(.el-menu-item .layout__menu-icon) {
-  margin-right: 0;
-  font-size: var(--text-md);
-  color: inherit;
-}
-
-.layout__menu :deep(.el-menu-item:hover) {
+.layout__menu :deep(.ant-menu-item:hover) {
   background: var(--sidebar-item-hover);
   color: var(--sidebar-text-active);
 }
 
-.layout__menu :deep(.el-menu-item.is-active) {
+.layout__menu :deep(.ant-menu-item-selected) {
   background: var(--sidebar-item-active);
   color: var(--sidebar-text-active);
   font-weight: var(--weight-medium);

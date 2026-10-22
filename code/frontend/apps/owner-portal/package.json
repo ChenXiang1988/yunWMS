@@ -14,6 +14,7 @@
     "@yunwms/request": "workspace:*",
     "@yunwms/tokens": "workspace:*",
     "@yunwms/ui-web": "workspace:*",
+    "@ant-design/icons-vue": "^7.0.1",
     "ant-design-vue": "^4.2.6",
     "element-plus": "^2.9.1",
     "vue": "^3.5.13",

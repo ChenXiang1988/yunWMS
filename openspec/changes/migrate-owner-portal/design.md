@@ -127,3 +127,13 @@ antd 的 token 是 JS 对象，密度切换（`compact` / `comfortable`）无法
 - 效果：圆角与颜色、字号一样只有一个真源；compact 仍可覆盖
 
 `web-antd.ts` 不带 `ThemeConfig` 类型注解，因为 `packages/tokens` 不得依赖 UI 库（类型导入同样要求安装该包）。结构正确性由 `ConfigProvider` 在调用点校验。
+
+## 9. 实施记录：antd 组件必须显式导入
+
+Element Plus 通过 `app.use(ElementPlus)` 全局注册，所以原代码里 `<el-menu>` 直接可用。antd 侧未做全局注册（为控制包体），因此：
+
+- `<a-menu>`、`<a-button>` 这类 kebab 写法**不会报错，也不会渲染**——页面看起来正常，菜单区域是空的
+- 必须在 SFC 里显式 `import { Menu, MenuItem, Button, Divider } from 'ant-design-vue'`，模板用 PascalCase
+- `Menu` 与原生 `<menu>` 标签同名，本 change 用 `Menu as AntMenu` 别名规避歧义
+
+**教训：迁移 EP → antd 时，"组件没注册"是静默失败，类型检查与构建都发现不了，只能靠运行时看页面。**
