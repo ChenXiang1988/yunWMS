@@ -1,8 +1,9 @@
 /* ==========================================================================
-   Primitive —— 原始值
-   规则：只允许 semantic.css 与各端适配器引用，业务组件禁止直接使用
-   这是全仓库允许出现十六进制色值的位置之一（另一处是生成目录）
+   由 scripts/gen-css.ts 生成，禁止手改
+   源：src/primitives.ts
+   改值请改源文件后运行 pnpm --filter @yunwms/tokens gen
    ========================================================================== */
+
 :root {
   /* 主色 */
   --blue-50: #eef4ff;
@@ -28,8 +29,7 @@
   --gray-800: #262c35;
   --gray-900: #14181d;
 
-  /* 功能色：50 → 600 完整梯度
-     100–400 档专供 UI 库的浅色映射（如 Element Plus 的 light-3/5/7/8、antd 的色板派生） */
+  /* 功能色 · 成功 */
   --green-50: #e7f6ee;
   --green-100: #d5ecdf;
   --green-200: #c2e4d3;
@@ -38,6 +38,7 @@
   --green-500: #12925a;
   --green-600: #0e7548;
 
+  /* 功能色 · 警告 */
   --orange-50: #fff4e5;
   --orange-100: #f7e3cf;
   --orange-200: #f4d8bc;
@@ -46,6 +47,7 @@
   --orange-500: #d97706;
   --orange-600: #b45f05;
 
+  /* 功能色 · 危险 */
   --red-50: #fdeeee;
   --red-100: #f6dcd9;
   --red-200: #f3cec9;
@@ -54,6 +56,7 @@
   --red-500: #d92d20;
   --red-600: #b42318;
 
+  /* 功能色 · 信息 */
   --cyan-50: #e6f5f9;
   --cyan-100: #d2e8ed;
   --cyan-200: #bfdde5;
@@ -63,8 +66,7 @@
   --cyan-600: #0b5c72;
 
   /* 字体族 */
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
   --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
 
   /* 字号 */
@@ -107,10 +109,8 @@
 
   /* 阴影 */
   --shadow-xs: 0 1px 2px 0 rgba(20, 24, 29, 0.06);
-  --shadow-sm: 0 1px 3px 0 rgba(20, 24, 29, 0.08),
-    0 1px 2px -1px rgba(20, 24, 29, 0.06);
-  --shadow-md: 0 4px 12px -2px rgba(20, 24, 29, 0.1),
-    0 2px 6px -2px rgba(20, 24, 29, 0.06);
+  --shadow-sm: 0 1px 3px 0 rgba(20, 24, 29, 0.08), 0 1px 2px -1px rgba(20, 24, 29, 0.06);
+  --shadow-md: 0 4px 12px -2px rgba(20, 24, 29, 0.1), 0 2px 6px -2px rgba(20, 24, 29, 0.06);
   --shadow-lg: 0 12px 32px -4px rgba(20, 24, 29, 0.14);
   --shadow-popup: 0 6px 16px -4px rgba(20, 24, 29, 0.16);
 

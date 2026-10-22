@@ -4,6 +4,10 @@
   "private": true,
   "description": "yunWMS 设计令牌：primitive / semantic / density / shell 四层，按端提供适配器",
   "type": "module",
+  "scripts": {
+    "gen": "node --experimental-strip-types scripts/gen-css.ts",
+    "test": "node --experimental-strip-types --test scripts/gen-css.test.ts"
+  },
   "files": [
     "src"
   ],

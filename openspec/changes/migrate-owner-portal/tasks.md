@@ -2,9 +2,9 @@
 
 ## 1. 令牌真源
 
-- [ ] 1.1 新建 `packages/tokens/src/primitives.ts`，把 `primitive.css` 的原始值按组搬入（尺寸存数字、颜色与阴影存字符串），验证：`pnpm --filter @yunwms/tokens typecheck` 通过，且导出的 `.d.ts` 中键名与现有 CSS 变量一一对应
-- [ ] 1.2 编写 `packages/tokens/scripts/gen-css.ts` 并在 `package.json` 加 `gen` 脚本，验证：运行 `pnpm --filter @yunwms/tokens gen` 后生成 `primitive.css`，其变量集合与迁移前版本逐项相等（用脚本解析比对，允许格式差异）
-- [ ] 1.3 加本仓库首个单测（对应 D8）：断言生成结果包含 `--blue-500: #2b63e0`、`--space-4: 16px`，且变量总数等于 `primitives` 中声明的数量，验证：`pnpm --filter @yunwms/tokens test` 通过
+- [x] 1.1 新建 `packages/tokens/src/primitives.ts`，把 `primitive.css` 的原始值按组搬入（尺寸存数字、颜色与阴影存字符串），验证：`pnpm --filter @yunwms/tokens typecheck` 通过，且导出的 `.d.ts` 中键名与现有 CSS 变量一一对应
+- [x] 1.2 编写 `packages/tokens/scripts/gen-css.ts` 并在 `package.json` 加 `gen` 脚本，验证：运行 `pnpm --filter @yunwms/tokens gen` 后生成 `primitive.css`，其变量集合与迁移前版本逐项相等（用脚本解析比对，允许格式差异）
+- [x] 1.3 加本仓库首个单测（对应 D8）：断言生成结果包含 `--blue-500: #2b63e0`、`--space-4: 16px`，且变量总数等于 `primitives` 中声明的数量，验证：`pnpm --filter @yunwms/tokens test` 通过
 
 ## 2. antd 适配
 
