@@ -27,10 +27,7 @@
   --form-item-gap: var(--space-5);
   --section-gap: var(--space-6);
 
-  --radius-sm: 2px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-full: 999px;
+  /* 圆角默认值来自 primitive.css，此处只在 compact 档覆盖 */
 
   --header-height: 56px;
   --sidebar-width: 220px;

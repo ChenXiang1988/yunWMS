@@ -90,3 +90,30 @@ antd 的 token 是 JS 对象，密度切换（`compact` / `comfortable`）无法
 | antd 静态 message 不跟主题 | §3 的注入方案，验收项 4.2 专门验证 |
 | 视觉差异（圆角、间距、控件高度） | 由人工走查 3 个页面确认；令牌值来自同一真源，差异应限于 antd 组件内部实现 |
 | 生成物被手改 | 生成文件首行标注禁止手改；`gen` 后 `git diff` 非空即说明手改过 |
+
+## 7. ant-design-vue 4.2.6 组件级 token 核对（任务 2.1 产出）
+
+来源：`npm pack ant-design-vue@4.2.6` 解包读取类型定义，未安装到工作区。
+
+| 位置 | 结论 |
+| --- | --- |
+| `es/config-provider/context.d.ts` | `ThemeConfig` 五字段：`token` / `components` / `algorithm` / `hashed` / `inherit`，无 `cssVar` |
+| `es/button/style/index.d.ts` | `ComponentToken` 为空对象，Button 无组件级 token |
+| `es/table/style/index.d.ts` | `ComponentToken` 为空对象 |
+| `es/menu/style/index.d.ts` | 有组件级 token，但为 **antd v4 命名**：`radiusItem`、`radiusSubMenuItem`、`colorItemText*`、`colorItemBg*`、`itemMarginInline`、`dropdownWidth`、`zIndexPopup` |
+| `es/menu/style/index.js` L312 | `menuItemHeight: controlHeightLG` —— 菜单项高度来自全局 alias token，组件层无法直接设置 |
+| `es/index.d.ts` | 根入口不导出 `ThemeConfig`；包无 `exports` 字段，深路径导入可用 |
+
+**一处更正**：此前讨论中出现的 `itemHeight` / `collapsedWidth` 是 antd（React v5）的命名，**在 ant-design-vue 4.2.6 中不存在**。菜单项高度只能通过 `controlHeightLG` 调整，侧栏配色用 `Menu` 的 `colorItem*` / `colorItemBg*`。该结论作为 `add-inline-menu` 的前置输入。
+
+**对本期的影响**：`owner-portal` 只用全局 token；Button 与 Table 没有可调组件 token，视觉差异只能由全局 token 与 CSS 覆盖控制。
+
+## 8. 圆角归属调整
+
+任务 2.2 需要 `borderRadius` 的数值，而圆角原本只存在于 `density.css`。处理方式：
+
+- 圆角并入 `primitives.radius`，由生成器输出 `--radius-*`
+- `density.css` 的 comfortable 块不再重复声明（取值与 primitive 相同），只在 compact 档覆盖为 2/4/6
+- 效果：圆角与颜色、字号一样只有一个真源；compact 仍可覆盖
+
+`web-antd.ts` 不带 `ThemeConfig` 类型注解，因为 `packages/tokens` 不得依赖 UI 库（类型导入同样要求安装该包）。结构正确性由 `ConfigProvider` 在调用点校验。

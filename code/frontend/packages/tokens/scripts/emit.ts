@@ -48,6 +48,9 @@ export function collectEntries(): Entry[] {
   for (const [key, value] of Object.entries(primitives.space)) {
     entries.push({ group: '间距：4px 网格', name: `--space-${key}`, value: toPx(value) })
   }
+  for (const [key, value] of Object.entries(primitives.radius)) {
+    entries.push({ group: '圆角', name: `--radius-${key}`, value: toPx(value) })
+  }
   for (const [key, value] of Object.entries(primitives.shadow)) {
     entries.push({ group: '阴影', name: `--shadow-${key}`, value })
   }

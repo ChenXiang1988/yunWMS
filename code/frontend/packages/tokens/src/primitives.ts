@@ -114,6 +114,12 @@ export const primitives = {
     '12': 48,
     '16': 64
   },
+  radius: {
+    sm: 2,
+    md: 6,
+    lg: 8,
+    full: 999
+  },
   shadow: {
     xs: '0 1px 2px 0 rgba(20, 24, 29, 0.06)',
     sm: '0 1px 3px 0 rgba(20, 24, 29, 0.08), 0 1px 2px -1px rgba(20, 24, 29, 0.06)',

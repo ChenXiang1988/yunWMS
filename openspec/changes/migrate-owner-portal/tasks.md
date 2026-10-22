@@ -8,8 +8,8 @@
 
 ## 2. antd 适配
 
-- [ ] 2.1 核对 `ant-design-vue@4.2.6` 的 Menu / Button / Table 组件级 token 名称（如 `itemHeight`、`controlHeight`、`cellPaddingBlock`），把实际名称回写 `design.md`，验证：结论逐条标注来源文件与行号，未核实的标「未验证」
-- [ ] 2.2 新增 `packages/tokens/src/web-antd.ts`，导出 `antdTheme: ThemeConfig`，验证：文件中不含十六进制与 `rgb(`，全部值引用 `primitives`
+- [x] 2.1 核对 `ant-design-vue@4.2.6` 的 Menu / Button / Table 组件级 token 名称（如 `itemHeight`、`controlHeight`、`cellPaddingBlock`），把实际名称回写 `design.md`，验证：结论逐条标注来源文件与行号，未核实的标「未验证」
+- [x] 2.2 新增 `packages/tokens/src/web-antd.ts`，导出 `antdTheme`（不带类型注解，避免依赖 UI 库），验证：文件中不含十六进制与 `rgb(`，全部值引用 `primitives`
 
 ## 3. 组件包分叉
 
