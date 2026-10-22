@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { Button, Form, FormItem, Input, Select, SelectOption, Table } from 'ant-design-vue'
 import { PageHeader, StatusTag } from '@yunwms/ui-web'
 
 type Status = 'draft' | 'pending' | 'active' | 'disabled'
@@ -22,6 +23,7 @@ const STATUS_TEXT: Record<Status, string> = {
 }
 
 const keyword = ref('')
+const customerType = ref<string | undefined>(undefined)
 
 const rows = ref<CustomerRow[]>([
   {
@@ -52,52 +54,80 @@ const rows = ref<CustomerRow[]>([
     updatedAt: '2026-10-18 17:20'
   }
 ])
+
+const columns = [
+  { title: '客户编码', dataIndex: 'code', key: 'code', width: 130 },
+  { title: '客户名称', dataIndex: 'name', key: 'name', width: 220 },
+  { title: '类型', dataIndex: 'type', key: 'type', width: 110 },
+  { title: '状态', key: 'status', width: 100 },
+  { title: '联系人', dataIndex: 'contact', key: 'contact', width: 110 },
+  { title: '手机号', dataIndex: 'mobile', key: 'mobile', width: 140 },
+  { title: '更新时间', dataIndex: 'updatedAt', key: 'updatedAt', width: 150 },
+  { title: '操作', key: 'actions', width: 130 }
+]
+
+function statusText(record: CustomerRow): string {
+  return STATUS_TEXT[record.status]
+}
 </script>
 
 <template>
   <div>
     <PageHeader title="客户管理" description="货主档案、合同附件与账号开通">
       <template #actions>
-        <el-button type="primary">新建客户</el-button>
+        <Button type="primary">新建客户</Button>
       </template>
     </PageHeader>
 
     <section class="panel">
-      <el-form inline class="filters">
-        <el-form-item label="关键词">
-          <el-input v-model="keyword" placeholder="编码 / 名称 / 联系人" clearable style="width: 240px" />
-        </el-form-item>
-        <el-form-item label="类型">
-          <el-select placeholder="全部" clearable style="width: 130px">
-            <el-option label="品牌方" value="brand" />
-            <el-option label="货代同行" value="forwarder" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary">查询</el-button>
-          <el-button>重置</el-button>
-        </el-form-item>
-      </el-form>
+      <Form layout="inline" class="filters">
+        <FormItem label="关键词">
+          <Input
+            v-model:value="keyword"
+            placeholder="编码 / 名称 / 联系人"
+            allow-clear
+            style="width: 240px"
+          />
+        </FormItem>
+        <FormItem label="类型">
+          <Select
+            v-model:value="customerType"
+            placeholder="全部"
+            allow-clear
+            style="width: 130px"
+          >
+            <SelectOption value="brand">品牌方</SelectOption>
+            <SelectOption value="forwarder">货代同行</SelectOption>
+          </Select>
+        </FormItem>
+        <FormItem>
+          <Button type="primary">查询</Button>
+          <Button class="filters__reset">重置</Button>
+        </FormItem>
+      </Form>
 
-      <el-table :data="rows" border>
-        <el-table-column prop="code" label="客户编码" width="130" />
-        <el-table-column prop="name" label="客户名称" min-width="220" />
-        <el-table-column prop="type" label="类型" width="110" />
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }">
-            <StatusTag :status="row.status" :text="STATUS_TEXT[row.status as Status]" />
+      <Table
+        :data-source="rows"
+        :columns="columns"
+        :pagination="false"
+        :scroll="{ x: 1100 }"
+        row-key="code"
+        bordered
+        size="middle"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'status'">
+            <StatusTag
+              :status="(record as CustomerRow).status"
+              :text="statusText(record as CustomerRow)"
+            />
           </template>
-        </el-table-column>
-        <el-table-column prop="contact" label="联系人" width="110" />
-        <el-table-column prop="mobile" label="手机号" width="140" />
-        <el-table-column prop="updatedAt" label="更新时间" width="150" />
-        <el-table-column label="操作" width="130">
-          <template #default>
-            <el-button link type="primary">详情</el-button>
-            <el-button link>子账号</el-button>
+          <template v-else-if="column.key === 'actions'">
+            <Button type="link" size="small">详情</Button>
+            <Button type="link" size="small">子账号</Button>
           </template>
-        </el-table-column>
-      </el-table>
+        </template>
+      </Table>
     </section>
   </div>
 </template>
@@ -105,5 +135,9 @@ const rows = ref<CustomerRow[]>([
 <style scoped>
 .filters {
   margin-bottom: var(--space-2);
+}
+
+.filters__reset {
+  margin-left: var(--space-2);
 }
 </style>
