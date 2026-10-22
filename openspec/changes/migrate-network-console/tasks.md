@@ -4,8 +4,8 @@
 
 ## 1. 组件包与布局
 
-- [ ] 1.1 `apps/network-console` 依赖加入 `@yunwms/ui-web`、`ant-design-vue`、`@ant-design/icons-vue`，三个基础组件引用切到 `@yunwms/ui-web`，验证：`pnpm --filter @yunwms/network-console build` 通过
-- [ ] 1.2 `BasicLayout.vue` 换成 antd 组件（Menu/MenuItem/Button/Divider），菜单 `:inline-indent="8"`、`selected-keys` 由路由派生，验证：浏览器实测菜单项高 44px、左内边距 8px、选中底 `rgb(238,244,255)`，与货主端逐项相同
+- [x] 1.1 `apps/network-console` 依赖加入 `@yunwms/ui-web`、`ant-design-vue`、`@ant-design/icons-vue`，三个基础组件引用切到 `@yunwms/ui-web`，验证：`pnpm --filter @yunwms/network-console build` 通过
+- [x] 1.2 `BasicLayout.vue` 换成 antd 组件（Menu/MenuItem/Button/Divider），菜单 `:inline-indent="8"`、`selected-keys` 由路由派生，验证：浏览器实测菜单项高 44px、左内边距 8px、选中底 `rgb(238,244,255)`，与货主端逐项相同
 
 ## 2. 页面迁移
 
