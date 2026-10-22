@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useInjectAppContext } from 'ant-design-vue/es/app/context'
-import { setHttpErrorHandler } from '@/api/client'
+import { setNotifyHandler } from '@/api/notify'
 
 /**
  * 必须是 <App> 的子组件：useInjectAppContext 依赖 App 提供的作用域。
@@ -8,7 +8,11 @@ import { setHttpErrorHandler } from '@/api/client'
  */
 const { message } = useInjectAppContext()
 
-setHttpErrorHandler((content) => {
+setNotifyHandler((kind, content) => {
+  if (kind === 'success') {
+    message.success(content)
+    return
+  }
   message.error(content)
 })
 </script>
