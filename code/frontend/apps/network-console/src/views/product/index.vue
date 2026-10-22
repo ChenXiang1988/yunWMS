@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { Button, Table } from 'ant-design-vue'
 import { PageHeader, StatusTag } from '@yunwms/ui-web'
 
 type Status = 'draft' | 'pending' | 'active' | 'disabled' | 'rejected'
@@ -23,7 +24,7 @@ const STATUS_TEXT: Record<Status, string> = {
   rejected: '已驳回'
 }
 
-const selected = ref<AuditRow[]>([])
+const selectedKeys = ref<string[]>([])
 
 const rows = ref<AuditRow[]>([
   {
@@ -47,38 +48,60 @@ const rows = ref<AuditRow[]>([
     submittedAt: '2026-10-20 16:30'
   }
 ])
+
+const columns = [
+  { title: 'SKUID', dataIndex: 'skuId', key: 'skuId', width: 120 },
+  { title: '货主', dataIndex: 'owner', key: 'owner', width: 120 },
+  { title: '商品名称', dataIndex: 'name', key: 'name', width: 160 },
+  { title: '条码', dataIndex: 'barcode', key: 'barcode', width: 145 },
+  { title: '进入人工原因', dataIndex: 'reason', key: 'reason', width: 190 },
+  { title: '状态', key: 'status', width: 85 },
+  { title: '提交时间', dataIndex: 'submittedAt', key: 'submittedAt', width: 150 },
+  { title: '操作', key: 'actions', width: 115 }
+]
+
+const rowSelection = computed(() => ({
+  selectedRowKeys: selectedKeys.value,
+  onChange: (keys: (string | number)[]) => {
+    selectedKeys.value = keys.map(String)
+  }
+}))
+
+function statusText(record: AuditRow): string {
+  return STATUS_TEXT[record.status]
+}
 </script>
 
 <template>
   <div>
     <PageHeader title="商品中心" description="SKUID 审核与全域商品检索">
       <template #actions>
-        <el-button :disabled="selected.length === 0">批量通过</el-button>
+        <Button :disabled="selectedKeys.length === 0">批量通过</Button>
       </template>
     </PageHeader>
 
     <section class="panel">
       <h2 class="panel__title">待审核队列</h2>
-      <el-table :data="rows" border @selection-change="(val: AuditRow[]) => (selected = val)">
-        <el-table-column type="selection" width="48" />
-        <el-table-column prop="skuId" label="SKUID" width="120" />
-        <el-table-column prop="owner" label="货主" width="120" />
-        <el-table-column prop="name" label="商品名称" min-width="160" />
-        <el-table-column prop="barcode" label="条码" width="145" />
-        <el-table-column prop="reason" label="进入人工原因" min-width="190" />
-        <el-table-column label="状态" width="85">
-          <template #default="{ row }">
-            <StatusTag :status="row.status" :text="STATUS_TEXT[row.status as Status]" />
+      <Table
+        :data-source="rows"
+        :columns="columns"
+        :pagination="false"
+        :row-selection="rowSelection"
+        :scroll="{ x: 1160 }"
+        row-key="skuId"
+        bordered
+        size="middle"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'status'">
+            <StatusTag :status="(record as AuditRow).status" :text="statusText(record as AuditRow)" />
           </template>
-        </el-table-column>
-        <el-table-column prop="submittedAt" label="提交时间" width="150" />
-        <el-table-column label="操作" width="115">
-          <template #default>
-            <el-button link type="primary">通过</el-button>
-            <el-button link type="danger">驳回</el-button>
+          <template v-else-if="column.key === 'actions'">
+            <Button type="link" size="small">通过</Button>
+            <Button type="link" size="small" danger>驳回</Button>
           </template>
-        </el-table-column>
-      </el-table>
+        </template>
+      </Table>
     </section>
   </div>
 </template>
