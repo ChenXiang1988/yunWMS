@@ -31,7 +31,6 @@ alwaysApply: true
 - 例外路径：`packages/tokens/src/primitive.css`、`packages/tokens/generated/`
   （TS 真源 `primitives.ts` 在 antd 适配器引入时新增，届时并入例外）
 - 间距、圆角、字号、行高、阴影只允许 `var(--*)`
-- 域色（`--inbound-*` 一类）禁止用于按钮、背景等组件表面色
 
 ## 菜单
 

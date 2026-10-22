@@ -67,7 +67,6 @@
 
 - 业务代码禁止色值字面量，只引用 semantic 与 component 层；唯一真源是 `packages/tokens` 的 primitives
 - 令牌改动须在同一次提交内同步生成物与适配器
-- 域色仅用于看板、标签、图标，禁止用于按钮与背景
 - 技术栈现状以 `openspec/config.yaml` 的 context 段为准
 
 ## 依赖准入
