@@ -53,7 +53,8 @@
 ### 2.2 分层与引用
 
 ```
-primitive.css（原始值，唯一真源）
+primitives.ts（原始值，唯一真源）
+  ├─ primitive.css（由 primitives.ts 生成，禁止手改）
   ├─ semantic.css（语义色：color-bg-*、color-text-*、color-border-*）
   ├─ density.css（尺寸：control-height-*、menu-item-*、table-*、radius-*）
   ├─ shell.css（外壳色：sidebar-*）
@@ -63,7 +64,7 @@ primitive.css（原始值，唯一真源）
 - `tokens.css` 只做 `@import` 聚合，不写任何变量
 - 业务代码只引用 semantic 与 component 层（density / shell 属于 component 层）
 - primitive 只允许被 semantic、density、shell 与各端适配器引用
-- 色值字面量只允许出现在 `packages/tokens/src/primitive.css` 与生成目录；antd 适配器引入后新增的 TS 真源 `primitives.ts` 一并列入例外
+- 色值字面量只允许出现在 `primitives.ts`；`primitive.css` 是生成物，手改会被单测拦截
 
 ### 2.3 跨端命名
 
@@ -87,11 +88,12 @@ primitive.css（原始值，唯一真源）
 
 ### 2.5 新增或修改令牌
 
-1. 改 `packages/tokens/src/primitive.css`
-2. 跑生成脚本，更新 `generated/`
-3. 同步各端适配器
-4. 三步放在**同一次提交**，不得只改一侧
-5. 若影响视觉，更新 `/_tokens` 对照页截图
+1. 改 `packages/tokens/src/primitives.ts`
+2. 运行 `pnpm --filter @yunwms/tokens gen` 重新生成 `primitive.css`
+3. 运行 `pnpm --filter @yunwms/tokens test`，确认生成物与源码一致（该单测同时用于拦截手改）
+4. 同步各端适配器
+5. 以上放在**同一次提交**，不得只改一侧
+6. 若影响视觉，更新 `/_tokens` 对照页截图
 
 ### 2.6 已验证与待验证
 

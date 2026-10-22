@@ -28,8 +28,8 @@ alwaysApply: true
 ## 令牌
 
 - `.vue`、`.ts`、`.scss` 中禁止 `#` 开头的色值，以及 `rgb(`、`rgba(`、`hsl(`
-- 例外路径：`packages/tokens/src/primitive.css`、`packages/tokens/generated/`
-  （TS 真源 `primitives.ts` 在 antd 适配器引入时新增，届时并入例外）
+- 例外路径：`packages/tokens/src/primitives.ts`（唯一真源）
+- `packages/tokens/src/primitive.css` 是生成物，禁止手改；改值须改 `primitives.ts` 后运行 `pnpm --filter @yunwms/tokens gen`
 - 间距、圆角、字号、行高、阴影只允许 `var(--*)`
 
 ## 菜单
