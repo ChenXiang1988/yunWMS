@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { PageHeader, StatusTag } from '@yunwms/ui'
+import { PageHeader, StatusTag } from '@yunwms/ui-web'
 
 type Status = 'draft' | 'pending' | 'active' | 'disabled' | 'rejected'
 

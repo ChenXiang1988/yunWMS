@@ -6,3 +6,5 @@ packages:
 allowBuilds:
   esbuild: true
   '@parcel/watcher': false
+  # core-js 的 postinstall 只打印资助提示，不需要原生构建，显式拒绝以免每次安装报未处理
+  core-js: false

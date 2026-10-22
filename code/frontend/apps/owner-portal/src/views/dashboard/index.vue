@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PageHeader } from '@yunwms/ui'
+import { PageHeader } from '@yunwms/ui-web'
 
 const stats = [
   { label: '在库商品', value: '1,248' },

@@ -13,8 +13,8 @@
 
 ## 3. 组件包分叉
 
-- [ ] 3.1 新建 `packages/ui-web`（`PageHeader` / `StatusTag` / `EmptyState`，antd 实现），验证：包内无 `el-*` 引用，样式只引用 `var(--*)`
-- [ ] 3.2 `owner-portal` 的引用从 `@yunwms/ui` 切到 `@yunwms/ui-web`，验证：`pnpm --filter @yunwms/owner-portal build` 通过，三个页面渲染无控制台报错
+- [x] 3.1 新建 `packages/ui-web`（`PageHeader` / `StatusTag` / `EmptyState`，antd 实现），验证：包内无 `el-*` 引用，样式只引用 `var(--*)`
+- [x] 3.2 `owner-portal` 的引用从 `@yunwms/ui` 切到 `@yunwms/ui-web`，验证：`pnpm --filter @yunwms/owner-portal build` 通过，三个页面渲染无控制台报错
 
 ## 4. 应用迁移
 
