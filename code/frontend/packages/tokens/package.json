@@ -17,7 +17,6 @@
     "./semantic": "./src/semantic.css",
     "./density": "./src/density.css",
     "./shell": "./src/shell.css",
-    "./element-plus": "./src/element-plus.css",
     "./web-antd": "./src/web-antd.ts"
   },
   "sideEffects": [

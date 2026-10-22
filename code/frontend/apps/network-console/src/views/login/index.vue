@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Button, Form, FormItem, Input, InputPassword } from 'ant-design-vue'
 import { setToken } from '@yunwms/request'
+import { notifySuccess } from '@/api/notify'
 
 const router = useRouter()
 const route = useRoute()
@@ -21,16 +22,13 @@ const rules = {
   password: [{ required: true, message: '请输入密码' }]
 }
 
-/**
- * 登录成功的提示已移除：本应用的 message 实例注入在任务 3.1 落地（移除 EP 时一并接入），
- * 现阶段用静态 message 不会跟随令牌主题，故先不给提示——本页提交后立即跳转，提示价值也低。
- */
 async function submit() {
   loading.value = true
   // 骨架阶段：后端尚未就绪，本地写入令牌以打通路由与布局
   window.setTimeout(() => {
     setToken('skeleton-token')
     loading.value = false
+    notifySuccess('登录成功（骨架演示）')
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard'
     void router.replace(redirect)
   }, 300)
