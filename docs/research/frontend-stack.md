@@ -103,7 +103,22 @@
 
 **关键技术事实**：ant-design-vue 4.0 迁移文档明确「弃用 less，采用 CSS-in-JS」「产物中不再包含 css 文件」「移除 CSS 变量及其之上的动态主题方案」。因此 Web 端令牌无法再走"CSS 变量单一真源"，必须提供 JS 侧令牌源。
 
-⚠️ **未验证**：ant-design-vue 4 是否提供后续可选的 `theme.cssVar` 模式。若提供，令牌可维持 CSS 单一真源；若不提供，须新增 `primitives.ts` + 生成脚本。该验证安排在 `migrate-owner-portal` 内完成。
+**已验证（2026-10-22，ant-design-vue 4.2.6，`npm pack` 解包查类型，未改动工作区依赖）**：
+
+```ts
+// es/config-provider/context.d.ts
+export interface ThemeConfig {
+  token?: Partial<AliasToken>
+  components?: OverrideToken
+  algorithm?: MappingAlgorithm | MappingAlgorithm[]
+  hashed?: boolean
+  inherit?: boolean
+}
+```
+
+`ThemeConfig` **无 `cssVar` 开关**。包内 `es/config-provider/cssVariables.js` 是 v3 时代 `theme.primaryColor` 的兼容路径（基于 TinyColor 与 `@ant-design/colors` 运行时算色并注入 style 标签），不是可选的 CSS 变量模式。
+
+**结论：Web 端令牌无法维持 CSS 单一真源，必须提供 JS 侧真源（`primitives.ts`）+ 生成 CSS 的脚本。**
 
 ### 3.2 PDA 端 UI 库
 
@@ -143,7 +158,7 @@
 
 | 风险 | 影响 | 缓解 |
 | --- | --- | --- |
-| ant-design-vue 4 无 `theme.cssVar` | 令牌须改为 TS 真源 + 生成，Web 端丧失"CSS 单源" | `migrate-owner-portal` 内第一时间验证；失败即启用 TS 真源方案 |
+| ant-design-vue 4 无 `theme.cssVar`（**已确认**，4.2.6） | 令牌须改为 TS 真源 + 生成，Web 端丧失"CSS 单源" | 已定方案：新增 `primitives.ts` 为唯一真源，由脚本生成 `primitive.css`；`primitive.css` 从此变为生成物，不再手改 |
 | antd 静态 `message` 不消费 ConfigProvider 上下文 | 错误提示不跟令牌，违反"禁色值字面量"约束的延伸要求 | 用 `<a-app>` + `App.useApp()`，注入点放在 `<a-app>` 子组件 |
 | Vant 在 320px 视口下的表单/弹层适配 | DT40 屏宽仅 320 CSS px，可能出现溢出 | `apps/pda` 首个页面（上架任务）即为验收探针 |
 | 2GB 设备包体预算 | 首屏卡顿 | 按需引入，首屏 JS 预算 300KB gzip；不引入图表库 |

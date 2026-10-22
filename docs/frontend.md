@@ -96,7 +96,7 @@ primitive.css（原始值，唯一真源）
 | 事项 | 状态 |
 | --- | --- |
 | Element Plus 通过 CSS 变量桥接 | 已验证，现有实现 |
-| antd-vue 4 是否支持 `theme.cssVar` 模式 | **未验证**，在 `migrate-owner-portal` 内确认 |
+| antd-vue 4 是否支持 `theme.cssVar` 模式 | **已验证不支持**（4.2.6 的 `ThemeConfig` 无该字段）。Web 端令牌将改为 TS 真源，生成 CSS；`primitive.css` 届时转为生成物，不再手改 |
 | antd-vue 4 的 Menu 组件 token 名 | **未验证**，同上 |
 | Vant 4 变量对 PDA 场景的覆盖度 | **未验证**，见 `docs/research/frontend-stack.md` |
 
