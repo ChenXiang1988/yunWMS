@@ -38,7 +38,7 @@ const status = ref<string | undefined>(undefined)
 const columns = [
   { title: 'SKUID', dataIndex: 'skuId', key: 'skuId', width: 135 },
   { title: '货主商品编码', dataIndex: 'ownerCode', key: 'ownerCode', width: 120 },
-  { title: '商品名称', dataIndex: 'name', key: 'name' },
+  { title: '商品名称', dataIndex: 'name', key: 'name', width: 220 },
   { title: '条码', dataIndex: 'barcode', key: 'barcode', width: 150 },
   { title: '包装', dataIndex: 'pack', key: 'pack', width: 125 },
   { title: '状态', key: 'status', width: 90 },
@@ -134,6 +134,7 @@ function statusText(record: SkuRow): string {
         :data-source="rows"
         :columns="columns"
         :pagination="false"
+        :scroll="{ x: 1125 }"
         row-key="skuId"
         bordered
         size="middle"
