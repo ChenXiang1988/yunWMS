@@ -21,6 +21,13 @@ export const antdTheme = {
     colorError: primitives.color.red[500],
     colorInfo: primitives.color.cyan[500],
 
+    /* 功能色浅底：不显式指定的话，antd 会按自己的算法派生，与令牌不一致 */
+    colorPrimaryBg: primitives.color.blue[50],
+    colorSuccessBg: primitives.color.green[50],
+    colorWarningBg: primitives.color.orange[50],
+    colorErrorBg: primitives.color.red[50],
+    colorInfoBg: primitives.color.cyan[50],
+
     /* 文字 */
     colorText: primitives.color.gray[900],
     colorTextSecondary: primitives.color.gray[600],

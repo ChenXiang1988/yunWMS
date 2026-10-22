@@ -60,11 +60,21 @@ antd 的 token 是 JS 对象，密度切换（`compact` / `comfortable`）无法
 
 `createHttp` 的 `onError` 在模块加载时就创建，无法直接拿到 `App.useApp()` 的实例。
 
-方案：`apps/owner-portal/src/api/client.ts` 暴露 `setHttpErrorHandler(fn)`，模块内保存；`AppBootstrap` 组件在 `<a-app>` 子树内调用 `App.useApp()` 取得 `message`，再注入。
+方案：`apps/owner-portal/src/api/client.ts` 暴露 `setHttpErrorHandler(fn)`，模块内保存；`AppBootstrap` 组件在 `<App>` 子树内取得 `message` 实例，再注入。
 
-**不用** `message.error` 的静态调用：静态方法不消费 `ConfigProvider` 上下文，提示会退回 antd 默认主题色，违反「颜色只来自令牌」。
+**API 名称必须按 Vue 版写**（实测 ant-design-vue 4.2.6）：
 
-注入点必须是 `<a-app>` 的**子组件**，在 `App.vue` 同层调用 `useApp()` 会拿到空上下文。
+- `<App>` 组件不是根入口的具名导出，而是 `ant-design-vue/es/app` 的**默认导出**
+- 没有 React 的 `App.useApp()`；对应物是 `ant-design-vue/es/app/context` 的 `useInjectAppContext()`，返回 `{ message, notification, modal }`
+- `message/index.js` 中不含任何全局配置引用，**静态 `message.error` 确实不消费 ConfigProvider**，因此必须走上下文实例
+
+注入点必须是 `<App>` 的**子组件**，在 `App.vue` 同层调用会拿到空上下文。
+
+### 3.1 功能色浅底需显式指定
+
+实测：只设 `colorSuccess` 时，antd 会用自己的算法派生浅底，`Tag` 背景为 `rgb(192,209,199)`，与 `--color-success-bg: #e7f6ee` 不一致。显式补上 `colorPrimaryBg` / `colorSuccessBg` / `colorWarningBg` / `colorErrorBg` / `colorInfoBg` 后，背景变为 `rgb(231,246,238)`，与令牌一致。这些 token 位于 `es/theme/interface/maps/colors.d.ts`，可通过 `AliasToken extends MapToken` 设置。
+
+**结论：antd 的派生色不是免费对齐的，凡是界面上会出现的浅底、边框，都要逐个显式映射。**
 
 ## 4. 组件包分叉
 
