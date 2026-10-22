@@ -2,14 +2,13 @@
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { Button, Form, FormItem, Input, InputPassword } from 'ant-design-vue'
 import { setToken } from '@yunwms/request'
 
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
 
-const formRef = ref<FormInstance>()
 const loading = ref(false)
 
 const form = reactive({
@@ -17,25 +16,23 @@ const form = reactive({
   password: ''
 })
 
-const rules: FormRules = {
-  account: [{ required: true, message: '请输入账号', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+const rules = {
+  account: [{ required: true, message: '请输入账号' }],
+  password: [{ required: true, message: '请输入密码' }]
 }
 
+/**
+ * 登录成功的提示已移除：本应用的 message 实例注入在任务 3.1 落地（移除 EP 时一并接入），
+ * 现阶段用静态 message 不会跟随令牌主题，故先不给提示——本页提交后立即跳转，提示价值也低。
+ */
 async function submit() {
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) {
-    return
-  }
-
   loading.value = true
   // 骨架阶段：后端尚未就绪，本地写入令牌以打通路由与布局
   window.setTimeout(() => {
     setToken('skeleton-token')
     loading.value = false
-    ElMessage.success('登录成功（骨架演示）')
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard'
-    router.replace(redirect)
+    void router.replace(redirect)
   }, 300)
 }
 </script>
@@ -46,17 +43,17 @@ async function submit() {
       <h1 class="login__title">{{ t('login.title') }}</h1>
       <p class="login__subtitle">{{ t('app.name') }} · {{ t('app.subtitle') }}</p>
 
-      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent>
-        <el-form-item :label="t('login.account')" prop="account">
-          <el-input v-model="form.account" size="large" />
-        </el-form-item>
-        <el-form-item :label="t('login.password')" prop="password">
-          <el-input v-model="form.password" type="password" show-password size="large" />
-        </el-form-item>
-        <el-button type="primary" size="large" class="login__submit" :loading="loading" @click="submit">
+      <Form :model="form" :rules="rules" layout="vertical" @finish="submit">
+        <FormItem :label="t('login.account')" name="account">
+          <Input v-model:value="form.account" size="large" />
+        </FormItem>
+        <FormItem :label="t('login.password')" name="password">
+          <InputPassword v-model:value="form.password" size="large" />
+        </FormItem>
+        <Button type="primary" size="large" html-type="submit" :loading="loading" block>
           {{ t('login.submit') }}
-        </el-button>
-      </el-form>
+        </Button>
+      </Form>
 
       <p class="login__tip">{{ t('login.tip') }}</p>
     </div>
@@ -92,11 +89,6 @@ async function submit() {
   margin: var(--space-1) 0 var(--space-5);
   font-size: var(--font-size-base);
   color: var(--color-text-tertiary);
-}
-
-.login__submit {
-  width: 100%;
-  margin-top: var(--space-2);
 }
 
 .login__tip {
