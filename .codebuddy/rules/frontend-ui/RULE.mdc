@@ -1,0 +1,44 @@
+---
+description: 前端 UI 门禁：单一组件库、令牌唯一、菜单由路由派生
+alwaysApply: true
+---
+
+# 前端 UI 门禁
+
+适用范围：`code/frontend/**`。与 `AGENTS.md` 的「前端」「设计令牌」两节配套，本文件只列可机器检查的硬约束；需要解释的细节见 `docs/frontend.md`。
+
+## 生效与存量
+
+- 本规则自落库起生效
+- 「组件库」一节中涉及既有 Element Plus 引用的部分，以对应迁移 change 归档为界全面生效
+- 迁移期间保留旧的 `packages/ui`（Element Plus 版）供未迁应用使用，`migrate-network-console` 归档时删除
+- 未完成迁移的应用允许维护既有 `el-*` 用法，但不得引入此前未用到的 EP 组件类型
+- 与存量冲突时登记到对应 change 的 `tasks.md`，禁止靠加豁免注释绕过
+
+## 组件库
+
+- 应用的 `package.json` 中只允许出现一套 UI 组件库，出现第二套即违规
+- 共享组件包只有两个：
+  - `packages/ui-web`：只允许依赖 Web 端 UI 库
+  - `packages/ui-pda`：只允许依赖 PDA 端 UI 库
+- 禁止 Web 应用引用 `packages/ui-pda`，禁止 PDA 引用 `packages/ui-web`
+- `packages/request`、`packages/tokens` 不得依赖任何 UI 库
+- 已完成迁移的应用，其依赖中不得再出现 `element-plus`
+
+## 令牌
+
+- `.vue`、`.ts`、`.scss` 中禁止 `#` 开头的色值，以及 `rgb(`、`rgba(`、`hsl(`
+- 例外路径：`packages/tokens/src/primitive.css`、`packages/tokens/generated/`
+  （TS 真源 `primitives.ts` 在 antd 适配器引入时新增，届时并入例外）
+- 间距、圆角、字号、行高、阴影只允许 `var(--*)`
+- 域色（`--inbound-*` 一类）禁止用于按钮、背景等组件表面色
+
+## 菜单
+
+- 菜单树必须递归渲染；模板中禁止 `level === 1`、`v-if="depth < 3"`、`v-if="index === 0"` 这类层级判断
+- 禁止用 `router-link` 或 `<a>` 包裹菜单项；跳转统一在菜单事件里 `router.push()`
+- 菜单 key 必须由转换层生成并校验唯一性，禁止直接使用后端 `id` 或 `title`
+
+## 交付
+
+- 涉及 UI 库引入或更换，先按 research-first 出调研文档，方案未确认不得写实现

@@ -1,0 +1,24 @@
+/* ==========================================================================
+   Shell —— 外壳层，只出颜色，不出尺寸
+   平台档位：shell-owner（默认，浅色侧栏）/ shell-network（深色侧栏）/ pda（待建）
+   规则：本文件禁止出现尺寸变量；密度尺寸见 density.css
+   这说明"紧凑"与"深色侧栏"是两件独立的事，不再互相绑定
+   ========================================================================== */
+:root,
+[data-platform="shell-owner"] {
+  --sidebar-bg: var(--gray-0);
+  --sidebar-text: var(--gray-600);
+  --sidebar-text-active: var(--blue-600);
+  --sidebar-item-hover: var(--gray-100);
+  --sidebar-item-active: var(--blue-50);
+  --sidebar-border: var(--gray-200);
+}
+
+[data-platform="shell-network"] {
+  --sidebar-bg: var(--gray-900);
+  --sidebar-text: var(--gray-300);
+  --sidebar-text-active: var(--gray-0);
+  --sidebar-item-hover: var(--gray-800);
+  --sidebar-item-active: var(--blue-500);
+  --sidebar-border: transparent;
+}

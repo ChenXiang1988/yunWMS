@@ -1,0 +1,21 @@
+{
+  "name": "@yunwms/tokens",
+  "version": "0.1.0",
+  "private": true,
+  "description": "yunWMS 设计令牌：primitive / semantic / density / shell 四层，按端提供适配器",
+  "type": "module",
+  "files": [
+    "src"
+  ],
+  "exports": {
+    ".": "./src/tokens.css",
+    "./primitive": "./src/primitive.css",
+    "./semantic": "./src/semantic.css",
+    "./density": "./src/density.css",
+    "./shell": "./src/shell.css",
+    "./element-plus": "./src/element-plus.css"
+  },
+  "sideEffects": [
+    "*.css"
+  ]
+}

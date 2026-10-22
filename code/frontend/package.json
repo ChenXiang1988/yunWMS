@@ -1,0 +1,21 @@
+{
+  "name": "yunwms-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev:owner": "pnpm --filter @yunwms/owner-portal dev",
+    "dev:network": "pnpm --filter @yunwms/network-console dev",
+    "build": "pnpm -r build",
+    "build:owner": "pnpm --filter @yunwms/owner-portal build",
+    "build:network": "pnpm --filter @yunwms/network-console build",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "typescript": "~5.7.2",
+    "vue-tsc": "^2.2.0"
+  }
+}

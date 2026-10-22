@@ -1,0 +1,10 @@
+/* ==========================================================================
+   yunWMS Design Tokens · 聚合入口
+   四层：primitive（原始值） → semantic（语义） → density（尺寸）/ shell（外壳色）
+   本文件只做聚合，不写任何变量；按需可以只引其中一层
+   引用顺序：tokens.css（或四层） → 各端适配器 → 业务样式
+   ========================================================================== */
+@import './primitive.css';
+@import './semantic.css';
+@import './density.css';
+@import './shell.css';

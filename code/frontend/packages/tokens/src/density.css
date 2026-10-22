@@ -1,0 +1,71 @@
+/* ==========================================================================
+   Density —— 密度层，只出尺寸，不出颜色
+   档位：comfortable（默认，货主端）/ compact（仓网端）/ touch（PDA，待建）
+   规则：本文件禁止出现任何颜色变量；外壳颜色见 shell.css
+   ========================================================================== */
+:root,
+[data-density="comfortable"] {
+  --font-size-base: var(--text-base);
+  --line-height-base: var(--leading-base);
+
+  --control-height-sm: 28px;
+  --control-height-md: 36px;
+  --control-height-lg: 40px;
+
+  --table-row-height: 48px;
+  --table-header-height: 48px;
+  --table-cell-px: var(--space-4);
+  --table-cell-py: var(--space-3);
+
+  --menu-item-height: 40px;
+  --menu-item-padding-x: var(--space-3);
+  --menu-radius: 6px;
+
+  --page-padding: var(--space-6);
+  --card-padding: var(--space-5);
+  --card-gap: var(--space-5);
+  --form-item-gap: var(--space-5);
+  --section-gap: var(--space-6);
+
+  --radius-sm: 2px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-full: 999px;
+
+  --header-height: 56px;
+  --sidebar-width: 220px;
+  --content-max-width: 1440px;
+}
+
+[data-density="compact"] {
+  --font-size-base: var(--text-sm);
+  --line-height-base: var(--leading-sm);
+
+  --control-height-sm: 24px;
+  --control-height-md: 28px;
+  --control-height-lg: 32px;
+
+  --table-row-height: 36px;
+  --table-header-height: 36px;
+  --table-cell-px: var(--space-2);
+  --table-cell-py: var(--space-2);
+
+  --menu-item-height: 34px;
+  --menu-item-padding-x: var(--space-3);
+  --menu-radius: 6px;
+
+  --page-padding: var(--space-4);
+  --card-padding: var(--space-3);
+  --card-gap: var(--space-3);
+  --form-item-gap: var(--space-3);
+  --section-gap: var(--space-4);
+
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-full: 999px;
+
+  --header-height: 48px;
+  --sidebar-width: 200px;
+  --content-max-width: none;
+}

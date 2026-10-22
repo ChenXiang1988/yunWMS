@@ -1,0 +1,135 @@
+/* ==========================================================================
+   Primitive —— 原始值
+   规则：只允许 semantic.css 与各端适配器引用，业务组件禁止直接使用
+   这是全仓库允许出现十六进制色值的位置之一（另一处是生成目录）
+   ========================================================================== */
+:root {
+  /* 主色 */
+  --blue-50: #eef4ff;
+  --blue-100: #dbe6ff;
+  --blue-200: #b9ceff;
+  --blue-300: #8aabff;
+  --blue-400: #5a86f5;
+  --blue-500: #2b63e0;
+  --blue-600: #1f4fbd;
+  --blue-700: #183e96;
+
+  /* 中性 */
+  --gray-0: #ffffff;
+  --gray-25: #fcfcfd;
+  --gray-50: #f7f8fa;
+  --gray-100: #f1f3f5;
+  --gray-200: #e4e7eb;
+  --gray-300: #d0d5dc;
+  --gray-400: #a8b0bb;
+  --gray-500: #7c8593;
+  --gray-600: #5a6472;
+  --gray-700: #3e4652;
+  --gray-800: #262c35;
+  --gray-900: #14181d;
+
+  /* 功能色：50 → 600 完整梯度
+     100–400 档专供 UI 库的浅色映射（如 Element Plus 的 light-3/5/7/8、antd 的色板派生） */
+  --green-50: #e7f6ee;
+  --green-100: #d5ecdf;
+  --green-200: #c2e4d3;
+  --green-300: #8cc9aa;
+  --green-400: #4fae80;
+  --green-500: #12925a;
+  --green-600: #0e7548;
+
+  --orange-50: #fff4e5;
+  --orange-100: #f7e3cf;
+  --orange-200: #f4d8bc;
+  --orange-300: #edbd86;
+  --orange-400: #e49c4c;
+  --orange-500: #d97706;
+  --orange-600: #b45f05;
+
+  --red-50: #fdeeee;
+  --red-100: #f6dcd9;
+  --red-200: #f3cec9;
+  --red-300: #eca19a;
+  --red-400: #e46a60;
+  --red-500: #d92d20;
+  --red-600: #b42318;
+
+  --cyan-50: #e6f5f9;
+  --cyan-100: #d2e8ed;
+  --cyan-200: #bfdde5;
+  --cyan-300: #86c0ce;
+  --cyan-400: #4d9db2;
+  --cyan-500: #0e7490;
+  --cyan-600: #0b5c72;
+
+  /* 字体族 */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* 字号 */
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 16px;
+  --text-lg: 18px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+
+  /* 行高 */
+  --leading-2xs: 16px;
+  --leading-xs: 18px;
+  --leading-sm: 20px;
+  --leading-base: 22px;
+  --leading-md: 24px;
+  --leading-lg: 26px;
+  --leading-xl: 28px;
+  --leading-2xl: 32px;
+
+  /* 字重 */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* 间距：4px 网格 */
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* 阴影 */
+  --shadow-xs: 0 1px 2px 0 rgba(20, 24, 29, 0.06);
+  --shadow-sm: 0 1px 3px 0 rgba(20, 24, 29, 0.08),
+    0 1px 2px -1px rgba(20, 24, 29, 0.06);
+  --shadow-md: 0 4px 12px -2px rgba(20, 24, 29, 0.1),
+    0 2px 6px -2px rgba(20, 24, 29, 0.06);
+  --shadow-lg: 0 12px 32px -4px rgba(20, 24, 29, 0.14);
+  --shadow-popup: 0 6px 16px -4px rgba(20, 24, 29, 0.16);
+
+  /* 遮罩 */
+  --overlay-mask: rgba(20, 24, 29, 0.45);
+
+  /* 层级 */
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-message: 1070;
+
+  /* 动效 */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 300ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+}

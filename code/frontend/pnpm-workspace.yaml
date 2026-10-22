@@ -1,0 +1,8 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# pnpm 11 默认阻止依赖执行安装脚本；esbuild 需执行以落地原生二进制
+allowBuilds:
+  esbuild: true
+  '@parcel/watcher': false
