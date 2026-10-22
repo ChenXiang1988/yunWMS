@@ -17,6 +17,9 @@ importers:
 
   apps/network-console:
     dependencies:
+      '@ant-design/icons-vue':
+        specifier: ^7.0.1
+        version: 7.0.1(vue@3.5.44(typescript@5.7.3))
       '@element-plus/icons-vue':
         specifier: ^2.3.2
         version: 2.3.2(vue@3.5.44(typescript@5.7.3))
@@ -26,9 +29,12 @@ importers:
       '@yunwms/tokens':
         specifier: workspace:*
         version: link:../../packages/tokens
-      '@yunwms/ui':
+      '@yunwms/ui-web':
         specifier: workspace:*
-        version: link:../../packages/ui
+        version: link:../../packages/ui-web
+      ant-design-vue:
+        specifier: ^4.2.6
+        version: 4.2.6(vue@3.5.44(typescript@5.7.3))
       element-plus:
         specifier: ^2.9.1
         version: 2.14.7(vue@3.5.44(typescript@5.7.3))

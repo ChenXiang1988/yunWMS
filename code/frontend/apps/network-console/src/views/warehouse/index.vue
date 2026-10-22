@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { PageHeader } from '@yunwms/ui'
+import { PageHeader } from '@yunwms/ui-web'
 
 interface TreeNode {
   label: string

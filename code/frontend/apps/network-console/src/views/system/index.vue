@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { EmptyState, PageHeader } from '@yunwms/ui'
+import { EmptyState, PageHeader } from '@yunwms/ui-web'
 
 const activeTab = ref('user')
 </script>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PageHeader } from '@yunwms/ui'
+import { PageHeader } from '@yunwms/ui-web'
 
 const stats = [
   { label: '合作货主', value: '18' },
