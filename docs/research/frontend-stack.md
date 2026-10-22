@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | 仓网端 | `apps/network-console` | 高密度表格、多级菜单、`compact` 密度 + 深色侧栏 |
 | 货主端 | `apps/owner-portal` | 中等密度、表单为主、`comfortable` 密度 + 浅色侧栏 |
-| PDA | `apps/pda`（待建） | 触摸作业、全屏流程、无侧栏 |
+| PDA | `apps/pda`（待建） | 一期仅**商品查询**：扫描 SKU → 展示档案；全屏流程、无侧栏 |
 
 ### 1.2 关键特征（已确认的硬约束）
 
@@ -166,11 +166,22 @@ export interface ThemeConfig {
 | 单仓端形态未定 | 可能新增第四个端 | 令牌三轴已容纳；若是独立应用，复用 `packages/ui-web` 即可 |
 | 许可证识别异常 | ant-design-vue 在 GitHub 显示 NOASSERTION | 已核实 LICENSE 文件首行为 MIT，登记时以文件原文为准 |
 
-### 5.2 待确认
+### 5.2 已闭环与待确认
 
-1. `apps/pda` 除上架任务外，一期还需要哪些页面（决定 Vant 组件清单）
-2. DT40 实机 WebView 的 `devicePixelRatio` 是否确为 1.5（官网参数推导，建议开发时读一次）
-3. 是否存在戴厚手套作业的场景（若是，56px 需上调至 64px）
+已闭环（2026-10-22）：
+
+| 事项 | 结论 |
+| --- | --- |
+| PDA 一期范围 | **仅商品查询**：扫描 SKU → 展示档案 |
+| 点按区档位 | **56px**（普通作业手套），不设 64px 档 |
+| 真机探针页 | **不做**。按 320×533 推导设计，真机验收时再校准 |
+
+一期 Vant 组件清单（随范围收窄到最小）：`Field`（扫码输入）/ `Cell` + `CellGroup`（档案展示）/ `Toast`（扫码结果反馈）。不需要 NumberKeyboard、Picker、Dialog、虚拟列表。
+
+待确认：
+
+1. **商品档案字段清单**。现有 `apps/network-console/src/views/product/index.vue` 是「待审核队列」，字段为 `skuId / owner / ownerCode / name / barcode / reason / status / submittedAt`，**不含商品档案详情结构**。PDA 页面要展示哪些字段需在 `apps-pda` 的 proposal 中先定，不得由前端臆造。
+2. DT40 实机 `devicePixelRatio` 是否为 1.5（官网参数推导，真机验收时确认；若不符，只需调整 `--sidebar-width` 一类尺寸令牌，不影响结构）。
 
 ---
 
