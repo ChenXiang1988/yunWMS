@@ -10,9 +10,9 @@
 
 | 端 | 应用 | UI 库 | 组件包 |
 | --- | --- | --- | --- |
-| 仓网端 | `apps/network-console` | Ant Design Vue 4（迁移中，当前为 Element Plus） | `packages/ui-web` |
-| 货主端 | `apps/owner-portal` | 同上 | `packages/ui-web` |
-| PDA | `apps/pda`（待建） | 待定，候选 Vant 4 | `packages/ui-pda` |
+| 仓网端 | `apps/network-console` | Element Plus（待迁移至 Ant Design Vue 4） | `packages/ui`（过渡） |
+| 货主端 | `apps/owner-portal` | Ant Design Vue 4 | `packages/ui-web` |
+| PDA | `apps/pda`（待建） | Vant 4 | `packages/ui-pda`（待建） |
 
 单仓端形态未定（独立应用或多集群部署形态），定案前不新增应用与包。
 
