@@ -1,7 +1,7 @@
 /* ==========================================================================
    Density —— 密度层，只出尺寸，不出颜色
    档位：comfortable（默认，货主端）/ compact（仓网端）/ touch（PDA，待建）
-   规则：本文件禁止出现任何颜色变量；外壳颜色见 shell.css
+   规则：本文件禁止出现任何颜色变量；外壳与导航尺寸见 shell.css
    ========================================================================== */
 :root,
 [data-density="comfortable"] {
@@ -17,9 +17,7 @@
   --table-cell-px: var(--space-4);
   --table-cell-py: var(--space-3);
 
-  --menu-item-height: 40px;
-  --menu-item-padding-x: var(--space-3);
-  --menu-radius: 6px;
+  /* 导航尺寸固定在 shell.css，不随密度变化 */
 
   --page-padding: var(--space-6);
   --card-padding: var(--space-5);
@@ -30,7 +28,6 @@
   /* 圆角默认值来自 primitive.css，此处只在 compact 档覆盖 */
 
   --header-height: 56px;
-  --sidebar-width: 220px;
   --content-max-width: 1440px;
 }
 
@@ -47,10 +44,6 @@
   --table-cell-px: var(--space-2);
   --table-cell-py: var(--space-2);
 
-  --menu-item-height: 34px;
-  --menu-item-padding-x: var(--space-3);
-  --menu-radius: 6px;
-
   --page-padding: var(--space-4);
   --card-padding: var(--space-3);
   --card-gap: var(--space-3);
@@ -63,6 +56,5 @@
   --radius-full: 999px;
 
   --header-height: 48px;
-  --sidebar-width: 200px;
   --content-max-width: none;
 }

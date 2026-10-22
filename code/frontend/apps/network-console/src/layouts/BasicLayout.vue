@@ -147,10 +147,11 @@ function logout() {
   height: var(--menu-item-height);
   line-height: var(--menu-item-height);
   padding: 0 var(--menu-item-padding-x);
-  margin: 0 0 2px;
+  margin: 0 0 var(--space-1);
   border-radius: var(--menu-radius);
   color: var(--sidebar-text);
-  font-size: var(--font-size-base);
+  font-size: var(--menu-font-size);
+  font-weight: var(--weight-medium);
   transition:
     background-color var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out);
@@ -158,7 +159,7 @@ function logout() {
 
 .layout__menu :deep(.el-menu-item .layout__menu-icon) {
   margin-right: 0;
-  font-size: var(--text-md);
+  font-size: var(--menu-icon-size);
   color: inherit;
 }
 

@@ -17,6 +17,12 @@ const menuItems = computed(() => [
 
 const selectedKeys = computed(() => [route.path])
 
+/**
+ * antd 通过行内样式下发菜单项左内边距，CSS 覆盖不了，只能从这里给。
+ * 取值须与 --menu-item-padding-x（8px）保持一致。
+ */
+const menuIndent = 8
+
 function handleMenuClick(info: { key: string | number }) {
   const key = String(info.key)
   if (key !== route.path) {
@@ -49,6 +55,7 @@ function logout() {
       <AntMenu
         class="layout__menu"
         mode="inline"
+        :inline-indent="menuIndent"
         :selected-keys="selectedKeys"
         @click="handleMenuClick"
       >
@@ -152,10 +159,15 @@ function logout() {
   padding-inline: var(--menu-item-padding-x);
   border-radius: var(--menu-radius);
   color: var(--sidebar-text);
-  font-size: var(--font-size-base);
+  font-size: var(--menu-font-size);
+  font-weight: var(--weight-medium);
   transition:
     background-color var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out);
+}
+
+.layout__menu :deep(.ant-menu-item .anticon) {
+  font-size: var(--menu-icon-size);
 }
 
 .layout__menu :deep(.ant-menu-item:hover) {

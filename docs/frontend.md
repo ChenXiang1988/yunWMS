@@ -46,9 +46,11 @@
 | --- | --- | --- | --- |
 | 主题 | `data-theme` | `light`（预留 `dark`） | 颜色 |
 | 密度 | `data-density` | `compact` / `comfortable` / `touch` | 尺寸：控件高度、字号、行高、间距 |
-| 平台 | `data-platform` | `shell-network` / `shell-owner` / `pda` | 布局、外壳色、安全区 |
+| 平台 | `data-platform` | 当前所有 Web 端统一 `shell-owner`（浅色导航）/ `pda` 待建 | 布局、外壳色、导航规格、安全区 |
 
 三个轴互不代替：`compact` 只表示信息密度，**不得**同时决定外壳颜色；`touch` 只表示触摸端尺寸，不得表示"这是 PDA"。
+
+导航规格（`--menu-item-height`、`--menu-item-padding-x`、`--menu-radius`、`--menu-*font-size`、`--sidebar-width`）固定在 `shell.css`，**不随密度变化**——导航是跨端一致性的锚点，跟着密度走会让两个应用看起来像两套产品。
 
 ### 2.2 分层与引用
 

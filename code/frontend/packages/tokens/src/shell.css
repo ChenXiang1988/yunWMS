@@ -1,24 +1,27 @@
 /* ==========================================================================
-   Shell —— 外壳层，只出颜色，不出尺寸
-   平台档位：shell-owner（默认，浅色侧栏）/ shell-network（深色侧栏）/ pda（待建）
-   规则：本文件禁止出现尺寸变量；密度尺寸见 density.css
-   这说明"紧凑"与"深色侧栏"是两件独立的事，不再互相绑定
+   Shell —— 外壳与导航
+   当前策略：所有端统一为浅色导航，菜单规格固定，不随密度变化。
+   原因：导航是跨端一致性的锚点，跟着密度变会导致两个应用看起来像两套产品。
+   若将来某端确需不同外壳（例如内部端深色），在此按 data-platform 增加 profile。
    ========================================================================== */
-:root,
-[data-platform="shell-owner"] {
+:root {
   --sidebar-bg: var(--gray-0);
-  --sidebar-text: var(--gray-600);
-  --sidebar-text-active: var(--blue-600);
-  --sidebar-item-hover: var(--gray-100);
+  --sidebar-text: var(--gray-800);
+  --sidebar-text-active: var(--blue-500);
+  --sidebar-item-hover: var(--gray-50);
   --sidebar-item-active: var(--blue-50);
   --sidebar-border: var(--gray-200);
-}
 
-[data-platform="shell-network"] {
-  --sidebar-bg: var(--gray-900);
-  --sidebar-text: var(--gray-300);
-  --sidebar-text-active: var(--gray-0);
-  --sidebar-item-hover: var(--gray-800);
-  --sidebar-item-active: var(--blue-500);
-  --sidebar-border: transparent;
+  --sidebar-width: 200px;
+
+  /* 导航尺寸：固定值，不进密度层 */
+  --menu-item-height: 44px;
+  --menu-child-height: 38px;
+  --menu-child-indent: 35px;
+  --menu-item-padding-x: var(--space-2);
+  /* 固定 6px，不引用 --radius-md：该项在 compact 档会被覆盖成 4px，导致两端不一致 */
+  --menu-radius: 6px;
+  --menu-icon-size: 17px;
+  --menu-font-size: var(--text-base);
+  --menu-child-font-size: var(--text-sm);
 }

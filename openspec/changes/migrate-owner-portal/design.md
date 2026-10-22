@@ -145,3 +145,20 @@ Element Plus 通过 `app.use(ElementPlus)` 全局注册，所以原代码里 `<e
 补齐后：表头 `rgb(247,248,250)` = `#f7f8fa`，表格边框 `rgb(241,243,245)` = `#f1f3f5`（`colorBorderSecondary`），单元格文字 `rgb(20,24,29)` = `#14181d`。
 
 **结论：这类偏差肉眼几乎看不出（#fafafa 与 #f7f8fa 差 3 个色阶），但确实不是令牌值。验收必须抽查计算样式，不能只看截图。**
+
+## 11. 导航规格统一（5.4 走查引发的调整）
+
+走查发现两端左侧菜单观感不一致。测量后确认：**除一处真 bug 外，其余差异都来自"导航尺寸挂在密度层"**——同一个 --menu-item-height 在 compact 是 34px、comfortable 是 40px。
+
+调整：
+
+- 导航尺寸（`--menu-item-height`、`--menu-child-height`、`--menu-item-padding-x`、`--menu-radius`、`--menu-icon-size`、`--menu-font-size`、`--sidebar-width`）从 `density.css` 移到 `shell.css`，**固定一套**
+- 外壳统一为浅色，仓网端 `data-platform` 改为 `shell-owner`；删除未被使用的 `shell-network` 深色 profile（避免死配置）
+- 菜单圆角固定 6px，不再引用 `--radius-md`——该项在 compact 档会被覆盖成 4px
+
+两个实现细节值得记：
+
+1. **antd 的菜单左内边距以行内样式下发**（`padding-left: 24px`），来自 `inlineIndent` 属性，CSS 覆盖不了，必须用 `:inline-indent`。
+2. 因此 `menuIndent = 8` 这个数字在 TS 与 CSS 各出现一次，属于 antd 的限制导致的合理重复，已在代码里注明两者须保持同步。
+
+验收：两端逐项测量相等——侧栏 200px、项高 44px、左内边距 8px、字号 14px、字重 500、圆角 6px、选中底 `rgb(238,244,255)`、选中字 `rgb(43,99,224)`。
