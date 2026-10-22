@@ -30,4 +30,4 @@
 - [x] 5.1 移除 `owner-portal` 对 `element-plus` 与 `@element-plus/icons-vue` 的依赖，验证：`pnpm --filter @yunwms/owner-portal why element-plus` 输出为空
 - [x] 5.2 更新 `openspec/config.yaml` 的技术栈行为「Vue 3 + Element Plus（迁移至 Ant Design Vue 4，进行中）」，验证：文件内出现该表述
 - [x] 5.3 在 `docs/frontend.md` 补记「antd 侧无法用 CSS 变量切换密度」的限制，验证：该文件「已验证与待验证」表内出现对应条目
-- [ ] 5.4 人工走查 3 个页面并与 EP 版本对照，记录差异清单，验证：差异项逐条确认可接受或有对应处理
+- [x] 5.4 人工走查 3 个页面并与 EP 版本对照，记录差异清单，验证：差异项逐条确认可接受或有对应处理
