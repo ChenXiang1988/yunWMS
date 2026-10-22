@@ -1,10 +1,9 @@
 name: CI
 
+# 所有分支的推送都跑一次校验：change/*、fix/* 等命名规则都可能变，
+# 白名单式触发容易漏（本次就漏过 fix/ 分支），代价是少量免费额度
 on:
   push:
-    branches:
-      - main
-      - 'change/**'
   pull_request:
 
 # 同一分支的新推送会取消上一次未跑完的任务，避免排队
