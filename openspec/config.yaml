@@ -5,6 +5,10 @@ context: |
   All artifacts must be written in zh-CN.
   Keep OpenSpec structural headings and SHALL/MUST keywords in English.
 
+  PRD 是 spec 的派生物，不是独立事实来源。冲突时一律以 spec 为准。
+  生成 PRD 前必须先做就绪度评估：若 spec 不足以支撑 PRD，先补 spec，不得在 PRD 中引入 spec 未定义的行为。
+  就绪度标准见 docs/prd/README.md。
+
   项目：yunWMS，多货主 3PL 云仓储管理系统。由 AI 编写全部代码，人类只做验收。
   技术栈：Java 21 + Spring Boot 3.x、MyBatis-Plus、PostgreSQL、Valkey、Vue 3 + Ant Design Vue 4。
   业务前提：多货主 3PL，tenant_id（系统租户）与 owner_id（货主）双维度；货位属仓库，库存属货主，同一货位可存放多货主货物。
@@ -20,6 +24,12 @@ rules:
   specs:
     - 每个 Requirement 至少包含一个 Scenario
     - 需求文本保留 SHALL/MUST 英文关键词，正文用中文
+    - 涉及状态变更、审核、删除、批量操作的需求，必须同时给出正向、异常与逆向场景，只有正向场景视为未完成
+    - 纯查询与纯展示类需求可只写正向场景，但需在 Requirement 文本中说明其无副作用
+    - 并发控制、幂等、批量部分失败等跨模块通用策略统一记录在 design.md，不在各需求重复
+    - 每条异常与逆向场景必须能说出「谁、在什么时机、因为什么」会走到这里；答不出来的不写，避免为凑数编造边界
+    - 异常场景的来源限于五类：用户误操作、外部数据不可信、并发、外部依赖失败、配置变更与存量数据脱节
+    - 网络中断、数据库不可用等系统级故障不写进业务场景，由全局异常处理统一覆盖
   design:
     - 记录被否方案与落选原因
     - 数据库变更必须说明兼容策略，遵循先加字段、再写代码、最后删旧字段
