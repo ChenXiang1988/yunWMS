@@ -1,0 +1,11 @@
+# 生成的样本与渲染结果不入库，脚本可重建
+fixtures/*.dxf
+fixtures/sample_*.png
+fixtures/real_*.png
+fixtures/local/
+
+# 只保留交付样例：input_flat.*、input_floor.*
+!fixtures/input_flat.png
+!fixtures/input_floor.png
+
+__pycache__/

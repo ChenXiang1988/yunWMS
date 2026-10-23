@@ -1,0 +1,21 @@
+[project]
+name = "wmscad"
+version = "0.2.0"
+description = "仓库平面图解析与自动排布（内部工具，非产品代码）"
+requires-python = ">=3.10"
+dependencies = ["ezdxf==1.4.5", "matplotlib>=3.8,<4"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["wmscad"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
