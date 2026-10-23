@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: yunwms
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/yunwms}
+    username: ${DB_USER:yunwms}
+    password: ${DB_PASSWORD:yunwms}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+    validate-on-migrate: true
+
+  jackson:
+    default-property-inclusion: always
+    time-zone: UTC
+    serialization:
+      write-dates-as-timestamps: false
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      # 逻辑删除统一用 deleted_at，与建表脚本一致
+      logic-delete-field: deletedAt
+      logic-not-delete-value: "null"
+      logic-delete-value: now()
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.yunwms: DEBUG

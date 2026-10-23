@@ -1,0 +1,56 @@
+name: yunwms-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: yunwms-postgres
+    environment:
+      POSTGRES_DB: yunwms
+      POSTGRES_USER: yunwms
+      POSTGRES_PASSWORD: yunwms
+      # 建库时就用 UTC，避免容器时区与业务假设不一致
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yunwms -d yunwms"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    container_name: yunwms-valkey
+    command: ["valkey-server", "--appendonly", "no"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: yunwms-minio
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: yunwms
+      MINIO_ROOT_PASSWORD: yunwms123
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  miniodata:
