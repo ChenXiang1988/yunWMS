@@ -9,9 +9,9 @@ context: |
   生成 PRD 前必须先做就绪度评估：若 spec 不足以支撑 PRD，先补 spec，不得在 PRD 中引入 spec 未定义的行为。
   就绪度标准见 docs/prd/README.md。
 
-  项目：yunWMS，多货主 3PL 云仓储管理系统。由 AI 编写全部代码，人类只做验收。
+  项目：yunWMS，多货主 3PL 仓储管理系统（单租户，私有部署，非 SaaS）。由 AI 编写全部代码，人类只做验收。
   技术栈：Java 21 + Spring Boot 3.x、MyBatis-Plus、PostgreSQL、Valkey、Vue 3 + Ant Design Vue 4。
-  业务前提：多货主 3PL，tenant_id（系统租户）与 owner_id（货主）双维度；货位属仓库，库存属货主，同一货位可存放多货主货物。
+  业务前提：单租户私有部署，不引入 tenant_id；货主（owner）是数据维度而非租户隔离层，通过业务表上的 owner_id 表达；货位属仓库，库存属货主，同一货位可存放多货主货物。
   许可约束：默认零商业授权预算，GPL/AGPL/SSPL 依赖一律不得引入，包括 XXL-Job、JeeWMS、MySQL、Redis 7.4+。已批准的唯一付费组件为 hiprint 打印客户端（静默打印必需，用户自行采购），其余保持零授权。
   调研门禁：任何新功能域在实现前必须完成开源调研，产物落 docs/research/<主题>.md，并在 proposal 中引用。
   交付纪律：一个 change 只覆盖一个垂直切片；单次提交不超过 400 行；数据库迁移与代码变更分离；每次提交必须可编译、可运行。
