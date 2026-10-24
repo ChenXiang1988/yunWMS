@@ -151,6 +151,8 @@
 
 **备选**：Keycloak / Casdoor。否决原因是首期只有单系统，独立部署身份服务不划算。
 
+> **2026-10-24 确认**：维持本决策。实现侧曾误引入 `spring-boot-starter-security`（`wms-auth/pom.xml`），需迁回 Sa-Token；依据见 `docs/research/auth-middleware.md`。
+
 ### D12. i18n 首期预留，界面与数据两层都留
 
 前端接 `vue-i18n`，后端消息走 message code，首期只填中文。数据库层面字典项、品类名等带 `name_en` 字段。
