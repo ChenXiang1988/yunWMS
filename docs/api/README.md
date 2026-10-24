@@ -44,7 +44,7 @@ python3 code/tools/api-inventory/gen_api_inventory.py --from-file docs/api/opena
 
 ## 当前状态
 
-首次生成于 2026-10-24，源 commit `7b1e705`（`change/implement-owner` 分支），共 **1 个接口**：
+首次生成于 2026-10-24，源 commit `7b1e705`；`change/implement-owner` 合入 main 后于同日重跑，源 commit 更新为 `602ff16`（main）。共 **1 个接口**：
 
 ```
 POST /api/auth/login

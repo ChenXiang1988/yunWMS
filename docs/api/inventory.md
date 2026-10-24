@@ -2,7 +2,7 @@
 
 > **生成物，禁止手改。** 由 `code/tools/api-inventory/gen_api_inventory.py` 生成。
 > 来源：实时拉取 `http://localhost:8080/v3/api-docs`
-> 源 commit：`7b1e705`
+> 源 commit：`602ff16`
 > 计数口径：OpenAPI operation（path × method），不是 Java 方法数
 > 字段记号：`a.b` 嵌套，`a[]` 数组元素，`↻` 自引用已截断，`…` 嵌套过深已截断
 
