@@ -32,9 +32,9 @@
 
 ---
 
-## 二、派活契约（任务包 7 项）
+## 二、派活契约（任务包 8 项）
 
-派给子 Agent 的任务包必须含以下七项，缺一项即视为不合格任务包：
+派给子 Agent 的任务包必须含以下八项，缺一项即视为不合格任务包：
 
 | # | 项 | 内容 |
 |---|---|---|
@@ -45,8 +45,9 @@
 | 5 | 完成标准 | 编译 + 单测 + 静态检查通过，给出可复制的验证命令 |
 | 6 | 禁止项 | 跨模块直接依赖、顺手改范围外文件、改测试断言、迁移与代码混合提交 |
 | 7 | 交付格式 | 改动文件清单 + 验证命令及结果 + 遗留问题 |
+| 8 | **工作目录与基线锚点** | 子 Agent 的工作目录（绝对路径）+ 派活时刻的 anchor；缺此项，越界核对不成立，见第十三节 |
 
-并行派多个子 Agent 时：各自占一条 `git worktree`，且路径白名单不得重叠。
+并行派多个子 Agent 时：各自占一条 `git worktree`，各自独立 anchor，且路径白名单用绝对路径、不得重叠。
 
 ---
 
@@ -101,7 +102,7 @@ AGENTS.md  >  .codebuddy/rules/  >  change 的 design.md / specs  >  任务包
 
 子 Agent 回传后，主 Agent 逐项核对：
 
-- [ ] `git diff --stat` 是否只落在白名单路径
+- [ ] `git diff <anchor> --stat` 是否只落在白名单路径（anchor 由任务包给出，auditor 不得自行推断基线）
 - [ ] 单次提交 ≤400 行
 - [ ] 数据库迁移是否与代码分离
 - [ ] 是否引入 GPL/AGPL/SSPL 依赖（`xxl-job`、`jee-wms`、MySQL、Redis 7.4+）
@@ -325,3 +326,58 @@ git branch -d change/implement-owner   # 已合并才可 -d
 ### 不适用的情况
 
 串行推进（做完一个切片再做下一个）不需要 worktree，直接在一条分支上按顺序提交即可。**新开 worktree 的成本是每份都要装依赖**，不为并行而并行。
+
+---
+
+## 十三、工作区归属与基线锚点
+
+### 问题
+
+主 Agent 会写（文档、`.codebuddy/`、构建配置），子 Agent 会写（业务代码），两者共用同一工作目录。回收时 `git diff --stat` 只反映「当前工作区 vs HEAD」，无法区分哪些改动出自本次任务包。工作区越脏，越界核对越不可信——别人的在途改动会被算到本次任务头上，真正的越界反而被淹没。
+
+### 成立前提：同步派发在时间上是串行的
+
+`Task` 同步调用期间主 Agent 被挂起（第四节），子 Agent 运行期间主 Agent 不写文件。因此：
+
+> **子 Agent 的产出 = 从 anchor 到回收时刻的全部 diff，归属唯一。**
+
+**Team Mode（带 `name` 的异步成员）不满足此前提**：主 Agent 不被挂起，可以继续写，anchor 方案失效，必须改走 worktree 物理隔离（第十二节），且每个成员独立 anchor。
+
+### 常态：收敛优先
+
+派活前尽量把已完成且自洽的改动提交掉，把「未提交」窗口压到最短：
+
+> **归属模糊的时间窗口 = 未提交改动的存活时间。**
+
+最理想的派活状态是「工作区干净」或「工作区只剩本任务包的在途改动」。收敛不了（改动编译不过、属于另一条待提交的工作）时才用 anchor 兜底。
+
+### 兜底：anchor
+
+```bash
+# 派活前，在目标工作目录执行
+ANCHOR=$(git stash create)
+git update-ref refs/baseline/<task-id> "$ANCHOR"
+git for-each-ref refs/baseline          # 确认已固定
+```
+
+要点：
+
+- `git stash create` 只创建 commit 对象，**不改工作区、不动 `refs/stash`**；工作区干净时返回空串，此时 anchor 直接用 `HEAD`。
+- 必须 `git update-ref` 固定，否则该提交是 dangling 的，会被 gc 回收。
+- `refs/baseline/*` 不属于任何分支，不随 `git push` 上传。
+- 回收后清理：`git update-ref -d refs/baseline/<task-id>`。
+- anchor 是快照，`git diff refs/baseline/<task-id>` 只给「相对派活时刻」的增量；**工作区原有的在途改动必须同时列成清单写进任务包**，否则会被误记为子 Agent 的产出。
+
+### 核对
+
+第五节的越界核对一律以 anchor 为基线，anchor 由任务包给出，**auditor 不得自行选基线，也不得用 `HEAD` 顶替**。若任务包的 anchor 与实际工作区对不上（例如 `git cat-file -e` 失败），auditor 直接返回主 Agent，不自行修复。
+
+### 主 Agent 自身改动的收尾
+
+顺序只有一种是无损的：**先提交主 Agent 的改动 → 再记 anchor → 再派活**。
+
+放宽到「不提交也能派」的条件只有一个：主 Agent 的在途改动与子 Agent 的改动**不在同一文件**。此时 anchor 能区分，回收后按文件分两次提交。
+
+**同一文件内既有主 Agent 的未提交改动、又有子 Agent 的改动时，`git` 无法按归属拆分**——这视为派活前收敛失败，不得派活，须先提交或先撤销主 Agent 那部分改动。
+
+判据：任务包的路径白名单与主 Agent 在途改动的文件清单相交即冲突，派活前必须消解。
