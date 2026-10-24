@@ -82,3 +82,4 @@
 | 提交 | 违反条款 | 处置 |
 |---|---|---|
 | `48f3d43` feat(backend): 搭建四模块工程骨架与 24 张表的 Flyway 迁移 | ① 单次提交 2436 行，超过 `AGENTS.md` 的 400 行上限（剔除 `mvnw`/`mvnw.cmd` 484 行自动生成后仍约 1952 行）；<br>② 21 份 SQL 迁移与 7 个 Java 文件在同一提交，违反「数据库迁移与代码变更分开提交」 | **不重写历史**。该提交已推送至 `origin/main`，改写需 force push main，风险高于收益；且拆分只能修掉②，修不掉①（21 份 SQL 自身已超 400 行）。<br>**防再发**：提交前跑 `delivery-auditor`，检查单见 `docs/agents.md` 第五节 |
+| `apps/network-console/src/views/warehouse/`（含路由 `/warehouse` 与菜单项） | `proposal.md:30` 明确「不做：仓库网络与空间模型」，相关规格在 `deferred/`，属越界实现 | **决定保留**（2026-10-24）。若要正式纳入范围，需从 `deferred/` 移出规格并更新 `proposal.md` 的非目标清单；在此之前它不进入验收范围 |
