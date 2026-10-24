@@ -313,6 +313,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--prefix", default=DEFAULT_PREFIX, help=f"只收录该前缀的路径（默认 {DEFAULT_PREFIX}）")
     parser.add_argument("--timeout", type=float, default=10.0, help="拉取超时秒数（默认 10）")
+    parser.add_argument(
+        "--source-commit",
+        help="覆盖台账头部的源 commit。跨分支生成时必填：台账描述的是提供 spec 的那版代码，"
+        "不是写台账所在分支的 HEAD，两者不一致会让读者定位到错的版本。",
+    )
     parser.add_argument("--check", action="store_true", help="只校验台账与源是否一致，不写文件；不一致返回 1")
     return parser
 
@@ -326,7 +331,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"错误：{exc}", file=sys.stderr)
         return 2
 
-    text = render(spec, origin, short_commit(), args.prefix)
+    text = render(spec, origin, args.source_commit or short_commit(), args.prefix)
     out_path = Path(args.out)
 
     if args.check:

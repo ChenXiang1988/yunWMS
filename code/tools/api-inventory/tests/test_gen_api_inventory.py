@@ -150,6 +150,10 @@ class CliTest(unittest.TestCase):
     def test_missing_file_returns_two(self) -> None:
         self.assertEqual(gen.main(["--from-file", str(Path(self.tmp.name) / "nope.json"), "--out", str(self.out)]), 2)
 
+    def test_source_commit_override(self) -> None:
+        gen.main(["--from-file", str(FIXTURE), "--out", str(self.out), "--source-commit", "abc1234"])
+        self.assertIn("源 commit：`abc1234`", self.out.read_text(encoding="utf-8"))
+
     def test_custom_prefix(self) -> None:
         gen.main(["--from-file", str(FIXTURE), "--out", str(self.out), "--prefix", "/api/console/"])
         text = self.out.read_text(encoding="utf-8")

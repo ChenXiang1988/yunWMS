@@ -40,7 +40,10 @@ python3 code/tools/api-inventory/gen_api_inventory.py --from-file docs/api/opena
 | `--json-out` | `docs/api/openapi.json` | 仅在实时拉取时写出 |
 | `--prefix` | `/api/` | 只收录该前缀，过滤 `/error`、`/actuator/*` 等框架路径 |
 | `--timeout` | `10` | 拉取超时秒数 |
+| `--source-commit` | 当前 HEAD | 覆盖台账头部的源 commit；跨分支生成时必填 |
 | `--check` | 关 | 只校验不写文件 |
+
+`--source-commit` 存在的原因：台账描述的是**提供 spec 的那版代码**，不一定是写台账所在分支的 HEAD。两者不一致时，头部 commit 会把人定位到错的版本。
 
 退出码：`0` 成功 / `1` 台账与源不一致（含文件不存在）/ `2` 输入不可用（文件缺失、JSON 非法、顶层缺 `paths`）。
 
