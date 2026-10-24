@@ -269,3 +269,59 @@ AGENTS.md  >  .codebuddy/rules/  >  change 的 design.md / specs  >  任务包
 
 1. `docs/research/auth-middleware.md` R4 写的 Boot 3.x 坐标有误（应为 `sa-token-spring-boot3-starter`）。该文档是快照，按 `docs-convention.md` 不回改正文；头部「时效」已声明以仓库现状为准。
 2. Sa-Token 会话存储当前是默认内存实现，重启即失效、多实例不共享。落登录（任务 2.1）前需决定是否引入 `sa-token-redis-*` 并走依赖准入。
+
+---
+
+## 十二、并行会话的工作目录隔离
+
+### 为什么需要
+
+两个会话在同一个目录工作时，即使改的是不同文件，也会互相踩到这些共享状态：
+
+| 共享状态 | 冲突后果 |
+| --- | --- |
+| `git` 工作区与暂存区 | A 会话 `git add` 后 B 会话提交，会把 A 的改动一起提交 |
+| `target/`、`node_modules/` | 一方 `clean` 或重装依赖，另一方构建失败 |
+| 同一个文件 | 后写覆盖先写，且没有任何提示 |
+
+2026-10-24 出现过一次：一个会话改规格、另一个改认证代码，靠「恰好改不同文件」没撞车。这是运气，不是机制。
+
+### 怎么做
+
+每个并行会话用一条独立 worktree：
+
+```bash
+# 主工作区保持在 main，用于合并与验收
+cd ~/yunWMS
+
+# 会话 A：拉一条 worktree 并切到自己的分支
+git worktree add ../yunWMS-owner -b change/implement-owner
+cd ../yunWMS-owner
+
+# 会话 B：另一条，路径与分支都不重叠
+git worktree add ../yunWMS-sku -b change/implement-sku
+cd ../yunWMS-sku
+```
+
+要点：
+
+- **一条分支一条 worktree**，同一个分支不能被两条 worktree 同时检出，`git` 会直接拒绝。
+- **路径必须在主仓库之外**（`../` 开头），放在仓库内会被 git 当成嵌套仓库。
+- **路径白名单按 worktree 划分**：`implement-owner` 的会话只改 `code/backend/wms-auth`、`wms-master/**/owner*` 等，不得改另一条 worktree 正在改的文件。
+- **依赖各自安装**：`node_modules` 不共享，各自 `pnpm install`。
+
+### 回收
+
+会话合并回 `main` 后立即清理：
+
+```bash
+cd ~/yunWMS
+git worktree remove ../yunWMS-owner
+git branch -d change/implement-owner   # 已合并才可 -d
+```
+
+遗留的 worktree 用 `git worktree list` 查看，`git worktree prune` 清理已删除目录的登记。
+
+### 不适用的情况
+
+串行推进（做完一个切片再做下一个）不需要 worktree，直接在一条分支上按顺序提交即可。**新开 worktree 的成本是每份都要装依赖**，不为并行而并行。
