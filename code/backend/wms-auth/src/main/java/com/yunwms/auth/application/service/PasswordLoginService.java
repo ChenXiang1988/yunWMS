@@ -36,6 +36,14 @@ public class PasswordLoginService {
     /** 连续失败达到该次数即锁定，对应规格「连续 5 次密码错误后锁定」。阈值只在这里定义，SQL 通过参数接收。 */
     private static final int MAX_CONSECUTIVE_FAILURES = 5;
 
+    /**
+     * 失败计数窗口，对应规格「同一主体在 30 分钟内连续 5 次输入错误密码」。
+     *
+     * <p>与锁定时长是两个独立的规则，只是当前取值相同：把窗口写成 {@link #LOCK_DURATION}
+     * 会让调整锁定时长时顺手改掉窗口，而这两条规则在规格里是分开表述的。
+     */
+    private static final Duration FAILURE_WINDOW = Duration.ofMinutes(30);
+
     /** 锁定时长，对应规格「锁定该主体 30 分钟」。 */
     private static final Duration LOCK_DURATION = Duration.ofMinutes(30);
 
@@ -74,6 +82,7 @@ public class PasswordLoginService {
         if (account.lockedUntil() != null && !account.isLockedAt(now)) {
             // 上一轮锁定已过期：先归零再校验。不清零的话，用户熬过 30 分钟后只要再错一次就立刻又被锁 30 分钟，
             // 惩罚没有停止条件；规格的「连续 5 次」应随这一次锁定结束而重新开始。
+            // 归零同时清掉失败窗口起点，下一轮的 30 分钟从这里重新算。
             userAccountRepository.clearExpiredLock(account.id(), now);
         }
 
@@ -105,10 +114,14 @@ public class PasswordLoginService {
      *
      * <p>用数据库返回的累加结果判断是否触发锁定，而不是用应用侧算出的次数：并发下应用侧的数字可能落后，
      * 日志里就会写错「是谁把账号试锁的」。
+     *
+     * <p>窗口起点由本方法算好后传给数据库，而「是否还在窗口内」由数据库在同一条语句里判定：
+     * 应用侧先查上次失败时间再决定加不加，并发下两个请求会读到同一个旧时间、各自从 1 重新计数。
+     * 三个时间参数同出一个时钟（本方法的 {@code now}），避免与库内 {@code now()} 混用后窗口被算偏。
      */
     private void recordFailure(long userId, Instant now) {
         FailedAttemptState failure = userAccountRepository.recordFailedAttempt(
-                userId, MAX_CONSECUTIVE_FAILURES, now.plus(LOCK_DURATION));
+                userId, MAX_CONSECUTIVE_FAILURES, now.minus(FAILURE_WINDOW), now, now.plus(LOCK_DURATION));
         if (failure.lockedUntil() != null && failure.lockedUntil().isAfter(now)) {
             log.warn("连续密码错误达到 {} 次，账号已锁定：userId={}, failedAttempts={}, lockedUntil={}",
                     MAX_CONSECUTIVE_FAILURES, userId, failure.failedAttempts(), failure.lockedUntil());

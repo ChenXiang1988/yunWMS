@@ -30,6 +30,7 @@ public class SysUserEntity {
     private String status;
     private Integer failedAttempts;
     private Instant lockedUntil;
+    private Instant lastFailedAt;
     private Instant lastLoginAt;
     private String dataScopeType;
     private String email;
@@ -125,6 +126,14 @@ public class SysUserEntity {
 
     public void setLockedUntil(Instant lockedUntil) {
         this.lockedUntil = lockedUntil;
+    }
+
+    public Instant getLastFailedAt() {
+        return lastFailedAt;
+    }
+
+    public void setLastFailedAt(Instant lastFailedAt) {
+        this.lastFailedAt = lastFailedAt;
     }
 
     public Instant getLastLoginAt() {
