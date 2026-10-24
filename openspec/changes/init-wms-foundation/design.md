@@ -35,6 +35,8 @@
 
 前端与后端统一放在 `code/` 下，前端在 `code/frontend`（自身是 pnpm workspace 根），后端在 `code/backend`（独立 Maven 工程）。仓库根只保留 `code/`、`docker/`、`docs/`、`openspec/`、`scripts/`。
 
+**例外**：依赖服务的 `docker-compose.dev.yml` 随所属模块放置（当前为 `code/backend/docker-compose.dev.yml`），不进 `docker/`。理由：D0 的意图是「仓库根整洁」，该文件位于 `code/` 之下，意图已满足；且它装的是 PostgreSQL、Valkey、MinIO，均为后端专属依赖，随 `wms-app` 走比塞进公共 `docker/` 更内聚。
+
 **理由**：根目录只放工程性文件，不会有人在根下误建业务文件；前后端物理隔离，各自的构建与依赖互不干扰。
 
 **代价**：路径深一层，IDE 需分别打开两个子目录，CI 的工作目录要显式指定。
