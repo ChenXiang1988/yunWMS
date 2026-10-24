@@ -11,7 +11,7 @@ code/frontend/
 │   └── network-console/    # 仓网管理端，端口 5174，compact 密度
 ├── packages/
 │   ├── tokens/             # 设计令牌（CSS 变量 + 两套密度）
-│   ├── ui/                 # 共用组件
+│   ├── ui-web/             # 共用组件
 │   └── request/            # Axios 封装、令牌存储、错误码
 ├── package.json
 ├── pnpm-workspace.yaml
@@ -67,5 +67,5 @@ pnpm typecheck
 ## 约定
 
 1. 组件里不写十六进制色值，只用语义令牌，见 `packages/tokens/README.md`。
-2. `packages/ui` 只放两端都会用的组件，单端专用组件放各自 `src/components/`。
+2. `packages/ui-web` 只放两端都会用的组件，单端专用组件放各自 `src/components/`。
 3. `src/api/` 与后端 controller 一一对应，文件名保持一致。

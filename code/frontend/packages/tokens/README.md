@@ -45,14 +45,25 @@ yunWMS 设计令牌。一套基础 + 两套密度主题，货主端与仓网管�
 
 ```ts
 // main.ts
-import '@yunwms/tokens'                 // tokens.css
-import '@yunwms/tokens/element-plus'    // Element Plus 变量映射
-import 'element-plus/dist/index.css'    // 顺序：tokens 在 EP 样式之前或之后均可
+import '@yunwms/tokens'   // tokens.css，输出 CSS 变量
 ```
 
-引入顺序建议：`element-plus/dist/index.css` → `@yunwms/tokens` → `@yunwms/tokens/element-plus`。
+Ant Design Vue 的主题映射在应用根组件接（`apps/owner-portal/src/App.vue` 为参考实现）：
 
-Element Plus 的 CSS 变量会被 v0.1 这张映射表覆盖，组件源码不需要改。
+```vue
+<script setup lang="ts">
+import { ConfigProvider } from 'ant-design-vue'
+import { antdTheme } from '@yunwms/tokens/web-antd'
+</script>
+
+<template>
+  <ConfigProvider :theme="antdTheme">
+    <router-view />
+  </ConfigProvider>
+</template>
+```
+
+`antdTheme` 把语义令牌映射为 Ant Design Vue 的 theme token，组件库样式随之生效，业务代码不直接引用原始色值。
 
 ## 命名规则
 
