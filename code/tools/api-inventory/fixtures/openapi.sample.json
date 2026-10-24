@@ -1,0 +1,228 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "yunWMS 测试样本（非真实契约）",
+    "version": "v0"
+  },
+  "paths": {
+    "/api/auth/login": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "登录名加密码登录，签发会话令牌。",
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LoginRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/ApiResultLoginResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/owners": {
+      "get": {
+        "tags": ["owner"],
+        "summary": "分页查询货主。",
+        "operationId": "pageOwners",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/ApiResultPageResultOwnerVO" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["owner"],
+        "summary": "新建货主。",
+        "operationId": "createOwner",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateOwnerRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/ApiResultOwnerVO" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/console/categories": {
+      "get": {
+        "tags": ["category"],
+        "summary": "查询类目树，用于验证自引用截断。",
+        "operationId": "categoryTree",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/ApiResultCategoryVO" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/portal/profile": {
+      "get": {
+        "tags": ["portal"],
+        "summary": "货主端查询自身资料。历史接口，响应未包 ApiResult，台账必须如实标注。",
+        "operationId": "portalProfile",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OwnerVO" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/actuator/health": {
+      "get": {
+        "summary": "框架健康检查，应被前缀过滤排除。",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/error": {
+      "get": {
+        "summary": "框架错误页，应被前缀过滤排除。",
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "LoginRequest": {
+        "type": "object",
+        "required": ["loginName", "password"],
+        "properties": {
+          "loginName": { "type": "string", "description": "登录名" },
+          "password": { "type": "string", "format": "password", "description": "密码" }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "required": ["token", "expiresIn", "subjectType"],
+        "properties": {
+          "token": { "type": "string", "description": "会话令牌" },
+          "expiresIn": { "type": "integer", "format": "int64", "description": "有效期（秒）" },
+          "subjectType": {
+            "type": "string",
+            "description": "主体类型",
+            "enum": ["CONSOLE", "PORTAL"]
+          },
+          "subjectId": { "type": "string", "description": "主体标识" },
+          "subjectName": { "type": "string", "description": "主体名称" }
+        }
+      },
+      "ApiResultLoginResponse": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "integer", "format": "int32" },
+          "message": { "type": "string" },
+          "data": { "$ref": "#/components/schemas/LoginResponse" }
+        }
+      },
+      "CreateOwnerRequest": {
+        "type": "object",
+        "required": ["ownerCode", "ownerName"],
+        "properties": {
+          "ownerCode": { "type": "string", "description": "货主编码" },
+          "ownerName": { "type": "string", "description": "货主名称" },
+          "contactName": { "type": "string", "description": "联系人", "nullable": true }
+        }
+      },
+      "OwnerVO": {
+        "type": "object",
+        "required": ["id", "ownerCode"],
+        "properties": {
+          "id": { "type": "string", "description": "主键，JSON 中用字符串" },
+          "ownerCode": { "type": "string", "description": "货主编码" },
+          "ownerName": { "type": "string", "description": "货主名称" },
+          "status": {
+            "type": "string",
+            "description": "状态",
+            "enum": ["ENABLED", "DISABLED"]
+          },
+          "createdAt": { "type": "string", "format": "date-time", "description": "创建时间" }
+        }
+      },
+      "ApiResultOwnerVO": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "integer", "format": "int32" },
+          "message": { "type": "string" },
+          "data": { "$ref": "#/components/schemas/OwnerVO" }
+        }
+      },
+      "PageResultOwnerVO": {
+        "type": "object",
+        "required": ["pageNo", "pageSize", "total", "records"],
+        "properties": {
+          "pageNo": { "type": "integer", "format": "int32", "description": "页码，从 1 开始" },
+          "pageSize": { "type": "integer", "format": "int32", "description": "每页条数，上限 200" },
+          "total": { "type": "integer", "format": "int64", "description": "总数" },
+          "records": {
+            "type": "array",
+            "description": "本页记录",
+            "items": { "$ref": "#/components/schemas/OwnerVO" }
+          }
+        }
+      },
+      "ApiResultPageResultOwnerVO": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "integer", "format": "int32" },
+          "message": { "type": "string" },
+          "data": { "$ref": "#/components/schemas/PageResultOwnerVO" }
+        }
+      },
+      "CategoryVO": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "type": "string", "description": "类目标识" },
+          "name": { "type": "string", "description": "类目名称" },
+          "children": {
+            "type": "array",
+            "description": "子类目",
+            "items": { "$ref": "#/components/schemas/CategoryVO" }
+          }
+        }
+      },
+      "ApiResultCategoryVO": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "integer", "format": "int32" },
+          "message": { "type": "string" },
+          "data": { "$ref": "#/components/schemas/CategoryVO" }
+        }
+      }
+    }
+  }
+}
