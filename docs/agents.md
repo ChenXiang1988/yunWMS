@@ -132,8 +132,20 @@ AGENTS.md  >  .codebuddy/rules/  >  change 的 design.md / specs  >  任务包
 | name | 模式 | 职责 | 触发条件 | 路径白名单 | 模型 | 上线日期 | 探针结果 |
 |---|---|---|---|---|---|---|---|
 | `delivery-auditor` | agentic | 提交前与 change 验收时的只读审计，产出检查结论 | 主 Agent 需要核对改动是否越界、提交是否超限、迁移与代码是否分离、是否引入违规依赖时 | 只读，无写入权限 | 留空 | 2026-10-24 | 2026-10-24 首次任务实测，见第十节 |
+| `backend-implementer` | agentic | 按任务包实现后端 Java 代码 | 主 Agent 完成冲突预检并下发单条实现任务包时 | `code/backend/**` | 留空 | 2026-10-24 | 2026-10-24 首次任务实测，见第十一节 |
 
-定义文件：`.codebuddy/agents/delivery-auditor.md`
+定义文件：`.codebuddy/agents/delivery-auditor.md`、`.codebuddy/agents/backend-implementer.md`
+
+### 实现类 Agent 的 `enabledAutoRun` 决定
+
+早前标记为「待定」，现定 **`true`**。
+
+理由：agentic 调用期间主 Agent 被挂起，无法介入；而一次实现任务通常包含数十次工具调用，逐次审批只会造成频繁打断，不提供判断力。真正的不可逆边界改由两条约束承担：
+
+1. **路径白名单**：写操作被限制在任务包给定范围内
+2. **System Prompt 硬禁不可逆命令**：`git add/commit/push`、删除、部署一律禁止，提交统一由主 Agent 执行
+
+回收时用第五节检查单核对是否越界。若首次实测发现越界，再收回到 `false` 并改为按步审批。
 
 ---
 
@@ -218,3 +230,42 @@ AGENTS.md  >  .codebuddy/rules/  >  change 的 design.md / specs  >  任务包
 
 - 主 Agent → 子 Agent 的回路已跑通，机制可用。
 - **暂不增加实现类子 Agent**：本次审计暴露的设计与实现分歧（尤其是认证中间件选型）尚未裁决，此时派实现类 Agent 会按可能错误的选型施工。待用户裁决后再决定第二个子 Agent。
+
+---
+
+## 十一、`backend-implementer` 首次派活实测记录（2026-10-24）
+
+**场景**：将 `wms-auth` 的认证基础设施从 Spring Security 切换为 Sa-Token（对应 `design.md` D11 与 `docs/research/auth-middleware.md` R4）。
+
+**规模**：84 次工具调用，约 39 分钟，改动 5 个文件（2 删 2 增 2 改），净 +36 行。
+
+### 按五个维度实测
+
+| 维度 | 结果 | 证据 |
+|---|---|---|
+| 约束遵守率 | **5/5** | 改动全在白名单内；无 git 写操作；未改测试断言；未新增迁移；未引入白名单外依赖 |
+| 长程一致性 | 良好 | 39 分钟后仍在执行「不新增依赖」「不越界」等任务包开头给出的约束 |
+| 范围自律 | 良好 | 未顺手重构 `ApiResult`/`ErrorCode`；主动声明 `docs/agents.md` 与子 Agent 定义文件的白名单外改动不属于它 |
+| 阻塞行为 | **正确** | 发现调研文档给的坐标与实际不符（`sa-token-spring-boot-starter` vs `spring-boot3-starter`）时，未自行改文档，而是上报待裁决 |
+| 工具调用稳定性 | 良好 | 无重复循环，无参数错误 |
+
+### 主 Agent 回收核对（未采信报告，独立复验）
+
+| 检查项 | 结果 |
+|---|---|
+| `git status` 是否越界 | 无越界 |
+| 单次提交 ≤400 行 | 满足（净 +36 行） |
+| 迁移与代码分离 | 无迁移改动 |
+| 违规依赖 | `sa-token 1.46.0` 为 Apache-2.0，父 pom 许可已核对 |
+| 修改测试断言 | 无测试文件，不适用 |
+| 构建 | `./mvnw clean verify` BUILD SUCCESS（主 Agent 独立执行） |
+| 运行时 | health 200 / api-docs 200 / swagger-ui 200 / `/api/anything` 401 且响应体逐字节符合预期（主 Agent 独立执行） |
+
+### 结论
+
+实现类子 Agent 可用，`enabledAutoRun: true` 未造成越界，维持该设置。
+
+### 两个遗留决策
+
+1. `docs/research/auth-middleware.md` R4 写的 Boot 3.x 坐标有误（应为 `sa-token-spring-boot3-starter`）。该文档是快照，按 `docs-convention.md` 不回改正文；头部「时效」已声明以仓库现状为准。
+2. Sa-Token 会话存储当前是默认内存实现，重启即失效、多实例不共享。落登录（任务 2.1）前需决定是否引入 `sa-token-redis-*` 并走依赖准入。
