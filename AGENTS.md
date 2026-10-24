@@ -7,11 +7,12 @@
 - 全部代码由 AI 编写，人类只做验收，不参与编码
 - 人类不逐行 review 中间过程，只在 change 结束时验收
 - 因此每个提交必须自证：可编译、可运行、可回查
+- 多 Agent 分工见 `docs/agents.md`：主 Agent 负责沟通、确认、派活、检查与汇报；实现任务一律派发给子 Agent，主 Agent 不直接写业务代码
 
 ## 工作单元
 
 - 一个 OpenSpec change = 一条分支 = 一个 PR
-- 分支命名：`change/<change-id>`，修复类为 `fix/<简述>`
+- 分支命名：`change/<change-id>`，修复类为 `fix/<简述>`，配置与基建类为 `chore/<简述>`
 - 开 change 时建分支，归档后立即删除
 - 分支存活不得超过 3 天；超过说明 change 切得太大，须拆分
 - 多个 AI 会话并行时用 `git worktree` 物理隔离，不在同一目录并发改文件
