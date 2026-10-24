@@ -299,6 +299,16 @@ def render(spec: dict, origin: str, commit: str, prefix: str = DEFAULT_PREFIX) -
     return "\n".join(lines)
 
 
+def body_of(text: str) -> str:
+    """取正文（从「## 汇总」起）。
+
+    头部元信息不参与一致性比较：来源行会随生成方式变化（实时拉取 / 文件快照），
+    源 commit 会随分支前进而变化。把它们算进比较，``--check`` 在正确的情况下
+    也会永远报不一致，那这个校验就等于没有。
+    """
+    return text.split("## 汇总", 1)[-1]
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="gen_api_inventory.py",
@@ -338,7 +348,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not out_path.exists():
             print(f"不一致：{out_path} 不存在。先不带 --check 生成一次。", file=sys.stderr)
             return 1
-        if out_path.read_text(encoding="utf-8") != text:
+        if body_of(out_path.read_text(encoding="utf-8")) != body_of(text):
             print(f"不一致：{out_path} 与源生成的台账不同。", file=sys.stderr)
             return 1
         print(f"一致：{out_path}")

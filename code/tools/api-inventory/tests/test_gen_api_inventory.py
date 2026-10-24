@@ -147,6 +147,21 @@ class CliTest(unittest.TestCase):
     def test_check_without_artifact_returns_one(self) -> None:
         self.assertEqual(gen.main(["--from-file", str(FIXTURE), "--out", str(self.out), "--check"]), 1)
 
+    def test_check_ignores_origin_line(self) -> None:
+        gen.main(["--from-file", str(FIXTURE), "--out", str(self.out)])
+        text = self.out.read_text(encoding="utf-8").replace("文件快照", "实时拉取")
+        self.out.write_text(text, encoding="utf-8")
+        self.assertEqual(gen.main(["--from-file", str(FIXTURE), "--out", str(self.out), "--check"]), 0)
+
+    def test_check_ignores_source_commit(self) -> None:
+        gen.main(["--from-file", str(FIXTURE), "--out", str(self.out), "--source-commit", "aaa1111"])
+        self.assertEqual(
+            gen.main(
+                ["--from-file", str(FIXTURE), "--out", str(self.out), "--source-commit", "bbb2222", "--check"]
+            ),
+            0,
+        )
+
     def test_missing_file_returns_two(self) -> None:
         self.assertEqual(gen.main(["--from-file", str(Path(self.tmp.name) / "nope.json"), "--out", str(self.out)]), 2)
 
