@@ -6,7 +6,7 @@
 
 - [x] 1.1 建立 `code/frontend` 的 pnpm workspace（`apps/*`、`packages/*`），验证 `pnpm install` 成功且 `apps/owner-portal` 能引用 `@yunwms/tokens`
 - [x] 1.2 建立后端四个 Maven 模块（common / auth / master / app）并锁定依赖方向，验证 `mvn verify` 通过且健康检查接口返回 200
-- [ ] 1.3 编写 `docker-compose.dev.yml`（PostgreSQL、Valkey、MinIO），验证 `docker compose up -d` 后三个依赖服务健康检查通过 —— **阻塞**：`minio/minio` 已从 Docker Hub 下架，拉取被拒。postgres 与 valkey 正常
+- [x] 1.3 编写 `docker-compose.dev.yml`（PostgreSQL、Valkey），验证 `docker compose up -d` 后依赖服务健康检查通过 —— 对象存储已按 `design.md` D40 移出 compose，不再作为依赖服务
 - [x] 1.4 配置 Flyway 并编写 24 张表的建表脚本，验证 `mvn flyway:migrate` 后表数量与 `design.md` 数据模型清单一致
 - [x] 1.5 建立两个前端工程（Vue 3 + Vite + TS + Ant Design Vue 4），验证两端 dev server 可启动且设计令牌的 `data-density` 生效 —— 构建与密度已验证，**dev server 启动待人工确认**（常驻进程无法在自动化环境验证）
 
@@ -16,7 +16,7 @@
 |---|---|---|
 | 1.1 | `pnpm install`、`pnpm typecheck` | 通过。6 个 workspace 项目；`owner-portal`、`network-console` 类型检查均 Done |
 | 1.2 | `./mvnw verify`、启动 jar 后 `curl -s localhost:8080/actuator/health` | 通过。BUILD SUCCESS；健康检查 **200**，`db` / `redis` / `diskSpace` / `ping` 全 UP |
-| 1.3 | `docker compose up -d` | **失败**。`pull access denied for minio/minio`（镜像已下架）。postgres 与 valkey 均可正常启动并通过健康检查 |
+| 1.3 | `docker compose up -d` | 通过（MinIO 移出后复测）。postgres 与 valkey 均启动且 healthcheck 通过。此前 `minio/minio` 因镜像下架 `pull access denied`，已按 `design.md` D40 移出 compose |
 | 1.4 | `./mvnw -pl wms-app flyway:migrate`、查 `information_schema.tables` | 通过。21 个迁移全部成功；业务表 **24 张**（另有 `flyway_schema_history`），与 `design.md` 数据模型清单逐名一致 |
 | 1.5 | `pnpm build`、`grep data-density` 产物 | 部分通过。两端 `dist` 均生成，`data-density` 分别为 `comfortable`（货主端）/ `compact`（仓网端）；dev server 未实测 |
 

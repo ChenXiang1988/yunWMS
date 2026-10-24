@@ -41,7 +41,7 @@ PG_PORT=15432 docker compose -f docker-compose.dev.yml up -d
 DB_URL="jdbc:postgresql://127.0.0.1:15432/yunwms" ./mvnw spring-boot:run
 ```
 
-可用变量：`PG_PORT`、`REDIS_PORT`、`MINIO_PORT`、`MINIO_CONSOLE_PORT`。
+可用变量：`PG_PORT`、`REDIS_PORT`。
 
 ### 拉不到镜像时
 
@@ -63,18 +63,13 @@ docker tag  docker.m.daocloud.io/valkey/valkey:8-alpine valkey/valkey:8-alpine
 
 `docker-compose.dev.yml` 里写的是标准镜像名，不打进镜像源地址，保持文件可移植。
 
-### 关于 MinIO
+### 关于对象存储
 
-`minio/minio` 已从 Docker Hub 下架，`quay.io/minio/minio` 需要登录，`bitnami/minio` 也已迁移，三个来源都取不到。
+已按 `design.md` **D40** 决策：做一层 `ObjectStorage` 抽象（`put` / `get` / `url` / `delete`），本地用文件系统实现，生产接 S3。**compose 里不再有 MinIO**，开发环境依赖只剩 PostgreSQL 与 Valkey。
 
-这不是网络问题，是分发策略变了。
+背景：`minio/minio` 已从 Docker Hub 下架，`quay.io/minio/minio` 需要登录，`bitnami/minio` 也已迁移，三个来源都取不到——这不是网络问题，是分发策略变了。
 
-对象存储只在商品图片与导入文件落地时才用得上，现阶段不阻塞。届时两条路：
-
-- 用 S3 兼容的替代（`localstack`、`seaweedfs`），或自建私有仓库
-- 或给对象存储做一层抽象，本地用文件系统实现，生产用 S3，开发环境彻底不依赖容器
-
-后者更轻，倾向这个方向。
+被否方案：换 S3 兼容容器（`localstack`、`seaweedfs`）。否决原因是开发机仍要多背一个服务，而首期根本用不到对象存储。
 
 ## 启动
 
