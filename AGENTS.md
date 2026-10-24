@@ -48,6 +48,12 @@
 - 禁止一次提交同时包含代码与数据库迁移
 - 禁止在未确认方案前开始写实现代码
 
+## 编码规范
+
+- 通则见 `docs/coding.md`，Java 与持久化见 `docs/coding-java.md`，目录与包归属见 `docs/coding-project.md`，接口契约见 `docs/api-convention.md`。
+- 动手前 **MUST** 读完本次改动命中的规范文件，**MUST NOT** 凭印象开工。
+- 实现与规范冲突时 **MUST** 改实现，**MUST NOT** 改规范来让错误实现合法化。
+
 ## 验证
 
 - 编译、单测、静态检查全部通过才算完成
