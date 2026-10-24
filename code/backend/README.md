@@ -6,7 +6,7 @@ Java 21 + Spring Boot 3.4 + MyBatis-Plus + PostgreSQL。
 
 ```
 wms-backend
-├── wms-common    统一响应、错误码、业务异常、全局异常处理
+├── wms-web       入站协议层共用物：统一响应、错误码、业务异常、全局异常处理
 ├── wms-auth      认证、会话、用户、角色、权限点、数据范围
 ├── wms-master    货主、联系人、税号、品类、品牌、商品、条码、包装
 └── wms-app       启动装配、配置、数据库迁移
@@ -16,11 +16,11 @@ wms-backend
 
 ```
 app ──► auth ──┐
- │             ├──► common
+ │             ├──► web
  └────► master ─┘
 ```
 
-`common` 不依赖任何业务模块；`auth` 与 `master` 互不依赖，需要跨模块协作时由 `app` 层装配。
+`web` 不依赖任何业务模块；`auth` 与 `master` 互不依赖，需要跨模块协作时由 `app` 层装配。
 **业务代码不放 `wms-app`**，它只负责启动。
 
 ## 环境准备
@@ -103,6 +103,14 @@ docker tag  docker.m.daocloud.io/valkey/valkey:8-alpine valkey/valkey:8-alpine
 curl -s localhost:8080/actuator/health   # 期望 status=UP
 curl -s -o /dev/null -w '%{http_code}' localhost:8080/v3/api-docs   # 期望 200
 curl -s -o /dev/null -w '%{http_code}' localhost:8080/api/anything  # 期望 401
+
+# 登录：两端共用同一入口，主体类型由后端判定
+curl -s -X POST localhost:8080/api/auth/login \
+     -H 'Content-Type: application/json' \
+     -d '{"loginName":"<登录名>","password":"<密码>"}'          # 期望 code=0 且 data.token 非空
+
+# 带令牌访问未映射路径：期望 404（说明令牌已通过鉴权，请求进了 DispatcherServlet）
+curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer <token>" localhost:8080/api/anything
 ```
 
 接口文档：<http://localhost:8080/swagger-ui/index.html>
@@ -124,11 +132,11 @@ python3 tools/verify_constraints.py
 
 ## 当前状态
 
-已完成：工程骨架、统一响应、全局异常、安全策略、数据库迁移。
+已完成：工程骨架、统一响应、全局异常、安全策略、数据库迁移、双主体登录与令牌签发。
 
-未完成：登录与令牌、权限拦截、业务接口。
+未完成：密码策略与失败锁定、首次登录强制改密、会话失效与踢人下线、邮箱找回密码、接口级权限拦截、业务接口。
 
-因此现在除健康检查与接口文档外，所有接口一律返回 401——这是预期行为，不是故障。
+因此除登录、健康检查与接口文档外，未带有效令牌的请求一律返回 401——这是预期行为，不是故障。
 
 ## 两个约定
 

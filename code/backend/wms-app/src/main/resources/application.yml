@@ -21,6 +21,10 @@ spring:
     time-zone: UTC
     serialization:
       write-dates-as-timestamps: false
+    deserialization:
+      # 契约要求多余字段直接拒绝（docs/api-convention.md 第六节）；Spring Boot 默认是忽略，
+      # 前端多传一个字段时不会有任何反馈，会以为改动生效了
+      fail-on-unknown-properties: true
 
 mybatis-plus:
   configuration:
@@ -31,6 +35,18 @@ mybatis-plus:
       logic-delete-field: deletedAt
       logic-not-delete-value: "null"
       logic-delete-value: now()
+
+# 会话与令牌
+sa-token:
+  # 前端请求层统一发送 Authorization: Bearer <token>（见 code/frontend/packages/request/src/http.ts），
+  # 后端按同一约定读取，token-prefix 负责在比对前去掉 Bearer 前缀
+  token-name: Authorization
+  token-prefix: Bearer
+  # 令牌有效期，单位秒
+  timeout: 7200
+  # 两端都是前后端分离，令牌只经响应体交给前端保存，不落 cookie：
+  # 落 cookie 会引入 CSRF 面，也会让「浏览器自动带令牌」变得难以解释
+  is-read-cookie: false
 
 springdoc:
   swagger-ui:

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+    放在 mapper/auth/ 而不是 mapper/ 根下：MyBatis-Plus 的默认扫描位置是 classpath*:/mapper/**/*.xml，
+    按模块分目录可以在多个模块都加 XML 之后仍然一眼看出归属。
+-->
+<mapper namespace="com.yunwms.auth.infrastructure.persistence.mapper.SysUserMapper">
+
+    <!--
+        连续失败次数必须由数据库原子累加，且「这一轮是否还在 30 分钟窗口内」也必须在这里判定。
+        应用层「读出来判断窗口、再加一写回去」在并发下会丢计数：同一账号的多个并发登录读到同一个旧时间，
+        各自判定为窗口外，各自从 1 重新计数，实际允许的尝试次数翻倍。
+
+        窗口判定放在同一条语句里还不够，必须先把目标行锁住再读它：
+        不带 FOR UPDATE 时，目标的 SELECT 走的是语句开始时的快照、也不与写操作互相阻塞，
+        两个并发请求都会按旧值算出 new_count = 1，后到的那次把先到的计数覆盖掉。
+        实测（两个会话并发执行本语句，起点 failed_attempts = 0）：去掉 FOR UPDATE 结果为 1，保留为 2。
+        FOR UPDATE 会让后到的语句先阻塞、拿到提交后的行再算 new_count，窗口与计数因此不会被覆盖。
+
+        锁定截止时间与累加放进同一条语句：分两步写会出现「次数够了但还没锁」的窗口，
+        该窗口内的正确密码会被放过。
+
+        阈值、窗口起点、失败时刻都由参数传入而不是写死在这里：5 与 30 分钟的权威定义在用例侧，
+        SQL 里再写一遍就成了第二处定义。
+        时间参数统一来自应用侧同一个时钟：库内 now() 与应用侧 now 混用会因时钟偏差把窗口算长或算短。
+
+        logic-delete 只作用于 MyBatis-Plus 生成的语句，手写 SQL 必须自己带 deleted_at 条件，
+        否则软删除的账号还会继续被计数、继续被锁定判定读到。
+    -->
+    <select id="recordFailedAttempt"
+            resultType="com.yunwms.auth.infrastructure.persistence.entity.FailedAttemptRow">
+        WITH target AS (
+            SELECT id,
+                   CASE
+                       WHEN last_failed_at IS NULL OR last_failed_at &lt; #{windowStart} THEN 1
+                       ELSE failed_attempts + 1
+                   END AS new_count
+            FROM sys_user
+            WHERE id = #{userId}
+              AND deleted_at IS NULL
+            FOR UPDATE
+        )
+        UPDATE sys_user u
+        SET failed_attempts = t.new_count,
+            last_failed_at  = #{failedAt},
+            locked_until    = CASE
+                                  WHEN t.new_count >= #{lockAfterFailures} THEN #{lockUntil}
+                                  ELSE u.locked_until
+                              END
+        FROM target t
+        WHERE u.id = t.id
+        RETURNING u.failed_attempts, u.locked_until
+    </select>
+
+</mapper>

@@ -18,7 +18,7 @@
     <name>yunWMS backend</name>
 
     <modules>
-        <module>wms-common</module>
+        <module>wms-web</module>
         <module>wms-auth</module>
         <module>wms-master</module>
         <module>wms-app</module>
@@ -36,7 +36,7 @@
         <dependencies>
             <dependency>
                 <groupId>com.yunwms</groupId>
-                <artifactId>wms-common</artifactId>
+                <artifactId>wms-web</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
