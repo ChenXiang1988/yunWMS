@@ -17,7 +17,7 @@
     <dependencies>
         <dependency>
             <groupId>com.yunwms</groupId>
-            <artifactId>wms-common</artifactId>
+            <artifactId>wms-web</artifactId>
         </dependency>
         <dependency>
             <groupId>com.baomidou</groupId>
