@@ -31,6 +31,7 @@ alwaysApply: true
 - 引入 GPL / AGPL / SSPL 许可依赖
 - 未读文件整体改写
 - 修改测试断言以通过测试
+- 建立 `CHANGELOG.md`：变更历史由 `git log` 与 Conventional Commits 承担，两份历史必然打架
 
 ## 交付
 
