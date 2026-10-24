@@ -5,6 +5,7 @@ import com.yunwms.auth.application.dto.AuthenticatedSubject;
 import com.yunwms.auth.domain.model.FailedAttemptState;
 import com.yunwms.auth.domain.model.SessionOrigin;
 import com.yunwms.auth.domain.model.UserAccount;
+import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.PasswordHasher;
 import com.yunwms.auth.domain.port.SessionTokenIssuer;
 import com.yunwms.auth.domain.port.UserAccountRepository;
@@ -51,15 +52,18 @@ public class PasswordLoginService {
     private final UserRoleQuery userRoleQuery;
     private final PasswordHasher passwordHasher;
     private final SessionTokenIssuer sessionTokenIssuer;
+    private final CurrentSession currentSession;
 
     public PasswordLoginService(UserAccountRepository userAccountRepository,
                                 UserRoleQuery userRoleQuery,
                                 PasswordHasher passwordHasher,
-                                SessionTokenIssuer sessionTokenIssuer) {
+                                SessionTokenIssuer sessionTokenIssuer,
+                                CurrentSession currentSession) {
         this.userAccountRepository = userAccountRepository;
         this.userRoleQuery = userRoleQuery;
         this.passwordHasher = passwordHasher;
         this.sessionTokenIssuer = sessionTokenIssuer;
+        this.currentSession = currentSession;
     }
 
     /**
@@ -105,8 +109,13 @@ public class PasswordLoginService {
         userAccountRepository.recordSuccessfulLogin(account.id(), now);
         String token = sessionTokenIssuer.issue(account,
                 new SessionOrigin(now, command.sourceAddress(), command.clientIdentifier()));
+        if (account.mustChangePassword()) {
+            // 标记必须在签发之后写入：会话是签发时建立的，先标记拿不到会话。
+            // 令牌照发而不是直接拒绝：规格要求「仅允许访问改密界面」，用户需要这个令牌才能去改密。
+            currentSession.markMustChangePassword();
+        }
         return new AuthenticatedSubject(token, account.subjectType(), account.ownerId(),
-                account.displayName(), roles);
+                account.displayName(), account.mustChangePassword(), roles);
     }
 
     /**

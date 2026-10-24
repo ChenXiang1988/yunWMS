@@ -7,6 +7,7 @@ import com.yunwms.auth.domain.model.SessionOrigin;
 import com.yunwms.auth.domain.model.SubjectType;
 import com.yunwms.auth.domain.model.UserAccount;
 import com.yunwms.auth.domain.model.UserStatus;
+import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.PasswordHasher;
 import com.yunwms.auth.domain.port.SessionTokenIssuer;
 import com.yunwms.auth.domain.port.UserAccountRepository;
@@ -70,6 +71,7 @@ class PasswordLoginServiceTest {
     private UserRoleQuery userRoleQuery;
     private PasswordHasher passwordHasher;
     private SessionTokenIssuer sessionTokenIssuer;
+    private CurrentSession currentSession;
     private PasswordLoginService passwordLoginService;
 
     @BeforeEach
@@ -78,8 +80,9 @@ class PasswordLoginServiceTest {
         userRoleQuery = mock(UserRoleQuery.class);
         passwordHasher = mock(PasswordHasher.class);
         sessionTokenIssuer = mock(SessionTokenIssuer.class);
+        currentSession = mock(CurrentSession.class);
         passwordLoginService = new PasswordLoginService(
-                userAccountRepository, userRoleQuery, passwordHasher, sessionTokenIssuer);
+                userAccountRepository, userRoleQuery, passwordHasher, sessionTokenIssuer, currentSession);
     }
 
     @Test
@@ -314,9 +317,47 @@ class PasswordLoginServiceTest {
         verify(userAccountRepository).recordSuccessfulLogin(eq(USER_ID), any(Instant.class));
     }
 
+    @Test
+    @DisplayName("初始密码登录：令牌照发，会话被标记为需先改密")
+    void shouldMarkSessionWhenPasswordMustBeChanged() {
+        given(userAccountRepository.findByLoginName(LOGIN_NAME))
+                .willReturn(Optional.of(account(UserStatus.ACTIVE, null, true)));
+        given(passwordHasher.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(true);
+        given(userRoleQuery.findActiveRoleCodesByUserId(USER_ID)).willReturn(List.of());
+        given(sessionTokenIssuer.issue(any(UserAccount.class), any(SessionOrigin.class))).willReturn(TOKEN);
+
+        AuthenticatedSubject subject = passwordLoginService.login(command(LOGIN_NAME, RAW_PASSWORD));
+
+        assertThat(subject.mustChangePassword()).isTrue();
+        // 先签发再标记：会话是签发时建立的，先标记在真实实现里会拿不到会话
+        InOrder inOrder = inOrder(sessionTokenIssuer, currentSession);
+        inOrder.verify(sessionTokenIssuer).issue(any(UserAccount.class), any(SessionOrigin.class));
+        inOrder.verify(currentSession).markMustChangePassword();
+    }
+
+    @Test
+    @DisplayName("非初始密码登录：不写改密标记，响应里也不带")
+    void shouldNotMarkSessionWhenPasswordIsNotInitial() {
+        given(userAccountRepository.findByLoginName(LOGIN_NAME))
+                .willReturn(Optional.of(account(UserStatus.ACTIVE, null, false)));
+        given(passwordHasher.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(true);
+        given(userRoleQuery.findActiveRoleCodesByUserId(USER_ID)).willReturn(List.of());
+        given(sessionTokenIssuer.issue(any(UserAccount.class), any(SessionOrigin.class))).willReturn(TOKEN);
+
+        AuthenticatedSubject subject = passwordLoginService.login(command(LOGIN_NAME, RAW_PASSWORD));
+
+        assertThat(subject.mustChangePassword()).isFalse();
+        verify(currentSession, never()).markMustChangePassword();
+    }
+
     private UserAccount account(UserStatus status, Instant lockedUntil) {
+        return account(status, lockedUntil, false);
+    }
+
+    /** 初始密码建号或管理员重置后的账号：登录会成功，但只能去改密。 */
+    private UserAccount account(UserStatus status, Instant lockedUntil, boolean mustChangePassword) {
         return new UserAccount(USER_ID, LOGIN_NAME, "张三", SubjectType.STAFF, null,
-                PASSWORD_HASH, status, lockedUntil);
+                PASSWORD_HASH, mustChangePassword, status, lockedUntil);
     }
 
     private PasswordLoginCommand command(String loginName, String password) {

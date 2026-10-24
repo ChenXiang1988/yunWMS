@@ -1,19 +1,22 @@
 package com.yunwms.auth.config;
 
+import cn.dev33.satoken.context.SaHolder;
 import cn.dev33.satoken.filter.SaServletFilter;
 import cn.dev33.satoken.stp.StpUtil;
+import com.yunwms.auth.domain.port.CurrentSession;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * 认证入口：除放行清单外，所有请求都必须已登录。
+ * 认证入口：除放行清单外，所有请求都必须已登录；已登录但需先改密的，只放行改密接口。
  *
- * <p>权限校验（接口级权限点）属于后续任务，当前只做到「是否登录」这一层：带有效令牌的请求放行，
- * 其余一律 401。
+ * <p>权限校验（接口级权限点）属于后续任务，当前只做到「是否登录」与「是否必须先改密」这两层。
  *
  * <p>用过滤器而不是 MVC 拦截器：拦截器要等到请求命中处理器才执行，未映射的路径会先变成 404，
  * 拿不到统一的 401；过滤器在 Servlet 容器里先于 DispatcherServlet 执行，结果与路径是否存在无关。
+ * 强制改密同理不放在 Controller 注解上：注解只能保护写了注解的接口，新加的业务接口漏写一个就绕过去了；
+ * 放在这里默认拒绝，新增路径必须显式加入放行清单才能通过。
  */
 @Configuration
 public class SaTokenConfig {
@@ -47,11 +50,18 @@ public class SaTokenConfig {
     private static final int AUTH_FILTER_ORDER = 0;
 
     @Bean
-    public FilterRegistrationBean<SaServletFilter> saTokenAuthFilter(RestAuthResponses authResponses) {
+    public FilterRegistrationBean<SaServletFilter> saTokenAuthFilter(RestAuthResponses authResponses,
+                                                                    CurrentSession currentSession) {
         SaServletFilter filter = new SaServletFilter()
                 .addInclude("/**")
                 .addExclude(PUBLIC_PATHS)
-                .setAuth(obj -> StpUtil.checkLogin())
+                .setAuth(obj -> {
+                    StpUtil.checkLogin();
+                    // 先确认登录再判改密：未登录的请求必须得到 40100「未登录或登录已失效」，
+                    // 换成 40104 会让匿名请求以为自己在待改密状态里
+                    MustChangePasswordGate.assertAllowed(
+                            SaHolder.getRequest().getRequestPath(), currentSession.mustChangePassword());
+                })
                 .setError(authResponses::failureBody);
         FilterRegistrationBean<SaServletFilter> registration = new FilterRegistrationBean<>(filter);
         registration.addUrlPatterns("/*");

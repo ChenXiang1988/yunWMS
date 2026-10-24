@@ -26,6 +26,7 @@ public class LoginResponseAssembler {
                 subject.subjectType().name(),
                 subject.ownerId() == null ? null : subject.ownerId().toString(),
                 subject.displayName(),
+                subject.mustChangePassword(),
                 subject.roles(),
                 subject.subjectType().accessiblePortals().stream()
                         .map(AccessiblePortal::code)

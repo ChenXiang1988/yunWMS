@@ -15,6 +15,7 @@ import org.mockito.ArgumentCaptor;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
@@ -32,6 +33,7 @@ class UserAccountRepositoryImplTest {
 
     private static final long USER_ID = 1001L;
     private static final Instant NOW = Instant.parse("2025-01-01T08:00:00Z");
+    private static final String NEW_PASSWORD_HASH = "$2a$10$0123456789012345678901234567890123456789012345678901";
 
     private SysUserMapper sysUserMapper;
     private UserAccountRepositoryImpl repository;
@@ -70,6 +72,27 @@ class UserAccountRepositoryImplTest {
 
         assertThat(capturedSetSql())
                 .contains("failed_attempts", "locked_until", "last_failed_at");
+    }
+
+    @Test
+    @DisplayName("改密：新哈希与「需先改密」标记在同一条语句里写入")
+    void shouldWriteHashAndClearMarkInOneStatement() {
+        given(sysUserMapper.update(isNull(), any())).willReturn(1);
+
+        repository.updatePassword(USER_ID, NEW_PASSWORD_HASH, NOW);
+
+        // 拆成两条语句时，中间失败会留下「标记已清、密码没变」的状态，初始密码从此不再被拦
+        assertThat(capturedSetSql())
+                .contains("password_hash", "password_updated_at", "must_change_password", "updated_at");
+    }
+
+    @Test
+    @DisplayName("改密命中零行：账号已不存在，不能报告成功")
+    void shouldFailWhenPasswordUpdateHitsNoRow() {
+        given(sysUserMapper.update(isNull(), any())).willReturn(0);
+
+        assertThatThrownBy(() -> repository.updatePassword(USER_ID, NEW_PASSWORD_HASH, NOW))
+                .isInstanceOf(IllegalStateException.class);
     }
 
     @SuppressWarnings("unchecked")

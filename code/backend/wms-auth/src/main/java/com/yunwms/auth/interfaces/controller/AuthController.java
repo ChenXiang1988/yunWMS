@@ -1,8 +1,11 @@
 package com.yunwms.auth.interfaces.controller;
 
+import com.yunwms.auth.application.command.ChangePasswordCommand;
 import com.yunwms.auth.application.command.PasswordLoginCommand;
+import com.yunwms.auth.application.service.PasswordChangeService;
 import com.yunwms.auth.application.service.PasswordLoginService;
 import com.yunwms.auth.interfaces.controller.assembler.LoginResponseAssembler;
+import com.yunwms.auth.interfaces.controller.request.ChangePasswordRequest;
 import com.yunwms.auth.interfaces.controller.request.LoginRequest;
 import com.yunwms.auth.interfaces.controller.response.LoginResponse;
 import com.yunwms.web.api.ApiResult;
@@ -10,6 +13,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,11 +32,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final PasswordLoginService passwordLoginService;
+    private final PasswordChangeService passwordChangeService;
     private final LoginResponseAssembler loginResponseAssembler;
 
     public AuthController(PasswordLoginService passwordLoginService,
+                          PasswordChangeService passwordChangeService,
                           LoginResponseAssembler loginResponseAssembler) {
         this.passwordLoginService = passwordLoginService;
+        this.passwordChangeService = passwordChangeService;
         this.loginResponseAssembler = loginResponseAssembler;
     }
 
@@ -52,5 +59,20 @@ public class AuthController {
                 httpRequest.getRemoteAddr(),
                 httpRequest.getHeader(HttpHeaders.USER_AGENT));
         return ApiResult.ok(loginResponseAssembler.toResponse(passwordLoginService.login(command)));
+    }
+
+    /**
+     * 修改当前登录用户的密码。
+     *
+     * <p>路径是待改密状态下唯一的放行入口（见 {@code MustChangePasswordGate}）：用初始密码登录后，
+     * 用户必须先走这里，其他业务接口一律返回 40104。路径写错会让账号既改不了密也出不去。
+     *
+     * @param request 旧密码与新密码
+     * @return 成功时 {@code code=0}，无业务数据；旧密码错误、新密码不合规通过业务错误码返回
+     */
+    @PutMapping("/password")
+    public ApiResult<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        passwordChangeService.change(new ChangePasswordCommand(request.oldPassword(), request.newPassword()));
+        return ApiResult.ok();
     }
 }
