@@ -82,6 +82,14 @@ docker tag  docker.m.daocloud.io/valkey/valkey:8-alpine valkey/valkey:8-alpine
 ./mvnw spring-boot:run
 ```
 
+> **首次构建先装依赖模块**。干净仓库下直接 `./mvnw -pl wms-app ...` 会报
+> `Could not resolve dependencies ... wms-auth / wms-master`，因为模块与根 POM 尚未进本地仓库。
+> 先跑一次全量安装：
+>
+> ```bash
+> ./mvnw install -DskipTests
+> ```
+
 首次启动会自动执行 `wms-app/src/main/resources/db/migration` 下的 21 份迁移脚本，建出 24 张表。
 
 可配置的环境变量：
