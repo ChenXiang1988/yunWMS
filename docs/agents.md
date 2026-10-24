@@ -169,6 +169,10 @@ AGENTS.md  >  .codebuddy/rules/  >  change 的 design.md / specs  >  任务包
 
 ## 八、机制约束与已知未验证项
 
+> **关于调研文档**：Subagents 机制属工具链配置，不是业务功能域，因此**未**单独立 `docs/research/<主题>.md`，结论直接记于本节。
+> 理由：① 它不产生 capability，没有 proposal 会引用它；② 候选集只有 CodeBuddy 自带机制一个，套 research-first 的候选比较表会写成凑数；③ 机制行为变更时要两边同步维护，反而容易变成陈旧文档。
+> 相关取舍（agentic 与 manual 的取舍、`model` 留空的理由）均在本节。**记下「为什么省略」，比补一份没人读的文档更可回查。**
+
 ### 已确认的约束（CodeBuddy Subagents 机制）
 
 - 子 Agent 存为 Markdown，项目级放 `.codebuddy/agents/`。
