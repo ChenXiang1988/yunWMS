@@ -10,6 +10,13 @@
         <version>0.1.0-SNAPSHOT</version>
     </parent>
 
+    <properties>
+        <!-- 与 application.yml 的 DB_URL / DB_USER / DB_PASSWORD 默认值保持一致，可用 -Ddb.url=... 覆盖 -->
+        <db.url>jdbc:postgresql://localhost:5432/yunwms</db.url>
+        <db.user>yunwms</db.user>
+        <db.password>yunwms</db.password>
+    </properties>
+
     <artifactId>wms-app</artifactId>
     <name>wms-app</name>
     <description>启动模块：装配、配置、数据库迁移。业务代码不写在这里。</description>
@@ -58,6 +65,23 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-maven-plugin</artifactId>
+                <version>${flyway.version}</version>
+                <configuration>
+                    <url>${db.url}</url>
+                    <user>${db.user}</user>
+                    <password>${db.password}</password>
+                    <locations>
+                        <location>filesystem:${project.basedir}/src/main/resources/db/migration</location>
+                    </locations>
+                    <baselineOnMigrate>false</baselineOnMigrate>
+                    <validateOnMigrate>true</validateOnMigrate>
+                    <!-- clean 会 drop 所有对象，与 AGENTS.md「库存相关表禁止物理删除」冲突，故显式禁用 -->
+                    <cleanDisabled>true</cleanDisabled>
+                </configuration>
             </plugin>
         </plugins>
     </build>
