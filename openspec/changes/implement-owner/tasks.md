@@ -59,5 +59,6 @@
 `docs/api-convention.md` 第八节要求接口有中文 `summary`/`description`、模型字段有 `description`，
 当前 `wms-auth` 无 `swagger-annotations` 依赖，本任务只写了 Javadoc。
 
-- [ ] 1.7 补 `sys_user.last_failed_at` 并实现 30 分钟滑动窗口，验证间隔超过 30 分钟的累计失败不触发锁定（当前实现为「连续失败无成功登录即累加」，与规格字面有偏差，见违约登记）
+- [x] 1.7 补 `sys_user.last_failed_at` 并实现 30 分钟滑动窗口，验证间隔超过 30 分钟的累计失败不触发锁定
+      —— 24 个单测通过；实测 31 分钟前（窗口外、已有 3 次）再错一次计数为 1，29 分钟前（窗口内、已有 4 次）再错一次计数为 5 并锁定；并发 4 次实测计数为 4（修正了任务包 SQL 缺 `FOR UPDATE` 的缺陷）
 - [ ] 1.6 为 `wms-auth` 引入 `io.swagger.core.v3:swagger-annotations-jakarta`（编译期注解，无运行时体积）并补齐登录接口的 OpenAPI 描述，验证 `/v3/api-docs` 中该接口有中文 summary 与字段说明
