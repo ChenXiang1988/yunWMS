@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+    放在 mapper/auth/ 而不是 mapper/ 根下：MyBatis-Plus 的默认扫描位置是 classpath*:/mapper/**/*.xml，
+    按模块分目录可以在多个模块都加 XML 之后仍然一眼看出归属。
+-->
+<mapper namespace="com.yunwms.auth.infrastructure.persistence.mapper.SysUserMapper">
+
+    <!--
+        连续失败次数必须由数据库原子累加。
+        应用层「读出来加一写回去」在并发下会丢计数：同一账号的多个并发登录读到同一个旧值，
+        只加了一次，实际允许的尝试次数就多于规格的 5 次。
+
+        锁定截止时间与累加放进同一条语句：分两步写会出现「次数够了但还没锁」的窗口，
+        该窗口内的正确密码会被放过。
+
+        阈值由参数传入而不是写死在这里：5 这个数字的权威定义在用例侧，
+        SQL 里再写一遍就成了第二处定义。
+
+        logic-delete 只作用于 MyBatis-Plus 生成的语句，手写 SQL 必须自己带 deleted_at 条件，
+        否则软删除的账号还会继续被计数、继续被锁定判定读到。
+    -->
+    <select id="recordFailedAttempt"
+            resultType="com.yunwms.auth.infrastructure.persistence.entity.FailedAttemptRow">
+        UPDATE sys_user
+        SET failed_attempts = failed_attempts + 1,
+            locked_until = CASE
+                               WHEN failed_attempts + 1 >= #{lockAfterFailures} THEN #{lockUntil}
+                               ELSE locked_until
+                           END
+        WHERE id = #{userId}
+          AND deleted_at IS NULL
+        RETURNING failed_attempts, locked_until
+    </select>
+
+</mapper>
