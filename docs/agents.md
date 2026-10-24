@@ -197,6 +197,7 @@ AGENTS.md  >  .codebuddy/rules/  >  change 的 design.md / specs  >  任务包
 
 - 子 Agent 是否自动继承 `AGENTS.md` 与 `.codebuddy/rules/`：官方文档未说明。因此每个子 Agent 的 System Prompt 第一行都要求「开工前先读 `AGENTS.md` 与对应 rule」，并把最硬的约束直接抄进 System Prompt。
 - `model` 字段留空时的默认行为：官方文档未说明。
+- **`tools` 字段的合法工具名**：官方文档只示例 `WebFetch, WebSearch`，未给完整清单；`.codebuddy/skills/` 用的是另一套字段 `allowed-tools: Bash(openspec:*)`，两者是否同语法未知。因此 `delivery-auditor` **暂不设置该字段**——盲写可能导致它只剩两个网络工具、读不了文件，比不收窄更糟。要启用需先实测：设定白名单后派一个只读任务，确认它仍能读文件、跑 `git diff`、列目录，缺一即回退。
 
 ---
 

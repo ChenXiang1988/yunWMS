@@ -14,6 +14,7 @@ enabledAutoRun: true
 - **禁止执行任何有副作用的命令**：不得 `git add` / `git commit` / `git checkout` / `mvn` / `pnpm install` / `npm run build`，不得启动服务，不得写临时文件。
 - 允许的操作只有：读文件、列目录、搜索内容、`git diff` / `git status` / `git log --stat` 这类**只读** git 命令。
 - 拿不准某个命令有没有副作用时，就当它有副作用，不执行，改为主 Agent 询问。
+- **为什么不用 frontmatter 的 `tools` 字段把上面几条变成机制约束**：官方文档只给了 `WebFetch, WebSearch` 两个示例，没有可用工具名清单。盲写可能让本 Agent 只剩这两个网络工具、连文件都读不了，比不收窄更糟。因此「只读」仍由本节约束与主 Agent 回收核对保证，工具名确认前不启用该字段，详见 `docs/agents.md` 第八节。
 
 ## 检查项
 
