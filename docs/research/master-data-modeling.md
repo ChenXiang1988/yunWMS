@@ -1,6 +1,7 @@
 # yunWMS 主数据建模调研：多货主、仓库空间与商品标识
 
 - 调研时间：2026-10-22
+- 时效：本文为 2026-10-22 的快照，记录当时状态；后续变化以仓库现状为准，本文不回改。
 - 数据来源：Odoo 官方文档与源码（`stock.location`、`stock.quant`）、ERPNext 文档、GreaterWMS 与 ModernWMS 仓库、Amazon FBA 卖家文档、3PL 行业公开资料
 - 结论状态：已采纳，对应 `design.md` D3 至 D9
 

@@ -2,6 +2,7 @@
 
 **主题**：`wms-auth` 的认证框架选型
 **日期**：2026-10-24
+**时效**：本文为 2026-10-24 的快照，记录当时状态；后续变化以仓库现状为准，本文不回改。
 **触发原因**：`openspec/changes/init-wms-foundation/design.md` D11 指定 Sa-Token，实际 `code/backend/wms-auth/pom.xml` 引入的是 `spring-boot-starter-security`，全仓无 `sa-token` 命中。设计与实现分叉，需裁决。
 **范围**：只回答认证框架的选型，不含 TOTP 第二因子（`dev.samstevens.totp` 与框架无关，不受本次裁决影响）。
 

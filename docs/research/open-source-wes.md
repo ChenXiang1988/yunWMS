@@ -1,6 +1,7 @@
 # 开源 WES 与任务中心参考实现调研
 
 - 调研时间：2026-10-23
+- 时效：本文为 2026-10-23 的快照，记录当时状态；后续变化以仓库现状为准，本文不回改。
 - 数据来源：GitHub 仓库原始文件（README、CLAUDE.md、docker-compose.yml、README.adoc 等）；star 与提交频次来自 repositorystats 快照与搜索页快照，非 GitHub API 实时值（采集时 API 已触发匿名限流）
 - 结论状态：候选已确认；open-wes 代码结构已于 2026-10-23 浅克隆实测，其余候选未读源码
 - 上游文档：`docs/research/execution-unit-modeling.md`（执行单元与任务池建模）、`docs/research/wms-open-source-landscape.md`（WMS 全景，已收录 open-wes 一行）

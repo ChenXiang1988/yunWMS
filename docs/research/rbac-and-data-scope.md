@@ -1,6 +1,7 @@
 # yunWMS 权限模型调研：RBAC 与三维数据权限
 
 - 调研时间：2026-10-22
+- 时效：本文为 2026-10-22 的快照，记录当时状态；后续变化以仓库现状为准，本文不回改。
 - 数据来源：RuoYi-Vue 与 RuoYi-Vue-Plus 仓库源码与官方文档、Sa-Token 官方文档、Spring Security 官方文档、PostgreSQL 官方文档
 - 结论状态：已采纳，对应 `design.md` D10 与 D18
 
