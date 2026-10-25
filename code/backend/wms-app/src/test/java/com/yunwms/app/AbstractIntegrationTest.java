@@ -8,8 +8,6 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * 集成测试基类：完整应用上下文 + 一次性 PostgreSQL 容器。
@@ -28,22 +26,32 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * 因此 {@code Sa-Token} 的上下文过滤器、登录校验与强制改密拦截在这里与运行时一致。
  *
  * <p>容器由 Testcontainers 的 Ryuk 在 JVM 退出时回收，测试自身不做任何数据清理：
- * 每个测试类拿到的是一个刚落地的空库，迁移在执行测试前跑完。
+ * 整个测试 JVM 共用一个库，迁移在第一个上下文启动时对空库跑完。因此用例之间不隔离数据——
+ * 每个用例必须自带唯一的业务键，并且不得改动种子账号的状态（{@code V023} 的 {@code superadmin}
+ * 是 {@code BootstrapIntegrationTest} 的断言对象）。
  */
-@Testcontainers
 @SpringBootTest
 @AutoConfigureMockMvc
 abstract class AbstractIntegrationTest {
 
     /**
-     * 与生产同版本的 PostgreSQL。
+     * 与生产同版本的 PostgreSQL，整个测试 JVM 共用一个实例。
      *
      * <p>库名对齐 {@code application.yml} 的默认库名，便于把测试里的 SQL 直接拿到本地库复现；
      * 用户名与密码用容器默认值，不复制生产凭据——测试里出现生产凭据是最容易被顺手抄走的一类泄露。
+     *
+     * <p>为什么用单例而不是 {@code @Testcontainers} + {@code @Container}：那套是按测试类启停容器的，
+     * 而 Spring 的上下文按配置缓存、测试类之间复用。第二个测试类会拿到一个新容器（新端口），
+     * 实际用的却是缓存里指向旧端口的 {@code DataSource}，整类用例连接超时——两套生命周期各自正确，
+     * 合起来却不成立。启动一次之后不再重启，URL 恒定，上下文缓存与容器生命周期才对得上；
+     * 回收仍由 Testcontainers 注册的 Ryuk 在 JVM 退出时完成，不依赖测试类的结束时机。
      */
-    @Container
     private static final PostgreSQLContainer<?> POSTGRESQL =
             new PostgreSQLContainer<>("postgres:16-alpine").withDatabaseName("yunwms");
+
+    static {
+        POSTGRESQL.start();
+    }
 
     /**
      * 把数据源指向本次测试的容器。
