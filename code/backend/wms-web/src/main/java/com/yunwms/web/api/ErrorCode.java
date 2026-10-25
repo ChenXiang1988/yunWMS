@@ -30,6 +30,15 @@ public enum ErrorCode {
     NOT_FOUND(40400, "资源不存在"),
     CONFLICT(40900, "数据冲突"),
 
+    /**
+     * 登录名已被占用（不区分大小写）。
+     *
+     * <p>单独成码而非复用 {@link #CONFLICT}：前端需要在「登录名」字段上就地提示，
+     * 而不是弹一个泛化的冲突提示。判重只能由数据库唯一索引给出——服务层「先查再插」
+     * 在并发下无效。
+     */
+    LOGIN_NAME_TAKEN(40901, "登录名已被占用"),
+
     INTERNAL(50000, "服务器内部错误");
 
     private final int code;
