@@ -166,7 +166,24 @@ In both branches, never create the root as a side effect: do not run `openspec i
 
    If the sync failed, or any capability does not match, report what differs and stop — do not archive. Nothing has moved and `changeRoot` is intact, so the user can fix the mismatch or re-run the sync and start the archive again.
 
-5. **Perform the archive**
+5. **Audit gate (yunWMS 本地增补)**
+
+   归档意味着这个 change 的代码已经或即将进入 `main`。`docs/agents.md` 要求
+   `change/*` 分支合并进 main 之前必须有一次 `delivery-auditor` 审计，结论落在
+   `<changeRoot>/audit.md`。
+
+   检查该文件是否存在：
+
+   - **存在**：读取并核对它包含 anchor（`git merge-base main HEAD`）、逐项结论
+     与证据路径、存量违约登记、总体结论四部分。缺失任一部分时提示，不阻断。
+   - **不存在**：告知用户「本 change 没有审计记录」，并给出两个选项——
+     现在派 `delivery-auditor` 补审，或跳过并以「未审计」入归档摘要。
+   - **任何情况下都不得自行编写 audit.md**。审计结论只能由 auditor 产出，
+     编造一份比没有更糟：它会让检查单的第一条永远通过。
+
+   纯 `docs/`、`code/tools/` 变更可不要求此记录，但要在摘要里写明「免审」及理由。
+
+6. **Perform the archive**
 
    Create an `archive` directory under `planningHome.changesDir` if it doesn't exist:
    ```bash
@@ -183,7 +200,7 @@ In both branches, never create the root as a side effect: do not run `openspec i
    mv "<changeRoot>" "<planningHome.changesDir>/archive/<target-name>"
    ```
 
-6. **Display summary**
+7. **Display summary**
 
    Show archive completion summary including:
    - Change name
@@ -219,3 +236,4 @@ In both branches, never create the root as a side effect: do not run `openspec i
 - Existing CLI checks, resolved paths, prompts, and command contracts are unchanged
 - Artifact rules constrain only the specs being written and are never operation guidance
 - Never copy runtime context, operation guidance, or artifact-rule text verbatim into output files
+- Never author `audit.md` yourself - the audit record must come from `delivery-auditor`; a fabricated one makes the first checklist item always pass

@@ -4,7 +4,19 @@
 
 与 `AGENTS.md` 的关系：`AGENTS.md` 是交付协议（分支、提交、禁止项、验证），适用于所有 agent；本文件只定义**谁做什么、怎么派活、怎么回收**。两者冲突时以 `AGENTS.md` 为准。
 
-本阶段只落地 1 个主 Agent + 1 个子 Agent，先把「派活 → 执行 → 回传 → 检查 → 汇报」这条回路跑通，再谈扩容。
+本阶段落地 1 个主 Agent + 3 个子 Agent，按**验证命令、规则集、路径白名单三者都不同**切分：
+
+| Agent | 权限 | 路径 | 完成判据 |
+|---|---|---|---|
+| `backend-implementer` | 写 | `code/backend/**` | `./mvnw clean verify` |
+| `frontend-implementer` | 写 | `code/frontend/apps/**` | 目标 app 的 `build` + `typecheck` |
+| `delivery-auditor` | 只读 | — | 逐项结论 + 证据路径 |
+
+不合并成一个 Agent：合并后白名单会退化成 `code/**`，「越界即失败」这条约束随之失效。
+
+PDA、测试、文档不单独设 Agent——`apps/pda` 尚未建立，测试代码跟随对应实现，文档属 `chore/` 级由主 Agent 自己做。
+
+**三个是三个角色，不是三条并行通道。** 同步派发时主 Agent 会被挂起，同一时刻只有一个在跑。
 
 ---
 
@@ -15,7 +27,7 @@
 1. **沟通** —— 向用户澄清需求。不猜业务口径，不猜编码规则。
 2. **确认** —— 把三道门禁的待确认项闭环：调研 R5 未确认项、proposal 的范围与非目标、design 的被否方案。
 3. **派活** —— 把 `tasks.md` 的单条任务转成任务包（见第二节）。
-4. **检查** —— 子 Agent 回传后，按第五节检查单逐项核对。
+4. **检查** —— 子 Agent 回传后按第五节检查单核对；`change/*` 合并进 main 前，还必须派一次 `delivery-auditor` 并把结论落成 `audit.md`（见第八节）。自查不算审计：自查的人正是改动的人。
 5. **汇报与提交** —— 向用户说明「改了哪些文件 / 怎么验证的 / 还有什么没做」，并由主 Agent 统一 git 提交，以保证 Conventional Commits 格式与单次 ≤400 行。
 
 ### 禁止项
@@ -32,9 +44,9 @@
 
 ---
 
-## 二、派活契约（任务包 8 项）
+## 二、派活契约（任务包 9 项）
 
-派给子 Agent 的任务包必须含以下八项，缺一项即视为不合格任务包：
+派给子 Agent 的任务包必须含以下九项，缺一项即视为不合格任务包：
 
 | # | 项 | 内容 |
 |---|---|---|
@@ -46,6 +58,9 @@
 | 6 | 禁止项 | 跨模块直接依赖、顺手改范围外文件、改测试断言、迁移与代码混合提交 |
 | 7 | 交付格式 | 改动文件清单 + 验证命令及结果 + 遗留问题 |
 | 8 | **工作目录与基线锚点** | 子 Agent 的工作目录（绝对路径）+ 派活时刻的 anchor；缺此项，越界核对不成立，见第十三节 |
+| 9 | **预估变更规模** | 派活前估算增删合计行数。**预估 > 400 行时 MUST 拆任务包**，拆不动说明任务本身该拆 |
+
+第 9 项是行数超限的**唯一有效修法**。审计只能发现超限，无法消除超限——把超限记成审计结论，等于用流程记录失败。历史三笔（1536 / 542 / 829 行）都是派活时没有估算规模造成的。
 
 并行派多个子 Agent 时：各自占一条 `git worktree`，各自独立 anchor，且路径白名单用绝对路径、不得重叠。
 
@@ -100,10 +115,11 @@ AGENTS.md  >  .codebuddy/rules/  >  change 的 design.md / specs  >  任务包
 
 ## 五、回收检查单
 
-子 Agent 回传后，主 Agent 逐项核对：
+子 Agent 回传后，主 Agent 逐项核对。**第一条可机检，其余需要人判断：**
 
+- [ ] **`openspec/changes/<change>/audit.md` 是否存在**（分支合并进 main 前必须有一份，见八节）
 - [ ] `git diff <anchor> --stat` 是否只落在白名单路径（anchor 由任务包给出，auditor 不得自行推断基线）
-- [ ] 单次提交 ≤400 行
+- [ ] 单次提交 ≤400 行 —— 口径：`git diff <anchor> --shortstat` 的**增删合计**，排除生成物（`primitive.css`、`docs/api/inventory.md`、`docs/api/openapi.json`、`pnpm-lock.yaml`）。「不含自动生成代码与纯格式化」不适用于本项，逐案解释等于没有上限
 - [ ] 数据库迁移是否与代码分离
 - [ ] 是否引入 GPL/AGPL/SSPL 依赖（`xxl-job`、`jee-wms`、MySQL、Redis 7.4+）
 - [ ] 前端是否出现色值字面量或第二套 UI 组件库
@@ -132,10 +148,15 @@ AGENTS.md  >  .codebuddy/rules/  >  change 的 design.md / specs  >  任务包
 
 | name | 模式 | 职责 | 触发条件 | 路径白名单 | 模型 | 上线日期 | 探针结果 |
 |---|---|---|---|---|---|---|---|
-| `delivery-auditor` | agentic | 提交前与 change 验收时的只读审计，产出检查结论 | 主 Agent 需要核对改动是否越界、提交是否超限、迁移与代码是否分离、是否引入违规依赖时 | 只读，无写入权限 | 留空 | 2026-10-24 | 2026-10-24 首次任务实测，见第十节 |
+| `delivery-auditor` | agentic | 只读审计，产出 `audit.md` | **`change/*` 合并进 main 之前必须执行一次**（anchor 取 `git merge-base main HEAD`）；另对单次 >400 行的提交做抽查 | 只读，无写入权限 | 留空 | 2026-10-24 | 2026-10-24 首次任务实测，见第十节 |
 | `backend-implementer` | agentic | 按任务包实现后端 Java 代码 | 主 Agent 完成冲突预检并下发单条实现任务包时 | `code/backend/**` | 留空 | 2026-10-24 | 2026-10-24 首次任务实测，见第十一节 |
+| `frontend-implementer` | agentic | 按任务包实现前端页面与交互 | 主 Agent 完成冲突预检并下发单条前端任务包时 | `code/frontend/apps/**` | 留空 | 2026-10-25 | 待首次任务实测 |
 
-定义文件：`.codebuddy/agents/delivery-auditor.md`、`.codebuddy/agents/backend-implementer.md`
+定义文件：`.codebuddy/agents/` 下同名 `.md`。
+
+**`delivery-auditor` 的触发条件刻意写成钩子而非条件句。** 原先写的是「主 Agent 需要核对时」——需不需要由主 Agent 自己判断，于是永远可以判定为不需要。30 个提交里它一次都没被调用。改成「合并前必须有一次」后，判断权从主观意愿转成客观节点。
+
+纯 `docs/` 与 `code/tools/` 变更可免审，不触碰 `code/` 与迁移。
 
 ### 实现类 Agent 的 `enabledAutoRun` 决定
 
@@ -198,6 +219,44 @@ AGENTS.md  >  .codebuddy/rules/  >  change 的 design.md / specs  >  任务包
 - 子 Agent 是否自动继承 `AGENTS.md` 与 `.codebuddy/rules/`：官方文档未说明。因此每个子 Agent 的 System Prompt 第一行都要求「开工前先读 `AGENTS.md` 与对应 rule」，并把最硬的约束直接抄进 System Prompt。
 - `model` 字段留空时的默认行为：官方文档未说明。
 - **`tools` 字段的合法工具名**：官方文档只示例 `WebFetch, WebSearch`，未给完整清单；`.codebuddy/skills/` 用的是另一套字段 `allowed-tools: Bash(openspec:*)`，两者是否同语法未知。因此 `delivery-auditor` **暂不设置该字段**——盲写可能导致它只剩两个网络工具、读不了文件，比不收窄更糟。要启用需先实测：设定白名单后派一个只读任务，确认它仍能读文件、跑 `git diff`、列目录，缺一即回退。
+
+### 审计必须留下产物
+
+CodeBuddy 机制无法在 `git commit` 时自动唤起子 Agent，能强制要求的只有**产物**。因此审计结论必须落盘：
+
+`openspec/changes/<change>/audit.md`，归档时随 change 进入 `archive/`，之后可回查。
+
+```markdown
+# 审计记录
+
+- change: <change-id>
+- anchor: <commit>（取 `git merge-base main HEAD`）
+- 审计时间：YYYY-MM-DD
+
+## 逐项结论
+
+| 检查项 | 结论 | 证据 |
+| --- | --- | --- |
+| 路径白名单 | 通过 | `git diff <anchor> --stat` 全部落在 `code/backend/wms-auth/**` |
+| 单次提交 ≤400 行 | 不通过 | `c1b5936` 增删合计 542 行 |
+| 迁移与代码分离 | 通过 | 无迁移改动 |
+| 违规依赖 | 通过 | 本轮无新增依赖 |
+| 测试断言 | 通过 | `git diff <anchor> -- '**/test/**'` 只新增用例，无既有断言被削弱 |
+
+## 存量违约
+
+| 提交 | 违规 | 处置 |
+| --- | --- | --- |
+| `7b1e705` | 1536 行；一提交做两件事 | 已进 main，登记不改历史 |
+
+## 结论
+
+通过 / 不通过 / 无法判定（附原因）
+```
+
+**为什么必须落盘**：没有产物就无法证明「审过」，也无法在归档后回答「这个 change 当初审出过什么」。检查单第一条查的就是这个文件存在与否。
+
+**行数问题的正确修法在动手之前**：派活时任务包加一条「预估变更 > 400 行就拆任务包」。审计只能发现超限，不能消除超限——把超限记成审计结论，等于用流程记录失败。
 
 ---
 
