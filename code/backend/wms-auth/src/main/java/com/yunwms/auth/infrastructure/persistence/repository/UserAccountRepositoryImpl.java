@@ -73,6 +73,17 @@ public class UserAccountRepositoryImpl implements UserAccountRepository {
     }
 
     @Override
+    public void clearFailureState(long userId) {
+        // 刻意不写 last_login_at：改密成功也是这一轮失败的终点，但它不是登录。
+        // 这里不看影响行数：账号已在 updatePassword 里确认存在，命中零行只能是并发删除，属正常结果。
+        sysUserMapper.update(null, Wrappers.<SysUserEntity>lambdaUpdate()
+                .eq(SysUserEntity::getId, userId)
+                .set(SysUserEntity::getFailedAttempts, 0)
+                .set(SysUserEntity::getLockedUntil, null)
+                .set(SysUserEntity::getLastFailedAt, null));
+    }
+
+    @Override
     public FailedAttemptState recordFailedAttempt(long userId, int lockAfterFailures,
                                                   Instant windowStart, Instant failedAt, Instant lockUntil) {
         FailedAttemptRow row = sysUserMapper.recordFailedAttempt(

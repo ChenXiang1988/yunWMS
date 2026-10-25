@@ -72,6 +72,20 @@ public interface UserAccountRepository {
                                            Instant windowStart, Instant failedAt, Instant lockUntil);
 
     /**
+     * 只清连续失败状态：失败次数归零、锁定截止时间与失败窗口起点一并置空。
+     *
+     * <p>与 {@link #recordSuccessfulLogin} 的区别是不写 {@code last_login_at}：
+     * 本人改密成功同样是「连续失败」这一轮的终点，但它不是登录，写登录时间会让审计里的
+     * 「上次登录」变成「上次改密时间」。两件事因此分成两个方法，{@code last_login_at} 只在真正登录时写。
+     *
+     * <p>不看影响行数：调用方此时已经用 {@link #updatePassword} 确认过账号还在，
+     * 这里命中零行只能是并发删除，属正常结果而不是失败。
+     *
+     * @param userId 用户标识
+     */
+    void clearFailureState(long userId);
+
+    /**
      * 写入新密码哈希，并在同一条语句里把「需先改密」标记置为 {@code false}。
      *
      * <p>两件事必须原子：分两步写时，若先清标记后写哈希中途失败，用户会带着旧密码进入「已改密」状态，

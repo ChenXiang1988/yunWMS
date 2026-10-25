@@ -43,8 +43,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 /**
  * 登录用例的单测。
  *
- * <p>四个端口全部替换为 mock，不起 Spring 上下文、不连数据库：登录规则的错误应该由这里发现，
- * 而不是等部署到有库的环境才暴露。
+ * <p>端口全部替换为 mock（失败计数记录器用的是真实实现，它背后的仓储是 mock），
+ * 不起 Spring 上下文、不连数据库：登录规则的错误应该由这里发现，而不是等部署到有库的环境才暴露。
  *
  * <p>失败计数与锁定时间的落库由 {@code UserAccountRepository} 的实现负责（XML 里的
  * {@code UPDATE ... RETURNING}），这里断言的是「什么时候调、传了什么阈值与窗口」；
@@ -81,8 +81,11 @@ class PasswordLoginServiceTest {
         passwordHasher = mock(PasswordHasher.class);
         sessionTokenIssuer = mock(SessionTokenIssuer.class);
         currentSession = mock(CurrentSession.class);
+        // 失败计数用真实实现包住同一个仓储 mock：计数参数由 FailedAttemptRecorder 统一装配，
+        // 换成 mock 就只能断言「调了记录器」，看不到真正传给库的阈值与窗口
         passwordLoginService = new PasswordLoginService(
-                userAccountRepository, userRoleQuery, passwordHasher, sessionTokenIssuer, currentSession);
+                userAccountRepository, userRoleQuery, passwordHasher, sessionTokenIssuer, currentSession,
+                new FailedAttemptRecorder(userAccountRepository));
     }
 
     @Test

@@ -75,6 +75,17 @@ class UserAccountRepositoryImplTest {
     }
 
     @Test
+    @DisplayName("改密成功清失败状态：计数归零，且不碰登录时间")
+    void shouldClearFailureStateWithoutTouchingLastLoginAt() {
+        repository.clearFailureState(USER_ID);
+
+        // 改密不是登录：last_login_at 一旦被写，审计里的「上次登录」就变成了「上次改密时间」
+        assertThat(capturedSetSql())
+                .contains("failed_attempts", "locked_until", "last_failed_at")
+                .doesNotContain("last_login_at");
+    }
+
+    @Test
     @DisplayName("改密：新哈希与「需先改密」标记在同一条语句里写入")
     void shouldWriteHashAndClearMarkInOneStatement() {
         given(sysUserMapper.update(isNull(), any())).willReturn(1);
