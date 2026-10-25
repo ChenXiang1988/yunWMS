@@ -27,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class BootstrapIntegrationTest extends AbstractIntegrationTest {
 
     /** 迁移文件数，与 {@code src/main/resources/db/migration} 下的文件一一对应。 */
-    private static final int MIGRATION_COUNT = 24;
+    private static final int MIGRATION_COUNT = 25;
 
     /** 业务表数：24 份建表语句产出的表，不含 Flyway 自己的历史表。 */
     private static final int BUSINESS_TABLE_COUNT = 24;
@@ -43,7 +43,7 @@ class BootstrapIntegrationTest extends AbstractIntegrationTest {
     private ObjectMapper objectMapper;
 
     @Test
-    @DisplayName("迁移可跑通：24 份迁移全部成功，24 张业务表就绪")
+    @DisplayName("迁移可跑通：25 份迁移全部成功，24 张业务表就绪")
     void shouldApplyAllMigrationsOnEmptyDatabase() {
         Integer migrations = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM flyway_schema_history WHERE success", Integer.class);
@@ -69,8 +69,11 @@ class BootstrapIntegrationTest extends AbstractIntegrationTest {
                 .as("初始密码只够换一次登录，登录响应必须要求先改密")
                 .isTrue();
         assertThat(login.path("data").path("subjectType").asText()).isEqualTo("STAFF");
-        // 未分配角色不影响登录：角色体系（2.2）落地前，初始化账号的角色是空数组
-        assertThat(login.path("data").path("roles")).isEmpty();
+        // V025 把初始账号挂到内置超管角色上：登录响应里必须能看见它，
+        // 否则前端拿不到角色标识，管理入口的显隐就只能靠前端硬编码
+        JsonNode roles = login.path("data").path("roles");
+        assertThat(roles.size()).isEqualTo(1);
+        assertThat(roles.get(0).asText()).isEqualTo("SUPER_ADMIN");
         assertThat(login.path("data").path("token").asText()).isNotBlank();
     }
 

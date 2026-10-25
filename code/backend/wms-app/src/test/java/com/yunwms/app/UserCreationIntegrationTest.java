@@ -70,6 +70,20 @@ class UserCreationIntegrationTest extends AbstractIntegrationTest {
                 """,
                 OPERATOR_LOGIN_NAME, "建号操作员", passwordHasher.hash(OPERATOR_PASSWORD),
                 "operator@example.com", OPERATOR_LOGIN_NAME);
+
+        // 建号接口自 V025 起要求权限点 system:user:create，因此操作人必须真的拥有它。
+        // 这里借用内置超管角色（它的权限点由鉴权时动态展开），而不是给测试造一条授权数据：
+        // 造授权数据就要跟着改 sys_role_menu，那正是规格禁止的做法。
+        // 「没有权限点会被拒」不在本类验证，见 PermissionAuthorizationIntegrationTest。
+        jdbcTemplate.update("""
+                INSERT INTO sys_user_role (user_id, role_id)
+                SELECT u.id, r.id
+                FROM sys_user u
+                         CROSS JOIN sys_role r
+                WHERE lower(u.login_name) = lower(?)
+                  AND r.code = 'SUPER_ADMIN'
+                ON CONFLICT (user_id, role_id) DO NOTHING
+                """, OPERATOR_LOGIN_NAME);
     }
 
     @Test
