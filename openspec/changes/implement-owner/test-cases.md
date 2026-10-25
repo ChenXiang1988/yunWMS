@@ -22,11 +22,11 @@
 
 | 状态 | 数量 |
 | --- | --- |
-| 自动 | 7 |
+| 自动 | 8 |
 | 自动+手工 | 3 |
 | 部分 | 3 |
 | 不适用 | 1 |
-| 未实现 | 79 |
+| 未实现 | 78 |
 | **合计** | **93** |
 
 自动化覆盖率：**10 / 93 = 10%**
@@ -86,7 +86,7 @@
 | --- | --- | --- | --- | --- | --- |
 | TC-PA-023 | 创建内部员工 | 管理员创建内部员工并分配角色 | 系统生成唯一用户标识，初始密码需首次登录修改 | `UserCreationIntegrationTest#shouldCreateStaffAndLetNewAccountLogin`（角色分配另有 `shouldAssignRolesWithoutDuplicating`） | 自动 |
 | TC-PA-024 | 货主用户缺少货主绑定 | 创建主体类型为货主的用户但未指定货主 | 系统拒绝创建并提示货主为必填项 | — | 未实现 |
-| TC-PA-025 | 停用用户 | 管理员停用某用户 | 该用户既有会话立即失效，且无法再次登录 | — | 未实现 |
+| TC-PA-025 | 停用用户 | 管理员停用某用户 | 该用户既有会话立即失效，且无法再次登录 | `UserAdministrationIntegrationTest#shouldDisableInvalidateSessionsAndBlockLogin`（旧令牌 401、重新登录 40102） | 自动 |
 
 ## 平台管理 · 系统参数
 
