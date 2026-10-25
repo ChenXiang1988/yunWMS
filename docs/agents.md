@@ -119,7 +119,7 @@ AGENTS.md  >  .codebuddy/rules/  >  change 的 design.md / specs  >  任务包
 
 - [ ] **`openspec/changes/<change>/audit.md` 是否存在**（分支合并进 main 前必须有一份，见八节）
 - [ ] `git diff <anchor> --stat` 是否只落在白名单路径（anchor 由任务包给出，auditor 不得自行推断基线）
-- [ ] 单次提交 ≤400 行（**唯一口径**，`AGENTS.md` 与 `.codebuddy/rules/` 均指向此处，其余各处不得另立豁免）—— 口径：`git diff <anchor> --shortstat` 的**增删合计**，排除生成物（`primitive.css`、`docs/api/inventory.md`、`docs/api/openapi.json`、`pnpm-lock.yaml`）。「不含自动生成代码与纯格式化」不适用于本项，逐案解释等于没有上限
+- [ ] 单次提交 ≤400 行（**唯一口径**，`AGENTS.md` 与 `.codebuddy/rules/` 均指向此处，其余各处不得另立豁免）—— 口径：**对每笔提交分别**计算增删合计（`git log -1 --numstat <sha>` 求和），排除生成物（`primitive.css`、`docs/api/inventory.md`、`docs/api/openapi.json`、`pnpm-lock.yaml`）。「不含自动生成代码与纯格式化」不适用于本项，逐案解释等于没有上限
 - [ ] 数据库迁移是否与代码分离
 - [ ] 是否引入 GPL/AGPL/SSPL 依赖（`xxl-job`、`jee-wms`、MySQL、Redis 7.4+）
 - [ ] 前端是否出现色值字面量或第二套 UI 组件库

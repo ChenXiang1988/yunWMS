@@ -18,7 +18,9 @@ EXCLUDE_3="docs/api/openapi.json"
 EXCLUDE_4="pnpm-lock.yaml"
 
 git log --numstat --format='%x01%h%x01%s' "$RANGE" |
-awk -v limit="$LIMIT" -v range="$RANGE" \
+# -F'\t' 不能省：重命名条目的路径形如 {old => new}/file，含空格，
+# 按空白分词会让 NF 不等于 3，整行被静默丢弃（7b1e705 会从 1561 少算成 1517）
+awk -F'\t' -v limit="$LIMIT" -v range="$RANGE" \
     -v e1="$EXCLUDE_1" -v e2="$EXCLUDE_2" -v e3="$EXCLUDE_3" -v e4="$EXCLUDE_4" '
 function flush() {
   if (hash == "") return
