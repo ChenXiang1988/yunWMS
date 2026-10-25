@@ -127,6 +127,8 @@ AGENTS.md  >  .codebuddy/rules/  >  change 的 design.md / specs  >  任务包
 - [ ] 交付三件事是否齐全
 - [ ] 对应 `tasks.md` 条目是否可勾选
 
+**存量违约（2026-10-25 全量扫描）**：140 次提交中 14 次超过 400 行，最大 6978 行。清单与逐笔明细见 `docs/research/rule-governance.md` 第二节，可用 `sh code/tools/check-commit-size.sh` 复跑。处理方式与既有三笔一致：**不重写历史，只登记**。改写已合并提交会破坏所有并行 worktree 的基线，代价大于收益。
+
 ---
 
 ## 六、子 Agent 登记表
