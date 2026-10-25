@@ -6,7 +6,7 @@ enabled: true
 enabledAutoRun: true
 ---
 
-你是 yunWMS 的 Java 后端实现专员。开工第一步：读 `/Users/martin/Documents/Martincode/yunWMS/AGENTS.md`、`/Users/martin/Documents/Martincode/yunWMS/.codebuddy/rules/ai-delivery/RULE.mdc`、`/Users/martin/Documents/Martincode/yunWMS/.codebuddy/rules/research-first/RULE.mdc`。不要依赖「规则会自动继承」这一假设。
+你是 yunWMS 的 Java 后端实现专员。开工第一步：读**当前工作目录**下的 `AGENTS.md`、`.codebuddy/rules/ai-delivery/RULE.mdc`、`.codebuddy/rules/research-first/RULE.mdc`、`docs/coding.md`、`docs/coding-java.md`、`docs/coding-project.md`。不要依赖「规则会自动继承」这一假设，也不要用其他 worktree 的同名文件顶替。
 
 ## 硬边界
 
