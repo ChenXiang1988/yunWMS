@@ -22,8 +22,8 @@
 
 | 状态 | 数量 |
 | --- | --- |
-| 自动 | 1 |
-| 自动+手工 | 5 |
+| 自动 | 3 |
+| 自动+手工 | 3 |
 | 部分 | 2 |
 | 不适用 | 1 |
 | 未实现 | 75 |
@@ -37,7 +37,7 @@
 
 | 编号 | 场景 | 操作 | 预期 | 验证方式 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| TC-PA-001 | 内部员工登录 | 内部员工提交有效的登录名与密码 | 系统签发访问令牌并返回其角色、数据权限范围与可访问端标识 | `PasswordLoginServiceTest` + 手工 curl | 自动+手工 |
+| TC-PA-001 | 内部员工登录 | 内部员工提交有效的登录名与密码 | 系统签发访问令牌并返回其角色、数据权限范围与可访问端标识 | `BootstrapIntegrationTest#shouldLoginWithSeededSuperadmin`（真实库 + 真实 HTTP 语义） | 自动 |
 | TC-PA-002 | 货主账号登录 | 货主主账号或子账号提交系统分配的登录名与正确密码 | 系统签发访问令牌，并在令牌中固定绑定该账号所属的货主 | `PasswordLoginServiceTest` + 手工 curl（货主登录得 ownerId 字符串） | 自动+手工 |
 | TC-PA-003 | 手机号不可作为登录名 | 用户以手机号作为登录名提交认证 | 系统认证失败，不提示该手机号是否已注册 | 无手机号字段参与登录，结构上排除 | 不适用 |
 | TC-PA-004 | 停用主体登录被拒 | 已停用的用户提交正确凭据 | 系统拒绝登录并返回账号已停用的提示，不签发令牌 | `PasswordLoginServiceTest` + 手工 curl（40102） | 自动+手工 |
@@ -47,7 +47,7 @@
 | 编号 | 场景 | 操作 | 预期 | 验证方式 | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | TC-PA-005 | 弱密码被拒绝 | 用户设置的新密码不满足长度或字符组合要求 | 系统拒绝保存并提示具体不满足的规则 | `PasswordPolicyTest` 9 例 | 自动 |
-| TC-PA-006 | 首次登录强制改密 | 用户使用初始密码登录成功 | 系统仅允许其访问改密界面，其他业务接口返回未授权 | `MustChangePasswordGateTest` + `PasswordLoginServiceTest` + 手工 curl（40104） | 自动+手工 |
+| TC-PA-006 | 首次登录强制改密 | 用户使用初始密码登录成功 | 系统仅允许其访问改密界面，其他业务接口返回未授权 | `BootstrapIntegrationTest#shouldRejectProtectedEndpointWhilePasswordChangePending` + `MustChangePasswordGateTest` | 自动 |
 | TC-PA-007 | 连续错误锁定 | 同一主体在 30 分钟内连续 5 次输入错误密码 | 系统锁定该主体 30 分钟，期间即使输入正确密码也拒绝登录 | `PasswordLoginServiceTest` + 手工 curl（5 次后 40103） | 自动+手工 |
 
 ## 平台管理 · 邮箱找回密码
@@ -336,9 +336,13 @@ docker exec yunwms-postgres psql -U yunwms -d yunwms -c \
   "DELETE FROM sys_user WHERE login_name LIKE 'probe.%';"
 ```
 
-## 待补：集成测试
+## 集成测试现状
 
-上述手工脚本应当被 `@SpringBootTest` + Testcontainers 替代。理由：
+已引入 `@SpringBootTest` + Testcontainers（`BootstrapIntegrationTest`），三条用例覆盖迁移、初始账号登录、40104 拦截。
+
+**仍未覆盖**：`FOR UPDATE` 并发计数、30 分钟窗口边界、令牌到期、会话失效。这些仍需手工验证，或留待后续轮次补测。
+
+手工脚本不删——排障时仍要用。原计划是它被完全替代，实际是逐步替代：
 
 1. **不可复现**——结论只存在于执行者的终端里，换人换环境要重跑
 2. **覆盖不到 SQL**——单测把 Mapper 整个 mock 掉，`FOR UPDATE`、窗口判定、并发计数都验不了
