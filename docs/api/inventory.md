@@ -1,8 +1,8 @@
 # 接口台账
 
 > **生成物，禁止手改。** 由 `code/tools/api-inventory/gen_api_inventory.py` 生成。
-> 来源：实时拉取 `http://localhost:8080/v3/api-docs`
-> 源 commit：`c0f8904`
+> 来源：实时拉取 `http://localhost:18082/v3/api-docs`
+> 源 commit：`192e90a`
 > 计数口径：OpenAPI operation（path × method），不是 Java 方法数
 > 字段记号：`a.b` 嵌套，`a[]` 数组元素，`↻` 自引用已截断，`…` 嵌套过深已截断
 
@@ -10,12 +10,14 @@
 
 | 项 | 值 |
 | --- | --- |
-| 接口总数 | 2 |
-| POST | 1 |
-| PUT | 1 |
+| 接口总数 | 9 |
+| GET | 4 |
+| POST | 3 |
+| PUT | 2 |
 
 | 主体 | 数量 |
 | --- | --- |
+| console（仓网端） | 7 |
 | 共用 | 2 |
 
 ## 统一响应外壳
@@ -32,7 +34,7 @@
 
 ## 接口清单
 
-共 2 个接口。
+共 9 个接口。
 
 ### 1. `POST /api/auth/login`
 
@@ -71,6 +73,180 @@
 | --- | --- | --- | --- |
 | `oldPassword` | string | 是 | — |
 | `newPassword` | string | 是 | — |
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `—` | object | 无字段声明 |
+
+### 3. `GET /api/console/roles`
+
+- 主体：console（仓网端）
+- 分页：是
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+无请求体。
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `pageNo` | integer(int32) | — |
+| `pageSize` | integer(int32) | — |
+| `total` | integer(int64) | — |
+| `records` | RoleListItemResponse[] | — |
+| `records[].id` | string | — |
+| `records[].code` | string | — |
+| `records[].name` | string | — |
+| `records[].builtin` | boolean | — |
+| `records[].status` | string | — |
+| `records[].userCount` | integer(int64) | — |
+| `records[].permissionCount` | integer(int64) | — |
+| `records[].remark` | string | — |
+
+### 4. `POST /api/console/roles`
+
+- 主体：console（仓网端）
+- 分页：否
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `code` | string | 是 | — |
+| `name` | string | 是 | — |
+| `remark` | string | 否 | — |
+| `menuIds` | integer(int64)[] | 否 | — |
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | string | — |
+| `code` | string | — |
+
+### 5. `GET /api/console/roles/{id}`
+
+- 主体：console（仓网端）
+- 分页：否
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+无请求体。
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | string | — |
+| `code` | string | — |
+| `name` | string | — |
+| `builtin` | boolean | — |
+| `status` | string | — |
+| `userCount` | integer(int64) | — |
+| `permissionCount` | integer(int64) | — |
+| `remark` | string | — |
+| `menuIds` | string[] | — |
+
+### 6. `GET /api/console/users`
+
+- 主体：console（仓网端）
+- 分页：是
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+无请求体。
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `pageNo` | integer(int32) | — |
+| `pageSize` | integer(int32) | — |
+| `total` | integer(int64) | — |
+| `records` | UserListItemResponse[] | — |
+| `records[].id` | string | — |
+| `records[].loginName` | string | — |
+| `records[].displayName` | string | — |
+| `records[].subjectType` | string | — |
+| `records[].ownerId` | string | — |
+| `records[].ownerName` | string | — |
+| `records[].status` | string | — |
+| `records[].roles` | string[] | — |
+| `records[].lastLoginAt` | string(date-time) | — |
+
+### 7. `POST /api/console/users`
+
+- 主体：console（仓网端）
+- 分页：否
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `loginName` | string | 是 | — |
+| `displayName` | string | 是 | — |
+| `subjectType` | string enum(STAFF, OWNER) | 是 | — |
+| `ownerId` | integer(int64) | 否 | — |
+| `email` | string | 否 | — |
+| `wecomUserId` | string | 否 | — |
+| `initialPassword` | string | 是 | — |
+| `roleIds` | integer(int64)[] | 否 | — |
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | string | — |
+| `loginName` | string | — |
+
+### 8. `GET /api/console/users/{id}`
+
+- 主体：console（仓网端）
+- 分页：否
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+无请求体。
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | string | — |
+| `loginName` | string | — |
+| `displayName` | string | — |
+| `subjectType` | string | — |
+| `ownerId` | string | — |
+| `ownerName` | string | — |
+| `status` | string | — |
+| `roles` | string[] | — |
+| `lastLoginAt` | string(date-time) | — |
+| `email` | string | — |
+| `wecomUserId` | string | — |
+| `dataScopeType` | string | — |
+| `createdAt` | string(date-time) | — |
+| `roleIds` | string[] | — |
+
+### 9. `PUT /api/console/users/{id}/roles`
+
+- 主体：console（仓网端）
+- 分页：否
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `roleIds` | integer(int64)[] | 是 | — |
 
 **返回字段**
 
