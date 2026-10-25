@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+    与 SysUserMapper.xml 同目录：MyBatis-Plus 的默认扫描位置是 classpath*:/mapper/**/*.xml，
+    按模块分目录便于多个模块各自添加 XML 后仍能看出归属。
+-->
+<mapper namespace="com.yunwms.auth.infrastructure.persistence.mapper.SysRoleMapper">
+
+    <!--
+        列表行的列与聚合计数。
+
+        为什么用两个派生表而不是两个 LEFT JOIN + count(DISTINCT ...)：
+        直接连接两张关联表会让结果行数是「用户数 × 授权数」，一个 30 人、40 个权限点的角色
+        会先摊成 1200 行再去重计数。派生表各自把关联表按 role_id 聚合一次，再按 role_id 连回来，
+        行数始终等于角色数。
+
+        为什么计数必须进这条语句：在应用层对每一行再查两次，10 个角色就是 21 次查询；
+        而分页边界上「先读角色、再读计数」两次读的时间点不同，会出现「这一页 11 行、总数写 10」
+        这种无法解释的结果。
+
+        user_count 按 sys_user_role 的关联行计（口径说明见 RoleSummary 的 Javadoc）；
+        permission_count 按 sys_role_menu 的行数计，菜单与操作两级都算，与详情里 menuIds 的条数一致。
+    -->
+    <sql id="roleSummarySelect">
+        SELECT r.id,
+               r.code,
+               r.name,
+               r.builtin,
+               r.status,
+               r.remark,
+               coalesce(ur.user_count, 0)       AS user_count,
+               coalesce(rm.permission_count, 0) AS permission_count
+        FROM sys_role r
+                 LEFT JOIN (SELECT role_id, count(*) AS user_count
+                            FROM sys_user_role
+                            GROUP BY role_id) ur ON ur.role_id = r.id
+                 LEFT JOIN (SELECT role_id, count(*) AS permission_count
+                            FROM sys_role_menu
+                            GROUP BY role_id) rm ON rm.role_id = r.id
+    </sql>
+
+    <!--
+        筛选条件。手写 SQL 必须自己带 deleted_at IS NULL：MyBatis-Plus 的逻辑删除只作用于
+        它生成的语句，漏掉这一条，已逻辑删除的角色会重新出现在管理界面里。
+
+        关键字只匹配编码与名称：备注是自由文本，把它也纳入模糊匹配会让「按编码搜 CS_STAFF」
+        命中一批备注里提到该编码的角色，管理员无法判断哪一条是精确结果。
+        这里不转义 % 与 _：参数化已经排除了注入，把它们当通配符用是 LIKE 的既有语义。
+    -->
+    <sql id="roleFilter">
+        <where>
+            r.deleted_at IS NULL
+            <if test="keyword != null">
+                AND (r.code ILIKE '%' || #{keyword} || '%'
+                    OR r.name ILIKE '%' || #{keyword} || '%')
+            </if>
+            <if test="status != null">
+                AND r.status = #{status}
+            </if>
+        </where>
+    </sql>
+
+    <select id="countByFilter" resultType="java.lang.Long">
+        SELECT count(*)
+        FROM sys_role r
+        <include refid="roleFilter"/>
+    </select>
+
+    <!--
+        排序用 (sort_no, id) 而不是只按 sort_no：sort_no 允许重复，只按它排序时数据库
+        不保证同一 sort_no 内的顺序稳定，翻页会漏行或重复行。id 是唯一值，兜住这个不确定性。
+
+        LIMIT / OFFSET 用参数而不是拼字符串：拼字符串会引入外部输入，也让「上限 200」这条
+        约束散落到 SQL 里；范围判定在 RoleQueryService 一处完成。
+    -->
+    <select id="selectSummaryPage" resultType="com.yunwms.auth.infrastructure.persistence.entity.RoleSummaryRow">
+        <include refid="roleSummarySelect"/>
+        <include refid="roleFilter"/>
+        ORDER BY r.sort_no, r.id
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="selectSummaryById" resultType="com.yunwms.auth.infrastructure.persistence.entity.RoleSummaryRow">
+        <include refid="roleSummarySelect"/>
+        WHERE r.id = #{roleId}
+          AND r.deleted_at IS NULL
+    </select>
+
+</mapper>
