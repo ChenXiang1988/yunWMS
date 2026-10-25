@@ -59,6 +59,16 @@
             <scope>test</scope>
         </dependency>
         <!--
+            模块边界检查（AGENTS.md 禁止跨模块直接依赖）。只能放 wms-app：只有它的 classpath
+            同时含 wms-web / wms-auth / wms-master 的类，放在其余模块里扫描不到被依赖方。
+            版本由父 pom 的 dependencyManagement 管理，此处不写版本号。
+        -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
             集成测试要连真实 PostgreSQL：H2 与 PG 在表达式索引、部分唯一索引、ON CONFLICT 上语义不同，
             用内存库测出来的「迁移可跑通」不能证明空库在 PG 上可跑通。版本由 spring-boot-starter-parent
             导入的 testcontainers-bom 管理，此处不写版本号。
