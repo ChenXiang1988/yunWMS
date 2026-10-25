@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+    本文件是本模块唯一一处读别的模块的表（owner 属于 wms-master）。
+    为什么允许、以及何时删除，见 com.yunwms.auth.domain.port.OwnerNameQuery 与 OwnerNameMapper 的说明。
+
+    刻意不做的事：不 join 别的列、不带 deleted_at 条件、不提供任何写入语句。
+    多一列就多一分「本模块也能管货主」的错觉，而这段代码的寿命只到 wms-master 具备查询能力为止。
+-->
+<mapper namespace="com.yunwms.auth.infrastructure.persistence.mapper.OwnerNameMapper">
+
+    <select id="selectNamesByIds"
+            resultType="com.yunwms.auth.infrastructure.persistence.entity.OwnerNameRow">
+        SELECT o.id,
+               o.name
+        FROM owner o
+        WHERE o.id IN
+        <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+            #{ownerId}
+        </foreach>
+    </select>
+
+</mapper>

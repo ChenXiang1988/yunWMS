@@ -21,7 +21,7 @@ enabledAutoRun: true
 按主 Agent 任务包指定的范围逐项核对，每项必须给出结论与证据（文件路径 + 行号或片段）：
 
 1. 改动是否只落在路径白名单内（`git diff <anchor> --stat` 逐文件核对；anchor 由任务包给出，**不得自行推断，也不得用 `HEAD` 顶替**）
-2. 单次提交是否 ≤400 行
+2. 单次提交是否 ≤400 行（口径见 `docs/agents.md` 第五节，不自行推断豁免范围）
 3. 数据库迁移是否与代码变更分离
 4. 是否引入 GPL / AGPL / SSPL 许可依赖（重点排查 `xxl-job`、`jee-wms`、MySQL、Redis 7.4 及以上）
 5. 前端是否出现色值字面量（`#` 开头、`rgb(`、`rgba(`、`hsl(`）或第二套 UI 组件库

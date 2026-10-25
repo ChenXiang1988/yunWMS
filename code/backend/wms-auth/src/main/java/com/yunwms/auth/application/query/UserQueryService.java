@@ -1,0 +1,109 @@
+package com.yunwms.auth.application.query;
+
+import com.yunwms.auth.application.dto.UserPage;
+import com.yunwms.auth.domain.model.SubjectType;
+import com.yunwms.auth.domain.model.UserProfile;
+import com.yunwms.auth.domain.model.UserStatus;
+import com.yunwms.auth.domain.model.UserSummary;
+import com.yunwms.auth.domain.port.UserQuery;
+import com.yunwms.web.exception.BizException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+/**
+ * 用户列表与详情的读取用例。
+ *
+ * <p>与 {@link com.yunwms.auth.application.service.UserCreationService} 分开：读侧不需要事务语义，
+ * 也不写审计字段；混在一个类里会让「这个类的每个方法是不是都在改数据」变成一个要看方法体
+ * 才能回答的问题。三处读取用例（角色、用户、用户这里）都是这个形状。
+ *
+ * <p>本类只做三件事：把分页参数判在合法范围内、把关键字归一（全空白按不筛选）、
+ * 把「用户不存在」转成 404。查询本身全部下沉到 {@link UserQuery}：货主名称与角色的拼装写在
+ * 仓储实现里，才能保证列表页的 SQL 条数不随页内行数增长。
+ */
+@Service
+public class UserQueryService {
+
+    /** 每页条数上限。与 {@code docs/api-convention.md} 第四节一致：超出必须拒绝，不得静默截断。 */
+    private static final int MAX_PAGE_SIZE = 200;
+
+    /** 每页条数默认值，与接口约定里的示例一致。 */
+    private static final int DEFAULT_PAGE_SIZE = 20;
+
+    private static final int DEFAULT_PAGE_NO = 1;
+
+    private final UserQuery userQuery;
+
+    public UserQueryService(UserQuery userQuery) {
+        this.userQuery = userQuery;
+    }
+
+    /**
+     * 取一页用户。
+     *
+     * <p>分页参数的范围判定写在这里而不是接口层的 {@code @Min} / {@code @Max}：方法参数校验
+     * 失败抛的是 {@code ConstraintViolationException}，而 {@code GlobalExceptionHandler} 里没有
+     * 它的分支，会被兜底成 50000。本批不改 {@code wms-web} 的异常处理（不在路径白名单内），
+     * 因此在这里抛 {@code BizException}，让错误码稳定落在 40000。与 {@code RoleQueryService} 同一口径。
+     *
+     * @param pageNo      页码；为 {@code null} 时取 1
+     * @param pageSize    每页条数；为 {@code null} 时取 20
+     * @param subjectType 主体类型；{@code null} 表示不筛选
+     * @param status      账号状态；{@code null} 表示不筛选
+     * @param keyword     按登录名或姓名模糊匹配；为 {@code null} 或全空白表示不筛选
+     * @return 一页用户，含总数
+     * @throws BizException 页码小于 1、每页条数不在 1 到 200 之间（40000）
+     */
+    @Transactional(readOnly = true)
+    public UserPage page(Integer pageNo, Integer pageSize, SubjectType subjectType,
+                         UserStatus status, String keyword) {
+        int resolvedPageNo = pageNo == null ? DEFAULT_PAGE_NO : pageNo;
+        int resolvedPageSize = pageSize == null ? DEFAULT_PAGE_SIZE : pageSize;
+        if (resolvedPageNo < 1) {
+            throw BizException.badRequest("页码必须从 1 开始");
+        }
+        if (resolvedPageSize < 1 || resolvedPageSize > MAX_PAGE_SIZE) {
+            // 拒绝而不是截断：静默截成 200 时前端会把「只看到 200 条」当成「一共 200 条」
+            throw BizException.badRequest("每页条数必须在 1 到 " + MAX_PAGE_SIZE + " 之间");
+        }
+
+        String normalizedKeyword = stripToNull(keyword);
+        long total = userQuery.count(subjectType, status, normalizedKeyword);
+        long offset = (long) (resolvedPageNo - 1) * resolvedPageSize;
+        List<UserSummary> records =
+                userQuery.findPage(subjectType, status, normalizedKeyword, resolvedPageSize, offset);
+        return new UserPage(resolvedPageNo, resolvedPageSize, total, records);
+    }
+
+    /**
+     * 取单个用户的详情。
+     *
+     * @param userId 用户标识
+     * @return 用户详情，含只在详情里出现的联系与来源信息
+     * @throws BizException 用户不存在或已逻辑删除（40400）
+     */
+    @Transactional(readOnly = true)
+    public UserProfile detail(long userId) {
+        return userQuery.findById(userId)
+                .orElseThrow(() -> BizException.notFound("用户不存在"));
+    }
+
+    /**
+     * 去掉两侧空白，空串按未填处理。
+     *
+     * <p>不裁空白时，一个只有空格的关键字会变成 {@code LIKE '% %'}，把登录名或姓名里恰好带空格的
+     * 记录筛出来，而管理员的本意是「不筛选」。
+     *
+     * @param value 原始值，可为 {@code null}
+     * @return 裁剪后的值；{@code null}、空串或全空白时为 {@code null}
+     */
+    private static String stripToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String stripped = value.strip();
+        return stripped.isEmpty() ? null : stripped;
+    }
+}

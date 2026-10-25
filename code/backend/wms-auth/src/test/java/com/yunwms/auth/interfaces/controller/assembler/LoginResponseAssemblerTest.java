@@ -22,7 +22,7 @@ class LoginResponseAssemblerTest {
     @DisplayName("内部员工：只能进仓网端，不带货主标识")
     void shouldExposeConsoleOnlyForStaff() {
         LoginResponse response = assembler.toResponse(
-                new AuthenticatedSubject("token-1", SubjectType.STAFF, null, "张三", List.of("CS_STAFF")));
+                new AuthenticatedSubject("token-1", SubjectType.STAFF, null, "张三", false, List.of("CS_STAFF")));
 
         assertThat(response.subjectType()).isEqualTo("STAFF");
         assertThat(response.ownerId()).isNull();
@@ -34,10 +34,22 @@ class LoginResponseAssemblerTest {
     @DisplayName("货主账号：只能进货主端，货主标识以字符串返回")
     void shouldExposePortalOnlyForOwner() {
         LoginResponse response = assembler.toResponse(
-                new AuthenticatedSubject("token-2", SubjectType.OWNER, 9007199254740993L, "李四", List.of("OWNER_ADMIN")));
+                new AuthenticatedSubject("token-2", SubjectType.OWNER, 9007199254740993L, "李四", false, List.of("OWNER_ADMIN")));
 
         assertThat(response.subjectType()).isEqualTo("OWNER");
         assertThat(response.ownerId()).isEqualTo("9007199254740993");
         assertThat(response.accessiblePortals()).containsExactly("portal");
+    }
+
+    @Test
+    @DisplayName("需先改密：标记原样带到响应，前端据此直达改密页")
+    void shouldCarryMustChangePasswordFlag() {
+        LoginResponse pending = assembler.toResponse(
+                new AuthenticatedSubject("token-3", SubjectType.STAFF, null, "张三", true, List.of()));
+        LoginResponse changed = assembler.toResponse(
+                new AuthenticatedSubject("token-4", SubjectType.STAFF, null, "张三", false, List.of()));
+
+        assertThat(pending.mustChangePassword()).isTrue();
+        assertThat(changed.mustChangePassword()).isFalse();
     }
 }

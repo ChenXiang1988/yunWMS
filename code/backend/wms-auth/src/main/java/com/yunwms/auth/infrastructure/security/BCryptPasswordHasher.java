@@ -5,7 +5,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
 
 /**
- * 用 BCrypt 校验密码。
+ * 用 BCrypt 校验与生成密码哈希。
  *
  * <p>不自研哈希：BCrypt 自带随机盐与可调代价，是密码存储的既定做法；这里只依赖
  * {@code spring-security-crypto} 这一个工具 jar，不引入 Spring Security 的过滤器链与自动配置。
@@ -22,5 +22,11 @@ public class BCryptPasswordHasher implements PasswordHasher {
     public boolean matches(String rawPassword, String passwordHash) {
         // 哈希格式无法识别时由 BCrypt 实现方按不匹配处理并告警：损坏的数据不该变成「这个账号有异常」的探针
         return encoder.matches(rawPassword, passwordHash);
+    }
+
+    @Override
+    public String hash(String rawPassword) {
+        // 盐由 encoder 每次随机生成，因此同一明文的两次调用结果不同，这正是「不比哈希串」的前提
+        return encoder.encode(rawPassword);
     }
 }

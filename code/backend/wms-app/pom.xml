@@ -58,6 +58,31 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!--
+            模块边界检查（AGENTS.md 禁止跨模块直接依赖）。只能放 wms-app：只有它的 classpath
+            同时含 wms-web / wms-auth / wms-master 的类，放在其余模块里扫描不到被依赖方。
+            版本由父 pom 的 dependencyManagement 管理，此处不写版本号。
+        -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            集成测试要连真实 PostgreSQL：H2 与 PG 在表达式索引、部分唯一索引、ON CONFLICT 上语义不同，
+            用内存库测出来的「迁移可跑通」不能证明空库在 PG 上可跑通。版本由 spring-boot-starter-parent
+            导入的 testcontainers-bom 管理，此处不写版本号。
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -65,6 +90,38 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <!--
+                集成测试用的 Docker API 版本。
+                Testcontainers 1.20.4 内置的 docker-java 默认按 Docker API 1.32 发请求，
+                而本机 Docker Engine 29.9 的最低可接受 API 已抬到 1.40，/v1.32/info 直接回 400，
+                结果所有 Docker 客户端策略都判为不可用，测试在启动容器前就失败。
+                这里钉 1.40 而不是更高：1.40 是 Docker 19.03 起就支持的版本，也是当前引擎的下限，
+                既能连上本机，也不会把仓库绑到某台机器的具体版本上。
+                只作用于 surefire 派生出的测试 JVM，生产运行时不受影响；
+                等 Spring Boot 管理的 Testcontainers 自己会协商版本时，这一段应当删掉。
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <!--
+                          告诉 Testcontainers 内置的 docker-java 用哪个 Docker Engine API 版本。
+
+                          为什么需要：docker-java（Testcontainers 1.20.x 内置）默认发 /v1.32/ 请求，
+                          而较新的 Docker Engine 把 MinAPIVersion 提到了 1.40，直接回 400，表现为
+                          「Could not find a valid Docker environment」——一个与 Docker 实际状态无关的误报。
+
+                          为什么是 1.40 而不是更高：1.40 是 Docker 19.03（2019）起的通用下限，
+                          取最小值可以让新旧引擎都能跑；跟着本机版本往上调反而会让旧环境失败。
+
+                          什么时候可以删：Testcontainers 升级到会自动协商版本的版本后。删之前先跑一次
+                          ./mvnw clean verify，确认 BootstrapIntegrationTest 的 3 个用例仍然执行。
+                        -->
+                        <api.version>1.40</api.version>
+                    </systemPropertyVariables>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.flywaydb</groupId>

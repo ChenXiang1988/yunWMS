@@ -36,6 +36,29 @@ public class UserAccountRepositoryImpl implements UserAccountRepository {
     }
 
     @Override
+    public Optional<UserAccount> findById(long userId) {
+        // selectById 会带上逻辑删除条件：被软删除的账号必须和「不存在」同口径，否则它能凭旧令牌继续改密
+        return Optional.ofNullable(sysUserMapper.selectById(userId))
+                .map(UserAccountRepositoryImpl::toDomain);
+    }
+
+    @Override
+    public void updatePassword(long userId, String newPasswordHash, Instant changedAt) {
+        // 哈希与「需先改密」标记在同一条 UPDATE 里落库：拆成两条语句时，中间失败会留下
+        // 「标记已清但密码没变」的状态，初始密码从此不再被拦。updated_at 一并写，改密属于账号变更。
+        int updated = sysUserMapper.update(null, Wrappers.<SysUserEntity>lambdaUpdate()
+                .eq(SysUserEntity::getId, userId)
+                .set(SysUserEntity::getPasswordHash, newPasswordHash)
+                .set(SysUserEntity::getPasswordUpdatedAt, changedAt)
+                .set(SysUserEntity::getMustChangePassword, Boolean.FALSE)
+                .set(SysUserEntity::getUpdatedAt, changedAt));
+        if (updated == 0) {
+            // 刚读到账号却写不回去：账号在改密过程中被删除，此时不能告诉调用方改密成功
+            throw new IllegalStateException("密码写入失败，用户已不存在：" + userId);
+        }
+    }
+
+    @Override
     public void clearExpiredLock(long userId, Instant now) {
         // 条件里重复判一次「已过期」：并发清理时后到的那次命中零行，是正常结果而不是失败，
         // 因此不看影响行数。判定放回数据库，避免应用拿着旧快照把别人的新锁定清掉。
@@ -44,6 +67,17 @@ public class UserAccountRepositoryImpl implements UserAccountRepository {
                 .eq(SysUserEntity::getId, userId)
                 .isNotNull(SysUserEntity::getLockedUntil)
                 .le(SysUserEntity::getLockedUntil, now)
+                .set(SysUserEntity::getFailedAttempts, 0)
+                .set(SysUserEntity::getLockedUntil, null)
+                .set(SysUserEntity::getLastFailedAt, null));
+    }
+
+    @Override
+    public void clearFailureState(long userId) {
+        // 刻意不写 last_login_at：改密成功也是这一轮失败的终点，但它不是登录。
+        // 这里不看影响行数：账号已在 updatePassword 里确认存在，命中零行只能是并发删除，属正常结果。
+        sysUserMapper.update(null, Wrappers.<SysUserEntity>lambdaUpdate()
+                .eq(SysUserEntity::getId, userId)
                 .set(SysUserEntity::getFailedAttempts, 0)
                 .set(SysUserEntity::getLockedUntil, null)
                 .set(SysUserEntity::getLastFailedAt, null));
@@ -77,6 +111,12 @@ public class UserAccountRepositoryImpl implements UserAccountRepository {
     }
 
     private static UserAccount toDomain(SysUserEntity entity) {
+        Boolean mustChangePassword = entity.getMustChangePassword();
+        if (mustChangePassword == null) {
+            // 列是 NOT NULL，为空只可能是映射漏了列。此时按 false 兜底会直接放过首次登录，
+            // 而强制改密正是靠这一位生效的，宁可让登录链路当场失败。
+            throw new IllegalStateException("sys_user.must_change_password 缺失，用户 id=" + entity.getId());
+        }
         return new UserAccount(
                 entity.getId(),
                 entity.getLoginName(),
@@ -84,6 +124,7 @@ public class UserAccountRepositoryImpl implements UserAccountRepository {
                 SubjectType.fromCode(entity.getSubjectType()),
                 entity.getOwnerId(),
                 entity.getPasswordHash(),
+                mustChangePassword,
                 UserStatus.fromCode(entity.getStatus()),
                 entity.getLockedUntil());
     }

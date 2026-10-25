@@ -6,6 +6,7 @@ alwaysApply: true
 # AI 交付协议
 
 完整协议见仓库根目录 `AGENTS.md`，本文件只列必须逐条执行的硬约束。
+与 `AGENTS.md` 或 `docs/agents.md` 冲突时以 `AGENTS.md` 为准；优先级：`AGENTS.md` > `.codebuddy/rules/` > change 的 `design.md`/`specs` > 任务包。
 
 ## 分支
 
@@ -14,7 +15,7 @@ alwaysApply: true
 
 ## 提交
 
-- Conventional Commits 格式，单次提交不超过 400 行变更
+- Conventional Commits 格式，单次提交不超过 400 行变更（口径见 `docs/agents.md` 第五节）
 - 一次提交只做一件事，结束时可编译可运行
 - 重构、格式化、数据库迁移均不得与功能改动混在同一提交
 

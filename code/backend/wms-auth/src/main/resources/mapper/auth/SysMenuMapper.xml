@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+    与 SysUserMapper.xml 同目录：MyBatis-Plus 的默认扫描位置是 classpath*:/mapper/**/*.xml，
+    按模块分目录便于多个模块各自添加 XML 后仍能看出归属。
+-->
+<mapper namespace="com.yunwms.auth.infrastructure.persistence.mapper.SysMenuMapper">
+
+    <!--
+        超管分支：全部权限点，不经过任何授权关联表。
+        这正是「新增权限点后超管无需授权即可访问」的落点——它读的是权限点集合本身，
+        而不是「某个角色被授予了什么」，因此新增一行 sys_menu 就自动生效。
+
+        perms 为空的行（目录与菜单）必须排除：它们不是权限点，混进来会让 checkPermission
+        拿一串 null 去比对。这一条也说明为什么不在应用层过滤：过滤条件与查询是同一次语义。
+    -->
+    <select id="selectAllPermissionCodes" resultType="java.lang.String">
+        SELECT perms
+        FROM sys_menu
+        WHERE perms IS NOT NULL
+        ORDER BY id
+    </select>
+
+    <!--
+        普通角色分支：角色 → 授权关联 → 权限点。
+        DISTINCT 是必要的：多个角色勾选同一个权限点是正常配置，不去重会让鉴权侧拿到的列表长度
+        随角色数量增长，缓存这份列表时的键值也会跟着变。
+
+        sys_menu 与 sys_role_menu 都没有 deleted_at，因此这里没有逻辑删除条件可加；
+        角色侧的 enabled / deleted_at 由调用方先用 Wrapper 过滤（那里能命中 MyBatis-Plus 的
+        逻辑删除自动条件），传进来的就是启用中的角色 id。
+    -->
+    <select id="selectPermissionCodesByRoleIds" resultType="java.lang.String">
+        SELECT DISTINCT m.perms
+        FROM sys_role_menu rm
+                 JOIN sys_menu m ON m.id = rm.menu_id
+        WHERE m.perms IS NOT NULL
+          AND rm.role_id IN
+        <foreach collection="roleIds" item="roleId" open="(" separator="," close=")">
+            #{roleId}
+        </foreach>
+    </select>
+
+</mapper>

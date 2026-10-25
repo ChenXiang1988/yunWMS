@@ -9,8 +9,8 @@ import java.util.Optional;
 /**
  * 登录主体的读写入口。
  *
- * <p>只暴露登录链路需要的动作。密码变更、启停用属于用户管理，不在本接口里扩张，
- * 否则这里会变成整张表的 CRUD 入口，谁都能绕过用例直接改库。
+ * <p>只暴露认证链路需要的动作：登录、强制改密判定与本人改密。管理员建号、启停用、重置密码属于用户管理，
+ * 不在本接口里扩张，否则这里会变成整张表的 CRUD 入口，谁都能绕过用例直接改库。
  */
 public interface UserAccountRepository {
 
@@ -23,6 +23,19 @@ public interface UserAccountRepository {
      * @return 账号；不存在时为空
      */
     Optional<UserAccount> findByLoginName(String loginName);
+
+    /**
+     * 按用户标识查账号。
+     *
+     * <p>改密用例手上只有会话里的用户标识，没有登录名；按标识回查是为了拿到当前密码哈希做旧密码校验，
+     * 而不是把哈希留在会话里——会话可能落到 Redis，凭据不该跟着会话走。
+     *
+     * <p>软删除的账号视为不存在，与 {@link #findByLoginName} 同口径。
+     *
+     * @param userId 用户标识
+     * @return 账号；不存在时为空
+     */
+    Optional<UserAccount> findById(long userId);
 
     /**
      * 清理已过期的锁定：连续失败次数归零、锁定截止时间与失败窗口起点一并清空。
@@ -57,6 +70,33 @@ public interface UserAccountRepository {
      */
     FailedAttemptState recordFailedAttempt(long userId, int lockAfterFailures,
                                            Instant windowStart, Instant failedAt, Instant lockUntil);
+
+    /**
+     * 只清连续失败状态：失败次数归零、锁定截止时间与失败窗口起点一并置空。
+     *
+     * <p>与 {@link #recordSuccessfulLogin} 的区别是不写 {@code last_login_at}：
+     * 本人改密成功同样是「连续失败」这一轮的终点，但它不是登录，写登录时间会让审计里的
+     * 「上次登录」变成「上次改密时间」。两件事因此分成两个方法，{@code last_login_at} 只在真正登录时写。
+     *
+     * <p>不看影响行数：调用方此时已经用 {@link #updatePassword} 确认过账号还在，
+     * 这里命中零行只能是并发删除，属正常结果而不是失败。
+     *
+     * @param userId 用户标识
+     */
+    void clearFailureState(long userId);
+
+    /**
+     * 写入新密码哈希，并在同一条语句里把「需先改密」标记置为 {@code false}。
+     *
+     * <p>两件事必须原子：分两步写时，若先清标记后写哈希中途失败，用户会带着旧密码进入「已改密」状态，
+     * 下次登录不再被拦，初始密码就一直有效；反过来先写哈希后清标记失败，只是多拦一次，用户重试即可。
+     *
+     * @param userId          用户标识
+     * @param newPasswordHash 新密码哈希，由 {@code PasswordHasher#hash} 生成，不接受明文
+     * @param changedAt       改密时刻，同时写入 {@code password_updated_at} 与 {@code updated_at}
+     * @throws IllegalStateException 账号在改密过程中已被删除，此时库内没有任何一行被改动
+     */
+    void updatePassword(long userId, String newPasswordHash, Instant changedAt);
 
     /**
      * 记录成功登录：写登录时间，并把连续失败次数归零、锁定截止时间与失败窗口起点清空。

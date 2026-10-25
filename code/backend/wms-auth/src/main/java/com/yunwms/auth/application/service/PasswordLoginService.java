@@ -2,20 +2,17 @@ package com.yunwms.auth.application.service;
 
 import com.yunwms.auth.application.command.PasswordLoginCommand;
 import com.yunwms.auth.application.dto.AuthenticatedSubject;
-import com.yunwms.auth.domain.model.FailedAttemptState;
 import com.yunwms.auth.domain.model.SessionOrigin;
 import com.yunwms.auth.domain.model.UserAccount;
+import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.PasswordHasher;
 import com.yunwms.auth.domain.port.SessionTokenIssuer;
 import com.yunwms.auth.domain.port.UserAccountRepository;
 import com.yunwms.auth.domain.port.UserRoleQuery;
 import com.yunwms.web.api.ErrorCode;
 import com.yunwms.web.exception.BizException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -25,41 +22,34 @@ import java.util.List;
  * <p>两类主体走同一条链路，主体类型在查到账号后由 {@code sys_user.subject_type} 决定，
  * 因此不存在「走错入口就能绕开规则」的可能。
  *
+ * <p>失败计数的阈值与窗口不在这里定义，统一取自 {@code LoginProtectionPolicy}：
+ * 本人改密同样要按这套规则计数，两处各留一份常量就迟早会分叉。
+ *
  * <p>不开事务：失败计数与锁定截止时间在同一条 UPDATE 里完成，成功登录也只写一处，
  * 没有任何跨语句需要原子提交的状态；加一个空事务只会让人误以为登录做了更多持久化。
  */
 @Service
 public class PasswordLoginService {
 
-    private static final Logger log = LoggerFactory.getLogger(PasswordLoginService.class);
-
-    /** 连续失败达到该次数即锁定，对应规格「连续 5 次密码错误后锁定」。阈值只在这里定义，SQL 通过参数接收。 */
-    private static final int MAX_CONSECUTIVE_FAILURES = 5;
-
-    /**
-     * 失败计数窗口，对应规格「同一主体在 30 分钟内连续 5 次输入错误密码」。
-     *
-     * <p>与锁定时长是两个独立的规则，只是当前取值相同：把窗口写成 {@link #LOCK_DURATION}
-     * 会让调整锁定时长时顺手改掉窗口，而这两条规则在规格里是分开表述的。
-     */
-    private static final Duration FAILURE_WINDOW = Duration.ofMinutes(30);
-
-    /** 锁定时长，对应规格「锁定该主体 30 分钟」。 */
-    private static final Duration LOCK_DURATION = Duration.ofMinutes(30);
-
     private final UserAccountRepository userAccountRepository;
     private final UserRoleQuery userRoleQuery;
     private final PasswordHasher passwordHasher;
     private final SessionTokenIssuer sessionTokenIssuer;
+    private final CurrentSession currentSession;
+    private final FailedAttemptRecorder failedAttemptRecorder;
 
     public PasswordLoginService(UserAccountRepository userAccountRepository,
                                 UserRoleQuery userRoleQuery,
                                 PasswordHasher passwordHasher,
-                                SessionTokenIssuer sessionTokenIssuer) {
+                                SessionTokenIssuer sessionTokenIssuer,
+                                CurrentSession currentSession,
+                                FailedAttemptRecorder failedAttemptRecorder) {
         this.userAccountRepository = userAccountRepository;
         this.userRoleQuery = userRoleQuery;
         this.passwordHasher = passwordHasher;
         this.sessionTokenIssuer = sessionTokenIssuer;
+        this.currentSession = currentSession;
+        this.failedAttemptRecorder = failedAttemptRecorder;
     }
 
     /**
@@ -89,7 +79,7 @@ public class PasswordLoginService {
         if (!passwordHasher.matches(command.password(), account.passwordHash())) {
             // 锁定期内不再累加：这一轮已经在计数，此刻的失败不属于任何新一轮，累加只会把锁定无限延长
             if (!account.isLockedAt(now)) {
-                recordFailure(account.id(), now);
+                failedAttemptRecorder.record(account.id(), now);
             }
             throw credentialsRejected();
         }
@@ -105,27 +95,13 @@ public class PasswordLoginService {
         userAccountRepository.recordSuccessfulLogin(account.id(), now);
         String token = sessionTokenIssuer.issue(account,
                 new SessionOrigin(now, command.sourceAddress(), command.clientIdentifier()));
-        return new AuthenticatedSubject(token, account.subjectType(), account.ownerId(),
-                account.displayName(), roles);
-    }
-
-    /**
-     * 累加一次连续失败，并在本次尝试触发锁定时留日志。
-     *
-     * <p>用数据库返回的累加结果判断是否触发锁定，而不是用应用侧算出的次数：并发下应用侧的数字可能落后，
-     * 日志里就会写错「是谁把账号试锁的」。
-     *
-     * <p>窗口起点由本方法算好后传给数据库，而「是否还在窗口内」由数据库在同一条语句里判定：
-     * 应用侧先查上次失败时间再决定加不加，并发下两个请求会读到同一个旧时间、各自从 1 重新计数。
-     * 三个时间参数同出一个时钟（本方法的 {@code now}），避免与库内 {@code now()} 混用后窗口被算偏。
-     */
-    private void recordFailure(long userId, Instant now) {
-        FailedAttemptState failure = userAccountRepository.recordFailedAttempt(
-                userId, MAX_CONSECUTIVE_FAILURES, now.minus(FAILURE_WINDOW), now, now.plus(LOCK_DURATION));
-        if (failure.lockedUntil() != null && failure.lockedUntil().isAfter(now)) {
-            log.warn("连续密码错误达到 {} 次，账号已锁定：userId={}, failedAttempts={}, lockedUntil={}",
-                    MAX_CONSECUTIVE_FAILURES, userId, failure.failedAttempts(), failure.lockedUntil());
+        if (account.mustChangePassword()) {
+            // 标记必须在签发之后写入：会话是签发时建立的，先标记拿不到会话。
+            // 令牌照发而不是直接拒绝：规格要求「仅允许访问改密界面」，用户需要这个令牌才能去改密。
+            currentSession.markMustChangePassword();
         }
+        return new AuthenticatedSubject(token, account.subjectType(), account.ownerId(),
+                account.displayName(), account.mustChangePassword(), roles);
     }
 
     private static BizException credentialsRejected() {

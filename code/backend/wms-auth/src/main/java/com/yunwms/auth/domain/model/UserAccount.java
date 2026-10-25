@@ -13,9 +13,10 @@ import java.time.Instant;
  * @param displayName  展示名，登录成功后回给前端
  * @param subjectType  主体类型，决定可访问端
  * @param ownerId      所属货主；内部员工必须为空，货主账号必须非空
- * @param passwordHash 密码哈希，算法由 {@code PasswordHasher} 的实现决定
- * @param status       账号状态
- * @param lockedUntil  锁定截止时间，为空表示未锁定
+ * @param passwordHash        密码哈希，算法由 {@code PasswordHasher} 的实现决定
+ * @param mustChangePassword  是否需要先改密：初始密码建号或管理员重置后为 {@code true}，本人改密成功后转 {@code false}
+ * @param status              账号状态
+ * @param lockedUntil         锁定截止时间，为空表示未锁定
  */
 public record UserAccount(
         long id,
@@ -24,6 +25,7 @@ public record UserAccount(
         SubjectType subjectType,
         Long ownerId,
         String passwordHash,
+        boolean mustChangePassword,
         UserStatus status,
         Instant lockedUntil) {
 

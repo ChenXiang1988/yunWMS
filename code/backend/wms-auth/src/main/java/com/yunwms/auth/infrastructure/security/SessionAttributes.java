@@ -25,6 +25,14 @@ public final class SessionAttributes {
     /** 所属货主标识，值为 {@link Long}；内部员工不写该属性。 */
     public static final String OWNER_ID = "ownerId";
 
+    /**
+     * 「需先改密」标记，值为 {@link Boolean}。
+     *
+     * <p>只在为 {@code true} 时写入，改密成功后整个属性被删除：缺省即「不需要改密」，
+     * 不用两个取值表达同一件事。
+     */
+    public static final String MUST_CHANGE_PASSWORD = "mustChangePassword";
+
     private SessionAttributes() {
     }
 }
