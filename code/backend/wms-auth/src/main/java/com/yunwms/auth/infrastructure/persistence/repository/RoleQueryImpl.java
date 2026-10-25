@@ -1,15 +1,18 @@
 package com.yunwms.auth.infrastructure.persistence.repository;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.yunwms.auth.domain.model.RoleIdentity;
 import com.yunwms.auth.domain.model.RoleStatus;
 import com.yunwms.auth.domain.model.RoleSummary;
 import com.yunwms.auth.domain.port.RoleQuery;
 import com.yunwms.auth.infrastructure.persistence.entity.RoleSummaryRow;
+import com.yunwms.auth.infrastructure.persistence.entity.SysRoleEntity;
 import com.yunwms.auth.infrastructure.persistence.entity.SysRoleMenuEntity;
 import com.yunwms.auth.infrastructure.persistence.mapper.SysRoleMapper;
 import com.yunwms.auth.infrastructure.persistence.mapper.SysRoleMenuMapper;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -52,6 +55,21 @@ public class RoleQueryImpl implements RoleQuery {
     public Optional<RoleSummary> findById(long roleId) {
         return Optional.ofNullable(sysRoleMapper.selectSummaryById(roleId))
                 .map(RoleQueryImpl::toSummary);
+    }
+
+    @Override
+    public List<RoleIdentity> findIdentities(Collection<Long> roleIds) {
+        if (roleIds.isEmpty()) {
+            // 空的 IN 条件在拼装时会被省略，查询会退化成「查全部角色」；
+            // 这里必须提前短路，否则一次空请求会被当成「所有角色都合法」
+            return List.of();
+        }
+        return sysRoleMapper.selectList(Wrappers.<SysRoleEntity>lambdaQuery()
+                        .select(SysRoleEntity::getId, SysRoleEntity::getBuiltin)
+                        .in(SysRoleEntity::getId, roleIds))
+                .stream()
+                .map(role -> new RoleIdentity(role.getId(), Boolean.TRUE.equals(role.getBuiltin())))
+                .toList();
     }
 
     @Override
