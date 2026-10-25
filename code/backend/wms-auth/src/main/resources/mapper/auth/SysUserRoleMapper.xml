@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+    与 SysUserMapper.xml / SysRoleMapper.xml 同目录：MyBatis-Plus 的默认扫描位置是
+    classpath*:/mapper/**/*.xml，按模块分目录便于多个模块各自添加 XML 后仍能看出归属。
+-->
+<mapper namespace="com.yunwms.auth.infrastructure.persistence.mapper.SysUserRoleMapper">
+
+    <!--
+        一页用户的角色授权用一条语句取回，而不是逐行查：20 行用户逐行查就是 20 次往返，
+        而这条语句的代价与「页内用户数」无关（一次 IN + 一次连接）。
+
+        JOIN 而不是子查询：要的是角色编码，而编码在 sys_role 上。
+
+        已逻辑删除的角色不返回（对管理界面已无意义）；停用中的角色<b>照常返回</b>——
+        列表要能看出「这个账号的角色已被停用」，那正是它权限失效的原因。
+        两者口径不同不是笔误：登录与鉴权侧只看启用中的角色，见 UserRoleQuery 的说明。
+
+        排序 (sort_no, id) 与角色列表一致：同一份角色集合在两处展示时顺序应当相同，
+        否则管理员会以为「列表里的角色顺序变了」是授权变了。
+    -->
+    <select id="selectGrantsByUserIds"
+            resultType="com.yunwms.auth.infrastructure.persistence.entity.UserRoleGrantRow">
+        SELECT ur.user_id,
+               r.id   AS role_id,
+               r.code AS role_code
+        FROM sys_user_role ur
+                 JOIN sys_role r ON r.id = ur.role_id
+        WHERE ur.user_id IN
+        <foreach collection="userIds" item="userId" open="(" separator="," close=")">
+            #{userId}
+        </foreach>
+          AND r.deleted_at IS NULL
+        ORDER BY ur.user_id, r.sort_no, r.id
+    </select>
+
+</mapper>

@@ -52,4 +52,62 @@
         RETURNING u.failed_attempts, u.locked_until
     </select>
 
+    <!--
+        管理端列表的筛选条件。
+
+        手写 SQL 必须自己带 deleted_at 条件：MyBatis-Plus 的逻辑删除只作用于它生成的语句，
+        漏掉这一条，已逻辑删除的账号会重新出现在管理界面里。
+
+        关键字用 ILIKE 模糊匹配登录名与姓名：不命中 lower(login_name) 那个表达式唯一索引——
+        它是给登录时的等值查询用的，模糊匹配本来就扫。不转义 % 与 _：参数化已排除注入，
+        把它们当通配符用是 LIKE 的既有语义。
+
+        不提供角色维度的筛选：角色是多值维度，「有任一角色」与「有全部角色」两种语义都说得通，
+        选哪一种都要在界面上再解释一次；等前端确实需要时再定口径（见任务 2.1b 的说明）。
+    -->
+    <sql id="userFilter">
+        <where>
+            u.deleted_at IS NULL
+            <if test="subjectType != null">
+                AND u.subject_type = #{subjectType}
+            </if>
+            <if test="status != null">
+                AND u.status = #{status}
+            </if>
+            <if test="keyword != null">
+                AND (u.login_name ILIKE '%' || #{keyword} || '%'
+                    OR u.display_name ILIKE '%' || #{keyword} || '%')
+            </if>
+        </where>
+    </sql>
+
+    <select id="countByFilter" resultType="java.lang.Long">
+        SELECT count(*)
+        FROM sys_user u
+        <include refid="userFilter"/>
+    </select>
+
+    <!--
+        排序只用 id：它是唯一的，翻页不会漏行或重复行。不按 created_at 或最后登录时间排——
+        那两列都可能相同，需要再补一个唯一列兜底，而「同一个时间点建的账号」谁先谁后
+        对管理员没有意义。
+
+        LIMIT / OFFSET 用参数而不是拼字符串：拼字符串会引入外部输入，也让「上限 200」这条约束
+        散落到 SQL 里；范围判定在 UserQueryService 一处完成。
+    -->
+    <select id="selectSummaryPage"
+            resultType="com.yunwms.auth.infrastructure.persistence.entity.UserSummaryRow">
+        SELECT u.id,
+               u.login_name,
+               u.display_name,
+               u.subject_type,
+               u.owner_id,
+               u.status,
+               u.last_login_at
+        FROM sys_user u
+        <include refid="userFilter"/>
+        ORDER BY u.id
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
 </mapper>
