@@ -6,6 +6,7 @@ import com.yunwms.auth.domain.model.PasswordRuleViolation;
 import com.yunwms.auth.domain.model.UserAccount;
 import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.PasswordHasher;
+import com.yunwms.auth.domain.port.SessionInvalidator;
 import com.yunwms.auth.domain.port.UserAccountRepository;
 import com.yunwms.web.api.ErrorCode;
 import com.yunwms.web.exception.BizException;
@@ -18,7 +19,7 @@ import java.util.List;
  * 本人改密的用例，也是待改密状态下唯一被放行的写操作。
  *
  * <p>判定顺序固定为「取会话用户 → 查账号 → 判锁定期 → 验旧密码 → 校验新密码策略 → 新旧相同判定
- * → 落库 → 清改密标记 → 清失败状态」。
+ * → 落库 → 失效其他会话 → 清改密标记 → 清失败状态」。
  *
  * <p>旧密码先于策略校验：密码策略的提示会暴露「哪些规则不满足」，若在验明本人之前就返回，
  * 拿着一张待改密令牌的人可以先用错误旧密码刷出全部规则，等于把口令策略当公共信息送出去。
@@ -31,7 +32,7 @@ import java.util.List;
  * 只拒绝、不计数，正是本接口原先可以被用来穷举密码的原因。
  *
  * <p>不开事务：改密只写一条 UPDATE（哈希与改密标记同语句），失败计数与失败状态清理各是一条独立的单行 UPDATE，
- * 会话标记不是事务资源。加一个空事务只会让人以为这里还有别的东西需要原子提交。
+ * 会话标记与会话失效也不是事务资源。加一个空事务只会让人以为这里还有别的东西需要原子提交。
  */
 @Service
 public class PasswordChangeService {
@@ -42,15 +43,18 @@ public class PasswordChangeService {
     private final UserAccountRepository userAccountRepository;
     private final PasswordHasher passwordHasher;
     private final CurrentSession currentSession;
+    private final SessionInvalidator sessionInvalidator;
     private final FailedAttemptRecorder failedAttemptRecorder;
 
     public PasswordChangeService(UserAccountRepository userAccountRepository,
                                  PasswordHasher passwordHasher,
                                  CurrentSession currentSession,
+                                 SessionInvalidator sessionInvalidator,
                                  FailedAttemptRecorder failedAttemptRecorder) {
         this.userAccountRepository = userAccountRepository;
         this.passwordHasher = passwordHasher;
         this.currentSession = currentSession;
+        this.sessionInvalidator = sessionInvalidator;
         this.failedAttemptRecorder = failedAttemptRecorder;
     }
 
@@ -97,8 +101,14 @@ public class PasswordChangeService {
         }
 
         userAccountRepository.updatePassword(userId, passwordHasher.hash(command.newPassword()), now);
-        // 先落库再清标记：写库失败时保持拦截，用户重试一次即可；顺序反过来会留下
-        // 「会话已放行、库里仍是初始密码」的状态，初始密码从此不再被拦
+        // 先落库再失效其他会话：反过来时，会话失效成功而密码没写进去，用户会被自己踢下线、
+        // 密码却还是旧的，既登不进去也没法重试改密。
+        // 紧跟落库之后失效，是因为改密的动机通常是「口令已经泄给别人」：晚一步，别处就多一秒可用时间
+        sessionInvalidator.invalidateOthersOfCurrent(userId);
+        // 清标记同样排在落库之后：写库失败时保持拦截，用户重试一次即可；顺序反过来会留下
+        // 「会话已放行、库里仍是初始密码」的状态，初始密码从此不再被拦。
+        // 失效排在清标记之前，是为了让「密码已换、别处令牌还在」的空窗尽可能短：
+        // 失效没有重试入口——旧密码已经作废，用户无法再触发一次改密
         currentSession.clearMustChangePassword();
         // 改密成功是这一轮「连续失败」的终点：留着计数，用户下一次输错就离锁定更近一步。
         // 只清失败状态、不写 last_login_at——改密不是登录，写登录时间会把审计里的登录时刻改成改密时刻

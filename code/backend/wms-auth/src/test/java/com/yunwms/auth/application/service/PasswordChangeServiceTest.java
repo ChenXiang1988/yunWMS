@@ -8,6 +8,7 @@ import com.yunwms.auth.domain.model.UserAccount;
 import com.yunwms.auth.domain.model.UserStatus;
 import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.PasswordHasher;
+import com.yunwms.auth.domain.port.SessionInvalidator;
 import com.yunwms.auth.domain.port.UserAccountRepository;
 import com.yunwms.web.api.ErrorCode;
 import com.yunwms.web.exception.BizException;
@@ -44,6 +45,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
  * 不连数据库。这里能钉住的是「判定顺序」与「哪一步不该发生」：旧密码错时哈希与密码都不该动，
  * 新密码不合规时连哈希都不该生成，账号处于锁定期时连密码都不该验——
  * 这几类错误一旦漏过去，用户就会带着一个自己没打算用的密码继续用系统，或者绕过锁定继续试密码。
+ *
+ * <p>改密成功后还要让其他设备手里的令牌失效，并且必须发生在落库之后：顺序反了就变成
+ * 「会话已断、密码没改」，用户被自己踢下线却还得用旧密码登录。改密被拒时则一个会话都不该动。
  */
 @DisplayName("本人改密")
 class PasswordChangeServiceTest {
@@ -61,6 +65,7 @@ class PasswordChangeServiceTest {
     private UserAccountRepository userAccountRepository;
     private PasswordHasher passwordHasher;
     private CurrentSession currentSession;
+    private SessionInvalidator sessionInvalidator;
     private PasswordChangeService passwordChangeService;
 
     @BeforeEach
@@ -68,10 +73,11 @@ class PasswordChangeServiceTest {
         userAccountRepository = mock(UserAccountRepository.class);
         passwordHasher = mock(PasswordHasher.class);
         currentSession = mock(CurrentSession.class);
+        sessionInvalidator = mock(SessionInvalidator.class);
         // 失败计数用真实实现包住同一个仓储 mock：只有这样才能断言真正传给库的阈值与窗口，
         // 把记录器换成 mock 就只能断言「调了它」，而「参数与登录一致」正是本任务要钉住的东西
         passwordChangeService = new PasswordChangeService(userAccountRepository, passwordHasher, currentSession,
-                new FailedAttemptRecorder(userAccountRepository));
+                sessionInvalidator, new FailedAttemptRecorder(userAccountRepository));
         given(currentSession.currentUserId()).willReturn(OptionalLong.of(USER_ID));
     }
 
@@ -92,6 +98,52 @@ class PasswordChangeServiceTest {
         inOrder.verify(userAccountRepository).clearFailureState(USER_ID);
         // 改密不是登录：清失败状态不能顺手写登录时间，否则审计里的「上次登录」会变成「上次改密」
         verify(userAccountRepository, never()).recordSuccessfulLogin(anyLong(), any(Instant.class));
+    }
+
+    @Test
+    @DisplayName("改密成功：落库之后才失效其他会话，且只失效其他会话")
+    void shouldInvalidateOtherSessionsAfterPasswordWritten() {
+        given(userAccountRepository.findById(USER_ID)).willReturn(Optional.of(pendingAccount()));
+        given(passwordHasher.matches(OLD_PASSWORD, OLD_HASH)).willReturn(true);
+        given(passwordHasher.hash(NEW_PASSWORD)).willReturn(NEW_HASH);
+
+        passwordChangeService.change(new ChangePasswordCommand(OLD_PASSWORD, NEW_PASSWORD));
+
+        // 顺序不能反：会话先失效而密码没写进库，用户就被自己的改密操作踢下线了，
+        // 而库里仍是旧密码，他既登不进去也没有机会重试改密
+        InOrder inOrder = inOrder(userAccountRepository, sessionInvalidator);
+        inOrder.verify(userAccountRepository).updatePassword(eq(USER_ID), eq(NEW_HASH), any(Instant.class));
+        inOrder.verify(sessionInvalidator).invalidateOthersOfCurrent(USER_ID);
+        // 只失效其他会话：发起改密的这台设备必须还能继续用，否则用户改完密就被自己踢出去
+        verify(sessionInvalidator, never()).invalidateAllOf(anyLong());
+    }
+
+    @Test
+    @DisplayName("旧密码错：拒绝改密，不动任何会话")
+    void shouldNotInvalidateSessionsWhenOldPasswordIsWrong() {
+        given(userAccountRepository.findById(USER_ID)).willReturn(Optional.of(pendingAccount()));
+        given(passwordHasher.matches(anyString(), anyString())).willReturn(false);
+        given(userAccountRepository.recordFailedAttempt(eq(USER_ID), anyInt(), any(Instant.class), any(Instant.class), any(Instant.class)))
+                .willReturn(new FailedAttemptState(1, null));
+
+        BizException failure = failureOf(new ChangePasswordCommand(WRONG_PASSWORD, NEW_PASSWORD));
+
+        assertThat(failure.errorCode()).isEqualTo(ErrorCode.LOGIN_FAILED);
+        // 改密没成，别处的登录状态不该受牵连：一次输错旧密码就把所有设备踢下线，
+        // 相当于让任何拿到令牌的人随手打断账号的正常使用
+        verifyNoInteractions(sessionInvalidator);
+    }
+
+    @Test
+    @DisplayName("新密码不合规：拒绝改密，不动任何会话")
+    void shouldNotInvalidateSessionsWhenNewPasswordViolatesPolicy() {
+        given(userAccountRepository.findById(USER_ID)).willReturn(Optional.of(pendingAccount()));
+        given(passwordHasher.matches(OLD_PASSWORD, OLD_HASH)).willReturn(true);
+
+        BizException failure = failureOf(new ChangePasswordCommand(OLD_PASSWORD, "abc"));
+
+        assertThat(failure.errorCode()).isEqualTo(ErrorCode.BAD_REQUEST);
+        verifyNoInteractions(sessionInvalidator);
     }
 
     @Test
