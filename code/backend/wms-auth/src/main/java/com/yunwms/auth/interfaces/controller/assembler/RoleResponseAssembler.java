@@ -7,7 +7,7 @@ import com.yunwms.auth.domain.model.RoleSummary;
 import com.yunwms.auth.interfaces.controller.response.CreatedRoleResponse;
 import com.yunwms.auth.interfaces.controller.response.RoleDetailResponse;
 import com.yunwms.auth.interfaces.controller.response.RoleListItemResponse;
-import com.yunwms.auth.interfaces.controller.response.RolePageResponse;
+import com.yunwms.web.api.PageResult;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -37,11 +37,11 @@ public class RoleResponseAssembler {
      * @param page 一页角色
      * @return 分页响应体，{@code records} 恒不为 {@code null}
      */
-    public RolePageResponse toPageResponse(RolePage page) {
+    public PageResult<RoleListItemResponse> toPageResponse(RolePage page) {
         List<RoleListItemResponse> records = page.records().stream()
                 .map(RoleResponseAssembler::toListItem)
                 .toList();
-        return new RolePageResponse(page.pageNo(), page.pageSize(), page.total(), records);
+        return new PageResult<>(page.pageNo(), page.pageSize(), page.total(), records);
     }
 
     /**

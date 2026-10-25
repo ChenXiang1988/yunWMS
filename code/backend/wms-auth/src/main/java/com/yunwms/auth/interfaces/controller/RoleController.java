@@ -9,8 +9,9 @@ import com.yunwms.auth.interfaces.controller.assembler.RoleResponseAssembler;
 import com.yunwms.auth.interfaces.controller.request.CreateRoleRequest;
 import com.yunwms.auth.interfaces.controller.response.CreatedRoleResponse;
 import com.yunwms.auth.interfaces.controller.response.RoleDetailResponse;
-import com.yunwms.auth.interfaces.controller.response.RolePageResponse;
+import com.yunwms.auth.interfaces.controller.response.RoleListItemResponse;
 import com.yunwms.web.api.ApiResult;
+import com.yunwms.web.api.PageResult;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -83,10 +84,10 @@ public class RoleController {
      */
     @SaCheckPermission("system:role:list")
     @GetMapping
-    public ApiResult<RolePageResponse> page(@RequestParam(required = false) Integer pageNo,
-                                            @RequestParam(required = false) Integer pageSize,
-                                            @RequestParam(required = false) String keyword,
-                                            @RequestParam(required = false) RoleStatus status) {
+    public ApiResult<PageResult<RoleListItemResponse>> page(@RequestParam(required = false) Integer pageNo,
+                                                            @RequestParam(required = false) Integer pageSize,
+                                                            @RequestParam(required = false) String keyword,
+                                                            @RequestParam(required = false) RoleStatus status) {
         return ApiResult.ok(roleResponseAssembler.toPageResponse(
                 roleQueryService.page(pageNo, pageSize, keyword, status)));
     }
