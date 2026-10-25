@@ -178,8 +178,10 @@ In both branches, never create the root as a side effect: do not run `openspec i
      与证据路径、存量违约登记、总体结论四部分。缺失任一部分时提示，不阻断。
    - **不存在**：告知用户「本 change 没有审计记录」，并给出两个选项——
      现在派 `delivery-auditor` 补审，或跳过并以「未审计」入归档摘要。
-   - **任何情况下都不得自行编写 audit.md**。审计结论只能由 auditor 产出，
-     编造一份比没有更糟：它会让检查单的第一条永远通过。
+   - **审计结论只能由 auditor 产出。** `delivery-auditor` 是只读的，它把结论
+     回传给主 Agent，由主 Agent 原样转录进 `audit.md`——转录不是编写，凡是
+     auditor 没给过的结论不得出现在文件里。编造一份比没有更糟：它会让检查单的
+     第一条永远通过。
 
    纯 `docs/`、`code/tools/` 变更可不要求此记录，但要在摘要里写明「免审」及理由。
 
