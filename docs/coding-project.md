@@ -23,6 +23,10 @@ wms-backend/
 └── wms-app        启动装配、配置、数据库迁移
 ```
 
+**模块边界 MUST 由业务语义、职责与变化原因决定，MUST NOT 由表、接口、技术组件或外部系统决定。**
+判断方法是问「改这个东西时，哪些代码会跟着改」，而不是「数据存在哪张表」。
+按表拆模块的典型症状是：加一张关联表就要同时改三个模块。
+
 依赖方向 **MUST** 单向且无环：
 
 ```text
@@ -55,8 +59,10 @@ wms-app ──► wms-auth ──┐
 
 `wms-web` 属于**入站协议层**。因此：
 
+- `domain` **MUST NOT** 依赖任何承载协议、持久化、配置或框架能力的技术共享模块，`com.yunwms.web.*` 只是其中之一。模块名称 **MUST NOT** 被当作允许反向依赖的理由。
 - `domain` 包 **MUST NOT** import `com.yunwms.web.*`。领域模型不认识 HTTP。
 - `infrastructure` **MUST NOT** import `com.yunwms.web.*`。持久化实现不认识响应结构。
+- `application` 引用 `wms-web` 属于**已知技术债**：当前 `PasswordLoginService` 等用例直接抛 `BizException(ErrorCode)`，使 Application 耦合了协议错误码。目标形态是由 `wms-web` 的全局异常处理把 Application 自有异常映射为 `ErrorCode`，Application 只表达失败原因。新代码 **MUST NOT** 扩大这处耦合。
 - 只有 `interfaces` 与 `application` 可以依赖它。
 
 这三条 **MUST** 由 ArchUnit 测试拦截，不靠自觉。
@@ -103,6 +109,8 @@ infrastructure → domain / application 的 port
 
 - **实体**（`*Entity`）**MUST** 与表一一对应，只出现在 `infrastructure/persistence/entity`。
 - **领域模型**（`domain/model`）**MUST NOT** 带持久化注解。
+- **聚合的创建与重建 MUST 分离**：创建入口由领域模型自己保证初始状态与不变量，接口层与应用层 **MUST NOT** 注入或覆盖；从库中重建 **MUST** 走独立入口并校验读到的事实，**MUST NOT** 借重建路径绕过创建期校验。
+  当前 `UserAccount` 做得对：紧凑构造器拒绝「货主账号没有 ownerId」，仓储的 `toDomain` 也走同一个构造器，因此库里读到脏数据会当场失败而不是被放行。这条规则是为了防止以后为了「重建方便」新增一个不校验的构造重载——那会让唯一入口变成两个，而绕过校验的那个总是更好用。
 - **请求/响应**（`interfaces/**/request|response`）**MUST NOT** 被 `application` 或 `domain` import。
 - 三者之间的转换 **MUST** 有显式的转换类，**MUST NOT** 用同一个类兼任两种角色。
 
