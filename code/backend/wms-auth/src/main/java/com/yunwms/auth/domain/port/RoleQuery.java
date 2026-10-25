@@ -1,8 +1,10 @@
 package com.yunwms.auth.domain.port;
 
+import com.yunwms.auth.domain.model.RoleIdentity;
 import com.yunwms.auth.domain.model.RoleStatus;
 import com.yunwms.auth.domain.model.RoleSummary;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -56,6 +58,21 @@ public interface RoleQuery {
      * @return 角色；不存在或已逻辑删除时为空
      */
     Optional<RoleSummary> findById(long roleId);
+
+    /**
+     * 按标识批量取角色的身份信息（标识 + 是否内置）。
+     *
+     * <p>给「分配角色」用：那里要判定请求里的角色是否都存在，以及替换之后目标账号是否还持有
+     * 内置角色。返回结果只含<b>存在且未逻辑删除</b>的角色，因此「返回条数少于去重后的请求条数」
+     * 就是「有不存在的角色」——判重交给调用方，本端口只负责把库里的事实原样交出去。
+     *
+     * <p>为空或空集合时返回空列表，不查库：空的 {@code IN} 条件在拼装时会被省略，
+     * 查询会退化成「查全部角色」，那会让一次错误的入参看起来像「所有角色都合法」。
+     *
+     * @param roleIds 角色标识集合
+     * @return 角色身份信息，顺序不保证；没有匹配时为空列表
+     */
+    List<RoleIdentity> findIdentities(Collection<Long> roleIds);
 
     /**
      * 取某个角色已勾选的菜单与权限点标识。
