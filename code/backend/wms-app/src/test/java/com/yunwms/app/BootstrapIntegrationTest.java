@@ -27,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class BootstrapIntegrationTest extends AbstractIntegrationTest {
 
     /** 迁移文件数，与 {@code src/main/resources/db/migration} 下的文件一一对应。 */
-    private static final int MIGRATION_COUNT = 26;
+    private static final int MIGRATION_COUNT = 27;
 
     /** 业务表数：24 份建表语句产出的表，不含 Flyway 自己的历史表。 */
     private static final int BUSINESS_TABLE_COUNT = 24;
@@ -43,7 +43,7 @@ class BootstrapIntegrationTest extends AbstractIntegrationTest {
     private ObjectMapper objectMapper;
 
     @Test
-    @DisplayName("迁移可跑通：26 份迁移全部成功，24 张业务表就绪")
+    @DisplayName("迁移可跑通：27 份迁移全部成功，24 张业务表就绪")
     void shouldApplyAllMigrationsOnEmptyDatabase() {
         Integer migrations = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM flyway_schema_history WHERE success", Integer.class);
