@@ -53,6 +53,50 @@
     </select>
 
     <!--
+        「是不是最后一个可用超管」。停用用户的保护要靠它，因此这里只回答这一个问题，
+        调用方拿到的就是结论，不需要自己再拼一遍条件。
+
+        两段 EXISTS 写在同一条语句里，不是两次查询：两段之间没有任何副作用，
+        拆成两次反而会读到两个时间点——第二次查询期间新来一个超管，第一次的结论就已经过期了。
+
+        口径与鉴权侧必须一致：{@code UserPermissionQueryImpl} 先按角色 status = 'ACTIVE' 过滤，
+        再按 builtin 展开全部权限点。因此「可用」同时包含账号维度（status / deleted_at）
+        与角色维度（builtin / status / deleted_at）。少判角色状态，会把持有已停用内置角色的账号
+        算成可用超管，于是一次真正会锁死系统的停用被放行。
+
+        手写 SQL 必须自己带 deleted_at IS NULL：MyBatis-Plus 的逻辑删除只作用于它生成的语句。
+
+        sys_user_role 没有 deleted_at 列（关联行随用户或角色的删除一起消失），
+        因此只有 sys_user 与 sys_role 需要逻辑删除条件。
+    -->
+    <select id="isOnlyAvailableSuperAdmin" resultType="java.lang.Boolean">
+        SELECT EXISTS (
+                   SELECT 1
+                   FROM sys_user u
+                            JOIN sys_user_role ur ON ur.user_id = u.id
+                            JOIN sys_role r ON r.id = ur.role_id
+                   WHERE u.id = #{userId}
+                     AND u.status = 'ACTIVE'
+                     AND u.deleted_at IS NULL
+                     AND r.builtin = true
+                     AND r.status = 'ACTIVE'
+                     AND r.deleted_at IS NULL
+               )
+               AND NOT EXISTS (
+                   SELECT 1
+                   FROM sys_user u
+                            JOIN sys_user_role ur ON ur.user_id = u.id
+                            JOIN sys_role r ON r.id = ur.role_id
+                   WHERE u.id != #{userId}
+                     AND u.status = 'ACTIVE'
+                     AND u.deleted_at IS NULL
+                     AND r.builtin = true
+                     AND r.status = 'ACTIVE'
+                     AND r.deleted_at IS NULL
+               )
+    </select>
+
+    <!--
         管理端列表的筛选条件。
 
         手写 SQL 必须自己带 deleted_at 条件：MyBatis-Plus 的逻辑删除只作用于它生成的语句，

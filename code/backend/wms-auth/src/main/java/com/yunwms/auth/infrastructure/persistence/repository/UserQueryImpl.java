@@ -32,6 +32,9 @@ import java.util.Optional;
  *
  * <p>详情 2 到 3 条：账号行（{@code selectById}，自带逻辑删除条件）、角色授权、货主名称。
  *
+ * <p>{@link #isOnlyAvailableSuperAdmin} 固定 1 条：结论由数据库一次算出，
+ * 应用层不做「先取回全部超管再逐个比对」。
+ *
  * <p>状态与主体类型的中文说明不做在这里：{@code UserStatus#fromCode} / {@code SubjectType#fromCode}
  * 遇到未知编码直接抛异常。这是刻意的——库里出现 {@code 'FOO'} 说明数据被绕过 CHECK 写坏，
  * 静默回落到「启用」会让一个本该停用的账号继续可登录。
@@ -119,6 +122,13 @@ public class UserQueryImpl implements UserQuery {
         // 只数行而不取详情：selectCount 同样带逻辑删除条件，且不需要把整行读回来
         return sysUserMapper.selectCount(Wrappers.<SysUserEntity>lambdaQuery()
                 .eq(SysUserEntity::getId, userId)) > 0;
+    }
+
+    @Override
+    public boolean isOnlyAvailableSuperAdmin(long userId) {
+        // 判定全部落在一条 SQL 里（见 SysUserMapper.xml）：在应用层取回全部超管再数一遍，
+        // 会让「是不是最后一个」这个结论取决于两次查询之间有没有人改了角色
+        return sysUserMapper.isOnlyAvailableSuperAdmin(userId);
     }
 
     /**
