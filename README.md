@@ -1,53 +1,36 @@
 # yunWMS
 
-多货主 3PL 仓储管理系统。单租户、私有部署，不做 SaaS。
+多货主 3PL 仓储系统。单租户，装在客户自己的服务器上，不做 SaaS。
 
-全部代码由 AI 编写，人类只做验收，交付协议见 [AGENTS.md](AGENTS.md)。
+代码是 AI 写的，我负责验收和拍板，所以别指望它有正经开源项目那种文档完整度。
 
-## 关于本仓库
+后端 Java 21 + Spring Boot，数据库 PostgreSQL，缓存 Valkey；前端 Vue 3 + Ant Design Vue。
 
-- 欢迎 fork、clone、自己改。改完之后怎么用、用出什么问题，是你和你的副本之间的事，与作者无关。
-- **不接受外部 PR，不接受用 issue 派活。** 本仓库只做单向发布：代码推上来，别人取走，不回流。
-- 不提供任何形式的技术支持、答疑与适配。
-- 安全问题请不要开公开 issue，直接私下联系作者。
+## 跑一下
 
-## 技术栈
+```bash
+# 后端
+cd code/backend
+docker compose -f docker-compose.dev.yml up -d
+./mvnw install -DskipTests    # 首次得先把依赖模块装进本地仓库，不然 wms-app 起不来
+./mvnw spring-boot:run
 
-| 层 | 选型 |
-| --- | --- |
-| 后端 | Java 21、Spring Boot 3.4、MyBatis-Plus、PostgreSQL、Valkey |
-| 前端 | Vue 3、Ant Design Vue 4、Vite、pnpm workspace |
-| 规格 | OpenSpec（spec 驱动，PRD 为派生物） |
-
-## 目录
-
-```
-code/backend/      后端多模块 Maven 工程（wms-web / wms-auth / wms-master / wms-app）
-code/frontend/     货主端与仓网端两个应用，共用 tokens / ui-web / request
-code/tools/        辅助工具（接口台账生成、仓库平面图解析）
-docs/              交付协议、编码规范、调研快照、PRD
-openspec/          当前有效规格（specs）与拟议变更（changes）
+# 前端，另开一个终端
+cd code/frontend
+pnpm install
+pnpm dev:owner                # 5173；仓网端是 pnpm dev:network，5174
 ```
 
-## 本地运行
+端口被占、拉不到镜像这些坑写在 [code/backend/README.md](code/backend/README.md) 里，前端结构见 [code/frontend/README.md](code/frontend/README.md)。
 
-- 后端：见 [code/backend/README.md](code/backend/README.md)
-- 前端：见 [code/frontend/README.md](code/frontend/README.md)
+## 进度
 
-## 项目状态
+认证和主数据能用了：货主、联系人、商品、条码、包装。入库、库存、出库、任务还没开工，表结构和接口随时会改，别当稳定版用。
 
-早期阶段。已完成认证与主数据（货主、联系人、税号、品类、品牌、商品、条码、包装），前端为两个应用的骨架。入库、库存、出库、任务等模块尚未落地，表结构与接口均可能变动。
-
-## 文档
-
-- [AGENTS.md](AGENTS.md) — 交付协议，动手前必读
-- [openspec/specs](openspec/specs) — 当前有效行为，最新
-- [openspec/changes](openspec/changes) — 拟议变更，随归档消失
-- [docs/coding.md](docs/coding.md)、[docs/coding-java.md](docs/coding-java.md)、[docs/frontend.md](docs/frontend.md) — 编码与前端规范
-- [docs/research](docs/research) — 开源调研快照，不回改
+规格在 `openspec/`，写代码的规矩在 [AGENTS.md](AGENTS.md)，这两样都不轻，动手前值得扫一眼。
 
 ## 许可
 
-[MIT](LICENSE)。可以自由使用、修改、分发、商用，包括 fork 之后改完作为你自己的项目发布，无需告知作者，也无需注明来源以外的东西。
+MIT，见 [LICENSE](LICENSE)。想 fork 就 fork，想改就改，改完怎么用是你自己的事，出了岔子也别找我。只有一条，别用 yunWMS 这个名字发你的版本，商标的事。
 
-MIT 不涉及商标，所以项目名 `yunWMS` 不在授权范围内：代码随你改，但请给你的版本另起一个名字，不要以 `yunWMS` 或容易混淆的名称对外发布。
+PR 和 issue 都不看，这仓库只往外出。
