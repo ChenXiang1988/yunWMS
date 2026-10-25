@@ -11,7 +11,8 @@ import org.springframework.context.annotation.Configuration;
 /**
  * 认证入口：除放行清单外，所有请求都必须已登录；已登录但需先改密的，只放行改密接口。
  *
- * <p>权限校验（接口级权限点）属于后续任务，当前只做到「是否登录」与「是否必须先改密」这两层。
+ * <p>本类只做到「是否登录」与「是否必须先改密」这两层；接口级权限点在
+ * {@link SaTokenAnnotationConfig} 里按方法注解校验。两处分工的理由见那个类。
  *
  * <p>用过滤器而不是 MVC 拦截器：拦截器要等到请求命中处理器才执行，未映射的路径会先变成 404，
  * 拿不到统一的 401；过滤器在 Servlet 容器里先于 DispatcherServlet 执行，结果与路径是否存在无关。

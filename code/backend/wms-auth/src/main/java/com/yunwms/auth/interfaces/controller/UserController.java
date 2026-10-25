@@ -1,5 +1,6 @@
 package com.yunwms.auth.interfaces.controller;
 
+import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.yunwms.auth.application.command.CreateUserCommand;
 import com.yunwms.auth.application.service.UserCreationService;
 import com.yunwms.auth.interfaces.controller.assembler.UserResponseAssembler;
@@ -21,9 +22,9 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>本类当前只做建号。列表、详情、编辑、启停与重置密码属于后续任务，不在这里预留空方法：
  * 一个返回 501 或空列表的占位实现，比没有这个接口更难解释。
  *
- * <p><strong>已知的临时越权窗口</strong>：接口只受「已登录」与「需先改密」两道拦截，
- * 没有权限点校验——权限点体系在 2.2 落地。在此之前任何已登录员工都能建号，
- * 这是本批任务明确接受的缺口，不是遗漏。
+ * <p>建号是管理动作，除「已登录」与「需先改密」两道拦截外还要求权限点
+ * {@code system:user:create}：只判登录不够，任何员工账号都能建号等于没有权限体系。
+ * 注解由 {@code SaTokenAnnotationConfig} 注册的拦截器消费，权限点本身在 {@code V025} 里定义。
  */
 @RestController
 @RequestMapping("/api/console/users")
@@ -48,6 +49,7 @@ public class UserController {
      * @return 新账号的标识与登录名；主体与货主不匹配、内部员工缺邮箱、密码不合规、
      *         登录名或邮箱已被占用通过业务错误码返回
      */
+    @SaCheckPermission("system:user:create")
     @PostMapping
     public ApiResult<CreatedUserResponse> create(@Valid @RequestBody CreateUserRequest request) {
         CreateUserCommand command = new CreateUserCommand(
