@@ -46,3 +46,25 @@ jobs:
 
       - name: 构建
         run: pnpm -r build
+
+  # 后端此前没有任何 CI：AGENTS.md 第 45 行要求的模块依赖拦截（ArchUnit）
+  # 与全部单测、集成测试都只在本地跑。集成测试用 Testcontainers，
+  # ubuntu-latest 自带 Docker；setup-java 的 cache 会自动找 **/pom.xml。
+  backend:
+    name: 后端校验
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: code/backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+
+      - name: 编译与测试
+        run: ./mvnw -B verify
