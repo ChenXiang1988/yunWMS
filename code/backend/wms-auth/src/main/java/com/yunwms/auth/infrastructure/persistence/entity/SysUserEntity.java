@@ -34,6 +34,8 @@ public class SysUserEntity {
     private Instant lastLoginAt;
     private String dataScopeType;
     private String email;
+    /** 企业微信 userid，内部员工用于应用消息推送；列由 V024 引入，货主账号不使用。 */
+    private String wecomUserId;
     private Instant createdAt;
     private Long createdBy;
     private Instant updatedAt;
@@ -158,6 +160,14 @@ public class SysUserEntity {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getWecomUserId() {
+        return wecomUserId;
+    }
+
+    public void setWecomUserId(String wecomUserId) {
+        this.wecomUserId = wecomUserId;
     }
 
     public Instant getCreatedAt() {
