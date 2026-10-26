@@ -13,6 +13,8 @@ import java.util.regex.Pattern;
  * <p><b>这里只判格式，不判「是否取自字典」：</b>国家是不是字典里的启用项、州省是不是属于所选国家，
  * 需要查字典——聚合本身不持有字典，判定放在 {@code OwnerDictionaryValidator}。
  * 分开的判据是「聚合能不能自己回答」：两位大写的是格式，属于字典的事实则不是。
+ * 邮政编码的必填性同理：它取决于地区（港澳台没有邮编），也归 {@code OwnerDictionaryValidator}，
+ * 本类不把任何地区写死在这里。
  *
  * <p>可选字段（{@code district}、{@code postalCode} 与除美国外的 {@code province}）
  * 原样保存，不做去空白或空串转 {@code null}：这类归一化一旦在领域层悄悄发生，
@@ -22,7 +24,7 @@ import java.util.regex.Pattern;
  * @param province    州省，对应 {@code PROVINCE} 字典的 value（形如 {@code US-CA}）；美国必填
  * @param city        城市，必填
  * @param district    区县，可为 {@code null}
- * @param postalCode  邮政编码，可为 {@code null}
+ * @param postalCode  邮政编码，可为 {@code null}；是否必填按地区判定，不在本类
  * @param addressLine 详细地址，必填
  */
 public record OwnerAddress(

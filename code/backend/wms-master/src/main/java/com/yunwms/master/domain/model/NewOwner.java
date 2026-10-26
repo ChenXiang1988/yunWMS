@@ -18,7 +18,7 @@ package com.yunwms.master.domain.model;
  * {@link Owner#requireAttributes}），SKU 前缀与地址的规则各自在 {@link SkuPrefix}、
  * {@link OwnerAddress} 里。本类因此不出现第三处定义。
  *
- * <p>本类不判「客户类型是否在字典里」「国家是否在字典里」「州省是否属于该国」：
+ * <p>本类不判「客户类型是否在字典里」「国家是否在字典里」「州省是否属于该国」「该地区是否要求邮编」：
  * 这些需要查字典，属 {@code OwnerDictionaryValidator}。
  *
  * @param name             客户名称，可重复

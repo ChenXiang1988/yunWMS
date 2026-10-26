@@ -28,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 数据字典种子与读取能力的端到端验证。
  *
- * <p>要证的是单测证不了的几件事：{@code V032} 真的把五类字典与约百条项种进了库、层级真的落在
+ * <p>要证的是单测证不了的几件事：{@code V032}（以及补种港澳台的 {@code V034}）真的把五类字典与约百条项种进了库、层级真的落在
  * {@code ext.parent} 上、{@code enabledOnly} 真的把停用项挡住而 {@code enabledOnly=false} 又放它回来、
  * 三个读接口的 SQL 条数与字典类型数量无关，以及 {@code V031} 的权限点真的被接口消费。
  *
@@ -64,6 +64,9 @@ class DictQueryIntegrationTest extends AbstractIntegrationTest {
     private static final int SEEDED_COUNTRY_COUNT = 28;
     private static final int SEEDED_US_PROVINCE_COUNT = 51;
     private static final int SEEDED_CN_PROVINCE_COUNT = 31;
+
+    /** {@code V034} 补的港澳台三条：同属中国，且都没有邮政编码。 */
+    private static final int SEEDED_CN_SPECIAL_REGION_COUNT = 3;
 
     /** 语句计数器，全类共用一个实例：拦截器挂在一个共享的 SqlSessionFactory 上。 */
     private static final StatementCounter STATEMENT_COUNTER = new StatementCounter();
@@ -112,7 +115,7 @@ class DictQueryIntegrationTest extends AbstractIntegrationTest {
         assertThat(itemCountOf(byType, "COMPLIANCE")).isEqualTo(SEEDED_COMPLIANCE_COUNT);
         assertThat(itemCountOf(byType, "COUNTRY")).isEqualTo(SEEDED_COUNTRY_COUNT);
         assertThat(itemCountOf(byType, "PROVINCE"))
-                .isEqualTo(SEEDED_US_PROVINCE_COUNT + SEEDED_CN_PROVINCE_COUNT);
+                .isEqualTo(SEEDED_US_PROVINCE_COUNT + SEEDED_CN_PROVINCE_COUNT + SEEDED_CN_SPECIAL_REGION_COUNT);
         for (String dictType : List.of("OWNER_TYPE", "TEMP_ZONE", "COMPLIANCE", "COUNTRY", "PROVINCE")) {
             assertThat(byType.get(dictType).path("name").asText()).isNotBlank();
             // 英文名是种子数据的一部分：缺了它，英文界面只能显示中文
@@ -138,7 +141,7 @@ class DictQueryIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("层级：PROVINCE 按 ext.parent 过滤，美国 51 条、中国 31 条")
+    @DisplayName("层级：PROVINCE 按 ext.parent 过滤，美国 51 条、中国 34 条")
     void shouldFilterProvincesByParentValue() throws Exception {
         String token = consoleToken();
 
@@ -146,7 +149,9 @@ class DictQueryIntegrationTest extends AbstractIntegrationTest {
         JsonNode cnProvinces = items(token, "/api/console/dicts/PROVINCE/items?parentValue=CN");
 
         assertThat(usProvinces.size()).as("美国 50 州 + 哥伦比亚特区").isEqualTo(SEEDED_US_PROVINCE_COUNT);
-        assertThat(cnProvinces.size()).as("中国 22 省 + 5 自治区 + 4 直辖市").isEqualTo(SEEDED_CN_PROVINCE_COUNT);
+        assertThat(cnProvinces.size())
+                .as("中国 22 省 + 5 自治区 + 4 直辖市 + V034 补的港澳台 3 条")
+                .isEqualTo(SEEDED_CN_PROVINCE_COUNT + SEEDED_CN_SPECIAL_REGION_COUNT);
         // 层级写在 ext.parent 里，不新增 parent_id 列；value 用「国家码-州/省码」，归属写进取值本身
         for (JsonNode item : usProvinces) {
             assertThat(item.path("ext").path("parent").asText()).isEqualTo("US");
@@ -158,6 +163,35 @@ class DictQueryIntegrationTest extends AbstractIntegrationTest {
         }
         assertThat(values(usProvinces)).contains("US-CA").doesNotContain("US-XX");
         assertThat(values(cnProvinces)).contains("CN-BJ", "CN-GD", "CN-XJ");
+    }
+
+    @Test
+    @DisplayName("V034：港澳台挂在 CN 下且写有 postalCodeRequired=false，内地各省不写该键")
+    void shouldSeedHongKongMacaoTaiwanWithPostalCodeExemption() throws Exception {
+        JsonNode cnProvinces = items(consoleToken(), "/api/console/dicts/PROVINCE/items?parentValue=CN");
+
+        for (String value : List.of("CN-HK", "CN-MO", "CN-TW")) {
+            JsonNode item = itemOf(cnProvinces, value);
+            assertThat(item.path("ext").path("parent").asText()).isEqualTo("CN");
+            // 港澳台没有邮政编码：不显式豁免，这些地区的货主会因为「必填邮编」而建不了档
+            assertThat(item.path("ext").path("postalCodeRequired").asBoolean())
+                    .as("%s 必须显式写成 false", value)
+                    .isFalse();
+            assertThat(item.path("label").asText()).isNotBlank();
+            assertThat(item.path("labelEn").asText()).isNotBlank();
+            assertThat(item.path("status").asText()).isEqualTo("ACTIVE");
+        }
+
+        // 内地各省不写这个键，读出来按默认必填处理；若某条误写成 false，邮编校验会在无声中失效
+        for (JsonNode item : cnProvinces) {
+            String value = item.path("value").asText();
+            if (value.startsWith("CN-HK") || value.startsWith("CN-MO") || value.startsWith("CN-TW")) {
+                continue;
+            }
+            assertThat(item.path("ext").has("postalCodeRequired"))
+                    .as("%s 不应写 postalCodeRequired，缺失即必填", value)
+                    .isFalse();
+        }
     }
 
     @Test
@@ -318,9 +352,21 @@ class DictQueryIntegrationTest extends AbstractIntegrationTest {
     }
 
     private static String statusOf(JsonNode items, String value) {
+        return itemOf(items, value).path("status").asText();
+    }
+
+    /**
+     * 按取值取字典项。
+     *
+     * @param items 字典项数组
+     * @param value 取值
+     * @return 命中的项
+     * @throws AssertionError 没有该取值的项，说明种子缺失
+     */
+    private static JsonNode itemOf(JsonNode items, String value) {
         for (JsonNode item : items) {
             if (value.equals(item.path("value").asText())) {
-                return item.path("status").asText();
+                return item;
             }
         }
         throw new AssertionError("字典项里没有取值为 " + value + " 的项");

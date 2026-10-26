@@ -14,14 +14,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 货主持久化与 {@code V033} 权限点的端到端验证。
  *
  * <p>要证的是单测证不了的几件事：XML 里的列名与条件真的能在 PostgreSQL 上跑通、
- * 插入后按标识读回的事实与写入一致、状态确实落在列默认值上、两条存在性判定的
- * {@code deleted_at} 口径与各自的唯一索引一致，以及跨模块装配（取号端口 → 取号引擎）
- * 在真实容器里确实接上了。
+ * 插入后按标识读回的事实与写入一致、初始状态确实由调用方传的值落库（不是列默认值）、
+ * 两条存在性判定的 {@code deleted_at} 口径与各自的唯一索引一致，以及跨模块装配
+ * （取号端口 → 取号引擎）在真实容器里确实接上了。
  *
  * <p>本类不验证字典规则：{@code OwnerDictionaryValidator} 的判定在 {@code wms-master} 的单测里
  * 用假字典覆盖，这里再跑一遍只是把同一批断言搬到更慢的环境里。
@@ -66,12 +67,12 @@ class OwnerPersistenceIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("写入货主后按标识读回：字段一致、状态为草稿、审计列由库填充")
+    @DisplayName("写入货主后按标识读回：字段一致、状态为传入的草稿、审计列由库填充")
     void shouldReadBackInsertedOwner() {
         String code = ownerCodeGenerator.next();
 
         long id = ownerRepository.insert(
-                newOwner("集成测试货主-读回", "TGX2", "EXT-TGX-0001"), code, OPERATOR_ID);
+                newOwner("集成测试货主-读回", "TGX2", "EXT-TGX-0001"), code, OwnerStatus.DRAFT, OPERATOR_ID);
 
         Owner loaded = ownerRepository.findById(id).orElseThrow();
         assertThat(loaded.code()).isEqualTo(code);
@@ -85,7 +86,7 @@ class OwnerPersistenceIntegrationTest extends AbstractIntegrationTest {
         assertThat(loaded.address().country()).isEqualTo("US");
         assertThat(loaded.address().province()).isEqualTo("US-CA");
         assertThat(loaded.address().postalCode()).isEqualTo("95110");
-        // 状态不写入，落在列默认值 DRAFT 上：草稿与「提交即合作中」的区别属 3.1b/3.2
+        // 状态由调用方传入，不再依赖列默认值：草稿入口显式落 DRAFT
         assertThat(loaded.status()).isEqualTo(OwnerStatus.DRAFT);
         // created_at / updated_at 由 DEFAULT now() 填充，应用侧不传
         assertThat(loaded.createdAt()).isNotNull();
@@ -94,11 +95,36 @@ class OwnerPersistenceIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("初始状态按传入值落库：传 ACTIVE 读回 ACTIVE，而不是列默认值 DRAFT")
+    void shouldPersistInitialStatusPassedByCaller() {
+        long id = ownerRepository.insert(
+                newOwner("集成测试货主-直接提交", "TGX5", "EXT-TGX-0004"),
+                ownerCodeGenerator.next(), OwnerStatus.ACTIVE, OPERATOR_ID);
+
+        assertThat(ownerRepository.findById(id).orElseThrow().status())
+                .as("「直接提交」入口落 ACTIVE；写入若被略过，这里会读到列默认值 DRAFT")
+                .isEqualTo(OwnerStatus.ACTIVE);
+    }
+
+    @Test
+    @DisplayName("初始状态为空：直接拒绝，不静默落到列默认值 DRAFT")
+    void shouldRejectNullInitialStatus() {
+        // 号已经取到但不会落库，这是预期：守卫在建档之前失败，取号本身是独立提交的副作用
+        String code = ownerCodeGenerator.next();
+
+        assertThatThrownBy(() -> ownerRepository.insert(
+                newOwner("集成测试货主-空状态", "TGX6", "EXT-TGX-0005"), code, null, OPERATOR_ID))
+                .as("空状态若被放过，MyBatis-Plus 会整列略过，落成列默认值 DRAFT 而不报错")
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     @DisplayName("列表与计数：按关键字、状态、客户类型筛选，口径与写入一致")
     void shouldFilterPageAndCount() {
         String name = "集成测试货主-筛选";
         String code = ownerCodeGenerator.next();
-        ownerRepository.insert(newOwner(name, "TGX3", "EXT-TGX-0002"), code, OPERATOR_ID);
+        ownerRepository.insert(
+                newOwner(name, "TGX3", "EXT-TGX-0002"), code, OwnerStatus.DRAFT, OPERATOR_ID);
 
         long count = ownerRepository.count(OwnerStatus.DRAFT, "BRAND", name);
         List<Owner> page = ownerRepository.findPage(OwnerStatus.DRAFT, "BRAND", name, 10, 0);
@@ -115,7 +141,8 @@ class OwnerPersistenceIntegrationTest extends AbstractIntegrationTest {
     @DisplayName("存在性判定：前缀按全表口径、外部码按未删除口径、空外部码不算冲突")
     void shouldReflectUniqueIndexScopes() {
         long id = ownerRepository.insert(
-                newOwner("集成测试货主-判重", "TGX4", "EXT-TGX-0003"), ownerCodeGenerator.next(), OPERATOR_ID);
+                newOwner("集成测试货主-判重", "TGX4", "EXT-TGX-0003"),
+                ownerCodeGenerator.next(), OwnerStatus.DRAFT, OPERATOR_ID);
 
         assertThat(ownerRepository.existsBySkuPrefix("TGX4"))
                 .as("前缀是全表唯一索引，已写入即被占用")

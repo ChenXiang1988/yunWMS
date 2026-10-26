@@ -32,19 +32,24 @@ public interface OwnerRepository {
      * 取号是一次独立提交的副作用（{@link OwnerCodeGenerator} 的契约），把两件事写在一行调用里，
      * 「号已经用掉了但货主没建成」这件事在代码里就看不见了。
      *
-     * <p>状态不写入：{@code owner.status} 有列默认值 {@code 'DRAFT'}，草稿与「提交即合作中」
-     * 两种建档流程的区别属 3.1b/3.2。在这里写死一个状态，会让 Java 里的值成为真正的默认值，
-     * 而列默认值变成永远不会生效的第二处定义。
+     * <p><b>初始状态由调用方给出，不在本方法里写死：</b>建档有「保存草稿」与「直接提交」两条入口
+     * （3.1b），前者落 {@link OwnerStatus#DRAFT}、后者落 {@link OwnerStatus#ACTIVE}；
+     * 落哪个状态是用例的判断，写进端口就成了「所有入口都从同一个状态开始」。
+     * 若靠列默认值 {@code 'DRAFT'} 兜底，另一条入口必须补一次更新，而那次更新在审计里
+     * 看起来像一次真实的状态流转。
      *
-     * @param owner      待落库的货主，属性已由 {@link NewOwner} 校验
-     * @param code       系统编码，由 {@link OwnerCodeGenerator} 取得
-     * @param operatorId 操作人标识，写入 {@code created_by} 与 {@code updated_by}
+     * @param owner         待落库的货主，属性已由 {@link NewOwner} 校验
+     * @param code          系统编码，由 {@link OwnerCodeGenerator} 取得
+     * @param initialStatus 初始状态，由建档用例决定；仅 {@code DRAFT} 与 {@code ACTIVE} 是当前入口会传的值，
+     *                      本方法不额外限制取值，状态机（3.2）负责流转约束
+     * @param operatorId    操作人标识，写入 {@code created_by} 与 {@code updated_by}
      * @return 数据库生成的货主标识
-     * @throws IllegalStateException 插入未返回主键，说明写入与主键回填不一致
-     * @throws RuntimeException      违反库约束（编码或前缀唯一、外键、CHECK）时由实现原样上抛，
-     *                               由调用方翻译成业务错误码
+     * @throws IllegalArgumentException 初始状态为 {@code null}
+     * @throws IllegalStateException    插入未返回主键，说明写入与主键回填不一致
+     * @throws RuntimeException         违反库约束（编码或前缀唯一、外键、CHECK）时由实现原样上抛，
+     *                                  由调用方翻译成业务错误码
      */
-    long insert(NewOwner owner, String code, long operatorId);
+    long insert(NewOwner owner, String code, OwnerStatus initialStatus, long operatorId);
 
     /**
      * 按标识读取货主。

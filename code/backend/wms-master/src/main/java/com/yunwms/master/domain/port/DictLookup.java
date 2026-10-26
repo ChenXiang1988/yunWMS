@@ -1,20 +1,22 @@
 package com.yunwms.master.domain.port;
 
 /**
- * 字典查询的窄端口：只回答货主建档需要问的两个问题。
+ * 字典查询的窄端口：只回答货主建档需要问的三个问题。
  *
  * <p><b>为什么不直接依赖字典模块的查询端口：</b>字典能力当前落在 {@code wms-auth}，而架构约束是
  * {@code auth} 与 {@code master} 互不引用（见 {@code docs/coding-project.md} 第二节与
  * {@code ModuleBoundaryTest}）。由 {@code wms-app} 装配适配器，是「两个模块都在场的那份 classpath」
  * 才能做的事，因此这里不出现另一个模块的类型。
  *
- * <p><b>为什么只有两个方法，而不是把字典的完整查询能力复制一遍：</b>端口按使用方的需要声明，
- * 不按提供方的能力声明。本模块目前只问两件事——某个值在某个字典里是否存在且启用、某个州省
- * 是否属于某个国家——多复制一个方法，就多一处「本模块也能查字典」的错觉，
+ * <p><b>为什么只有三个方法，而不是把字典的完整查询能力复制一遍：</b>端口按使用方的需要声明，
+ * 不按提供方的能力声明。本模块目前只问三件事——某个值在某个字典里是否存在且启用、某个州省
+ * 是否属于某个国家、某个地区是否要求填写邮政编码——多复制一个方法，就多一处「本模块也能查字典」的错觉，
  * 也会让适配器有多个实现分支要维护。将来商品模块需要按字典批量读取时，由它自己声明自己的窄端口。
  *
- * <p>方法的参数都要求非 {@code null}：调用方（{@code OwnerDictionaryValidator}）判过非空才调用，
- * 收到 {@code null} 说明是编程错误，不是业务输入问题。
+ * <p>{@link #isActiveItem} 与 {@link #isProvinceOfCountry} 的参数都要求非 {@code null}：调用方
+ * （{@code OwnerDictionaryValidator}）判过非空才调用，收到 {@code null} 说明是编程错误，不是业务输入问题。
+ * {@link #isPostalCodeRequired} 是例外，它把 {@code null} 当作一个有业务含义的输入（未填州省），
+ * 理由见该方法自己的说明。
  */
 public interface DictLookup {
 
@@ -42,4 +44,19 @@ public interface DictLookup {
      * @throws IllegalArgumentException 任一参数为 {@code null} 或空白
      */
     boolean isProvinceOfCountry(String provinceValue, String countryValue);
+
+    /**
+     * 该地区是否要求填写邮政编码。
+     *
+     * <p>港澳台等地区没有邮政编码，强制填写会让这些货主无法建档。判断依据是字典项
+     * 的 {@code ext.postalCodeRequired}，<b>缺失该键时为 true</b>——默认必填，只有明确
+     * 无邮编的地区才豁免。
+     *
+     * <p>地区为空时返回 true：省州都不是必填项（美国除外），但邮编在规格里是必填。
+     *
+     * @param provinceValue 州省取值，即 {@code PROVINCE} 字典项的 value；{@code null} 或空白表示未填州省
+     * @return 该地区要求填写邮政编码时返回 {@code true}；未填州省、字典里没有该项、或该项未写
+     *         {@code postalCodeRequired} 时同样返回 {@code true}
+     */
+    boolean isPostalCodeRequired(String provinceValue);
 }

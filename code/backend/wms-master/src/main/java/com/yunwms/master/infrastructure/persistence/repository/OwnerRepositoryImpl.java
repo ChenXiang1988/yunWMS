@@ -19,7 +19,8 @@ import java.util.Optional;
  * <p><b>写入：</b>单行插入用 {@code BaseMapper#insert}，不需要 XML。{@code created_at} 与
  * {@code updated_at} 不在应用侧取值——两列在库内都有 {@code DEFAULT now()}，交给数据库可以保证
  * 同一行的创建与修改时间同源；应用侧再取一次时钟只会引入两个可能相差几毫秒的来源。
- * {@code status} 同样不写，理由见端口上的说明（草稿与提交两种建档流程的区别属 3.1b/3.2）。
+ * {@code status} 则必须由应用侧写入：它是建档入口的决定（草稿 / 直接提交），交给列默认值
+ * 会让第二条入口落到错误的状态上，理由见端口上的说明。
  *
  * <p><b>重建：</b>{@link #toDomain} 把行搬成聚合，聚合的构造器会拒绝残缺数据
  * （状态、前缀、地址缺失，或名称、结算主体为空）。因此读投影漏列不会变成「读出来一个字段全空
@@ -44,10 +45,17 @@ public class OwnerRepositoryImpl implements OwnerRepository {
      *
      * <p>主键回填依赖 JDBC 的 generated keys；拿不到主键时当场失败，不返回 0 或 -1 充当标识：
      * 那会让调用方拿着一个不存在的 id 继续往下走，错误要到更远的链路才暴露。
+     *
+     * <p>初始状态为 {@code null} 时先失败：MyBatis-Plus 默认只拼非空字段，空值会被整列略过，
+     * 于是插入悄悄落到列默认值 {@code 'DRAFT'}——「保存草稿」看起来正常，「直接提交」则会
+     * 以草稿落库而没有任何报错。这类静默回落比一次明确的失败昂贵得多。
      */
     @Override
-    public long insert(NewOwner owner, String code, long operatorId) {
-        OwnerEntity entity = toEntity(owner, code, operatorId);
+    public long insert(NewOwner owner, String code, OwnerStatus initialStatus, long operatorId) {
+        if (initialStatus == null) {
+            throw new IllegalArgumentException("货主初始状态不能为空，编码为：" + code);
+        }
+        OwnerEntity entity = toEntity(owner, code, initialStatus, operatorId);
         ownerMapper.insert(entity);
         Long id = entity.getId();
         if (id == null) {
@@ -101,12 +109,13 @@ public class OwnerRepositoryImpl implements OwnerRepository {
     /**
      * 把创建入参搬成表映射对象。
      *
-     * @param owner      待落库的货主
-     * @param code       系统编码，由取号端口取得
-     * @param operatorId 操作人标识
+     * @param owner         待落库的货主
+     * @param code          系统编码，由取号端口取得
+     * @param initialStatus 初始状态，由建档用例决定
+     * @param operatorId    操作人标识
      * @return 待插入的行
      */
-    private static OwnerEntity toEntity(NewOwner owner, String code, long operatorId) {
+    private static OwnerEntity toEntity(NewOwner owner, String code, OwnerStatus initialStatus, long operatorId) {
         OwnerAddress address = owner.address();
         OwnerEntity entity = new OwnerEntity();
         entity.setCode(code);
@@ -118,6 +127,8 @@ public class OwnerRepositoryImpl implements OwnerRepository {
         entity.setSkuPrefix(owner.skuPrefix().value());
         entity.setOwnerType(owner.ownerType());
         entity.setSettlementEntity(owner.settlementEntity());
+        // 枚举按 name() 落库，与 ck_owner_status 的取值集合一致；不取 ordinal()，那会把枚举顺序变成数据格式
+        entity.setStatus(initialStatus.name());
         entity.setCountry(address.country());
         entity.setProvince(address.province());
         entity.setCity(address.city());

@@ -1,10 +1,11 @@
 package com.yunwms.master.domain.service;
 
 import com.yunwms.master.domain.model.NewOwner;
+import com.yunwms.master.domain.model.OwnerAddress;
 import com.yunwms.master.domain.port.DictLookup;
 
 /**
- * 货主建档里「要查字典才能判定」的三条规则：客户类型、国家、州省归属。
+ * 货主建档里「要查字典才能判定」的四条规则：客户类型、国家、州省归属、邮编必填性。
  *
  * <p><b>为什么是领域服务而不是聚合上的方法：</b>{@code Owner} 与 {@code NewOwner} 只能回答自己
  * 手里的数据能回答的问题（非空、格式、跨字段搭配）。「这个客户类型是不是字典里的启用项」
@@ -14,6 +15,7 @@ import com.yunwms.master.domain.port.DictLookup;
  * <p><b>为什么不判「国家是否等于州省的上级」以外的地址格式：</b>格式（两位大写、美国必填州省）
  * 已经由 {@link com.yunwms.master.domain.model.OwnerAddress} 的构造器判过，本类不重复。
  * 两个类的分工是「聚合能自己回答的归聚合，要查字典的归这里」，因此同一件事不会有两处实现。
+ * 邮编同理：{@link OwnerAddress} 只管字段自身的格式与必填性，而「这个地区要不要填」是字典里的事实。
  *
  * <p>不依赖 Spring：本类由用例（3.1b）在构造时注入 {@link DictLookup}，不作为容器组件扫描。
  */
@@ -37,14 +39,15 @@ public class OwnerDictionaryValidator {
     /**
      * 校验货主的字典取值。
      *
-     * <p>三项都判完才返回，遇错即抛：一行里只报第一个错误，是为了让用户按提示逐项改完；
+     * <p>四项依次判完，遇错即抛：一行里只报第一个错误，是为了让用户按提示逐项改完；
      * 一次性列出所有字段错误需要接口层的校验框架参与，那是 3.1b 的事，本类不预造那个结构。
      *
      * <p>空州省视为「未填」（非美国可选），不判归属：拿空串去问「属于哪个国家」只能得到否，
      * 而它在业务上并不是一个错误的取值。
      *
      * @param owner 待建档的货主，属性已通过聚合校验
-     * @throws IllegalArgumentException 客户类型或国家不在字典的启用项中，或州省不属于所选国家
+     * @throws IllegalArgumentException 客户类型或国家不在字典的启用项中、州省不属于所选国家，
+     *                                  或该地区要求邮编而注册地址未填
      */
     public void validate(NewOwner owner) {
         if (!dictLookup.isActiveItem(OWNER_TYPE_DICT, owner.ownerType())) {
@@ -57,6 +60,29 @@ public class OwnerDictionaryValidator {
         String province = owner.address().province();
         if (province != null && !province.isBlank() && !dictLookup.isProvinceOfCountry(province, country)) {
             throw new IllegalArgumentException("州省不属于所选国家：" + province + " 不属于 " + country);
+        }
+        requirePostalCode(owner.address());
+    }
+
+    /**
+     * 按地区判定邮政编码的必填性。
+     *
+     * <p>只在缺邮编时才问字典：邮编有值时答案不影响结论，多查一次只会让「有邮编为什么还查字典」
+     * 成为一个说不清的问题；省下的这一次查询在单次建档里并不关键，关键是判定条件保持单一。
+     *
+     * <p>未填州省同样要问：{@link DictLookup#isPostalCodeRequired} 对空值回必填，因为省州本身
+     * （美国除外）可以留空，而规格里邮编是必填——把「没填省州」当成豁免，等于给所有非美国地址开了后门。
+     *
+     * @param address 注册地址
+     * @throws IllegalArgumentException 该地区要求填写邮编而地址里没有
+     */
+    private void requirePostalCode(OwnerAddress address) {
+        String postalCode = address.postalCode();
+        if (postalCode != null && !postalCode.isBlank()) {
+            return;
+        }
+        if (dictLookup.isPostalCodeRequired(address.province())) {
+            throw new IllegalArgumentException("该地区要求填写邮政编码");
         }
     }
 }
