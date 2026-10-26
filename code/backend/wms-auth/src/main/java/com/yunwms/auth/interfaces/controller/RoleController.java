@@ -17,6 +17,9 @@ import com.yunwms.auth.interfaces.controller.response.RoleDetailResponse;
 import com.yunwms.auth.interfaces.controller.response.RoleListItemResponse;
 import com.yunwms.web.api.ApiResult;
 import com.yunwms.web.api.PageResult;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,6 +47,9 @@ import org.springframework.web.bind.annotation.RestController;
  * 四个权限点由 {@code V026} 与 {@code V029} 定义，注解由 {@code SaTokenAnnotationConfig}
  * 注册的拦截器消费。
  */
+@Tag(name = "角色管理", description = "仓网端的角色管理：建、读、改、启停、删在这里闭环。角色是授权数据的来源，"
+        + "能改角色就等于能给自己加权限，因此全部接口都要求权限点而不是只要求登录。"
+        + "货主端没有角色管理能力，权限由管理员在这里配置。")
 @RestController
 @RequestMapping("/api/console/roles")
 public class RoleController {
@@ -73,6 +79,12 @@ public class RoleController {
      * @return 新角色的标识与编码；编码格式不合规、编码已被占用、勾选的菜单或权限点不存在
      *         通过业务错误码返回
      */
+    @Operation(summary = "创建角色",
+            description = "新建一个自定义角色并同时写入它勾选的菜单与权限点。三个属性不在请求体里、也不能由调用方指定："
+                    + "新角色一律启用、builtin 恒为 false、数据范围固定 CUSTOM——接口不能创建内置角色，"
+                    + "否则等于绕开权限体系造一个超级管理员。角色编码是程序引用角色的标识，格式不合规或已被占用"
+                    + "（含已删除的角色，因为唯一索引不带删除条件）返回 40000/40902；勾选的菜单或权限点不存在"
+                    + "同样返回 40000。响应只回带标识与编码。")
     @SaCheckPermission("system:role:create")
     @PostMapping
     public ApiResult<CreatedRoleResponse> create(@Valid @RequestBody CreateRoleRequest request) {
@@ -95,12 +107,22 @@ public class RoleController {
      * @param status   角色状态；省略表示全部状态
      * @return 一页角色及总数；页码或每页条数越界时返回 40000
      */
+    @Operation(summary = "分页查询角色",
+            description = "按状态筛选角色，支持按编码或名称模糊匹配，返回每行的占用人数与权限点数量，"
+                    + "供管理端角色列表页使用。两个计数由同一条 SQL 聚合得出，前端可以直接用 userCount 判断"
+                    + "「该角色还能不能删」而不再发一次请求。筛选条件均可省略，全部省略即返回全量分页；"
+                    + "页码从 1 开始，每页条数上限 200，越界返回 40000。")
     @SaCheckPermission("system:role:list")
     @GetMapping
-    public ApiResult<PageResult<RoleListItemResponse>> page(@RequestParam(required = false) Integer pageNo,
-                                                            @RequestParam(required = false) Integer pageSize,
-                                                            @RequestParam(required = false) String keyword,
-                                                            @RequestParam(required = false) RoleStatus status) {
+    public ApiResult<PageResult<RoleListItemResponse>> page(
+            @Parameter(description = "页码，从 1 开始；省略时取 1")
+            @RequestParam(required = false) Integer pageNo,
+            @Parameter(description = "每页条数，上限 200；省略时取 20，超出上限返回 40000")
+            @RequestParam(required = false) Integer pageSize,
+            @Parameter(description = "按角色编码或名称模糊匹配的关键词；省略或全空白表示不筛选")
+            @RequestParam(required = false) String keyword,
+            @Parameter(description = "角色状态：ACTIVE 启用，DISABLED 停用；省略表示全部状态")
+            @RequestParam(required = false) RoleStatus status) {
         return ApiResult.ok(roleResponseAssembler.toPageResponse(
                 roleQueryService.page(pageNo, pageSize, keyword, status)));
     }
@@ -111,9 +133,15 @@ public class RoleController {
      * @param id 角色标识
      * @return 角色摘要与其已勾选的菜单及权限点标识；角色不存在时返回 40400
      */
+    @Operation(summary = "查询角色详情",
+            description = "取单个角色的完整信息：列表行已有的字段之外，再带出该角色已勾选的菜单与权限点标识，"
+                    + "供授权配置页回显勾选状态。menuIds 同时含菜单（C）与操作（F）两级——只回操作级会让菜单节点"
+                    + "无法回显。角色不存在或已被逻辑删除返回 40400。")
     @SaCheckPermission("system:role:list")
     @GetMapping("/{id}")
-    public ApiResult<RoleDetailResponse> detail(@PathVariable long id) {
+    public ApiResult<RoleDetailResponse> detail(
+            @Parameter(description = "角色标识，取自列表响应里的 id")
+            @PathVariable long id) {
         return ApiResult.ok(roleResponseAssembler.toDetailResponse(roleQueryService.detail(id)));
     }
 
@@ -132,9 +160,18 @@ public class RoleController {
      * @return 成功无数据；角色不存在（40400）、名称为空或菜单不存在（40000）、
      *         内置角色（40900）通过业务错误码返回
      */
+    @Operation(summary = "编辑角色",
+            description = "全量替换角色名称、备注与授权：menuIds 提交的就是这个角色之后拥有的全部权限点，"
+                    + "空数组表示清空全部授权，名称与授权在同一个事务里落库，不存在只改了一半的中间态。"
+                    + "编码不在可编辑范围内——配置与代码按编码引用角色，改了等于换一个角色，"
+                    + "因此多传 code 会被拒绝而不是静默忽略。内置角色不可编辑（40900）；"
+                    + "角色不存在返回 40400，名称为空或菜单不存在返回 40000。成功后不回带详情。")
     @SaCheckPermission("system:role:update")
     @PutMapping("/{id}")
-    public ApiResult<Void> update(@PathVariable long id, @Valid @RequestBody UpdateRoleRequest request) {
+    public ApiResult<Void> update(
+            @Parameter(description = "角色标识，取自列表响应里的 id")
+            @PathVariable long id,
+            @Valid @RequestBody UpdateRoleRequest request) {
         roleModificationService.update(new UpdateRoleCommand(
                 id, request.name(), request.remark(), request.menuIds()));
         return ApiResult.ok();
@@ -152,10 +189,17 @@ public class RoleController {
      * @param request 目标状态
      * @return 成功无数据；角色不存在（40400）、内置角色（40900）通过业务错误码返回
      */
+    @Operation(summary = "启用或停用角色",
+            description = "切换角色状态。停用立即生效：鉴权侧每次请求都按角色状态过滤，持有该角色的用户下一次请求"
+                    + "就不再拥有它带来的权限点，不必等会话过期；启用同样立即恢复。目标状态与当前状态相同时"
+                    + "返回成功，不报错。内置角色不可停用（40900）——停完之后没有任何账号能配置权限，"
+                    + "而界面上没有恢复入口。角色不存在返回 40400。")
     @SaCheckPermission("system:role:update")
     @PutMapping("/{id}/status")
-    public ApiResult<Void> changeStatus(@PathVariable long id,
-                                        @Valid @RequestBody ChangeRoleStatusRequest request) {
+    public ApiResult<Void> changeStatus(
+            @Parameter(description = "角色标识，取自列表响应里的 id")
+            @PathVariable long id,
+            @Valid @RequestBody ChangeRoleStatusRequest request) {
         roleModificationService.changeStatus(new ChangeRoleStatusCommand(id, request.status()));
         return ApiResult.ok();
     }
@@ -177,9 +221,18 @@ public class RoleController {
      * @param id 角色标识
      * @return 成功无数据；角色不存在（40400）、内置角色或仍被用户占用（40900）通过业务错误码返回
      */
+    @Operation(summary = "删除角色",
+            description = "删除一个自定义角色，采用软删除（库里留 deleted_at），与账号的删除模式一致，"
+                    + "将来审计日志里的角色编码才对得上真实对象；删除后列表与详情立即查不到它。"
+                    + "仍被用户占用的角色一律拒绝并在提示里带出占用人数（40900）：关联表是级联删除，"
+                    + "少了这道校验，删除会静默带走关联记录，那些用户会静默失去该角色带来的权限。"
+                    + "内置角色不可删除（40900），角色不存在返回 40400。副作用需提前知道：角色编码的唯一索引"
+                    + "不带删除条件，删除后该编码仍被占用，重建同名角色会被拒绝。成功后不回带被删对象。")
     @SaCheckPermission("system:role:delete")
     @DeleteMapping("/{id}")
-    public ApiResult<Void> delete(@PathVariable long id) {
+    public ApiResult<Void> delete(
+            @Parameter(description = "角色标识，取自列表响应里的 id")
+            @PathVariable long id) {
         roleModificationService.delete(id);
         // 不回带被删对象：它已经查不到了，回显一份只存在于响应里的数据没有意义
         return ApiResult.ok();
