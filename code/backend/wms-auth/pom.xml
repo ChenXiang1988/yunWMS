@@ -43,6 +43,15 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
+        <!--
+            OpenAPI 注解（@Tag / @Operation / @Parameter / @Schema）。没有它，接口与 DTO 的描述只能是
+            代码注释，生成的 /v3/api-docs 里字段说明全是空。版本由父 pom 的 dependencyManagement 管理，
+            此处不写版本号，也不跟随 springdoc 的传递依赖——传递依赖随时可能因 wms-app 的引入方式变化而消失。
+        -->
+        <dependency>
+            <groupId>io.swagger.core.v3</groupId>
+            <artifactId>swagger-annotations-jakarta</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

@@ -1,5 +1,7 @@
 package com.yunwms.web.api;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.util.List;
 
 /**
@@ -19,5 +21,16 @@ import java.util.List;
  * @param records  本页数据；没有数据时为空数组，调用方 MUST NOT 传 {@code null}
  * @param <T>      单行响应体的类型
  */
-public record PageResult<T>(int pageNo, int pageSize, long total, List<T> records) {
+public record PageResult<T>(
+        @Schema(description = "页码，从 1 开始", example = "1")
+        int pageNo,
+
+        @Schema(description = "每页条数，取值 1 至 200，超出范围时接口返回 40000", example = "20")
+        int pageSize,
+
+        @Schema(description = "满足筛选条件的总条数，不是本页条数", example = "137")
+        long total,
+
+        @Schema(description = "本页数据；无数据时为空数组，不会是 null")
+        List<T> records) {
 }
