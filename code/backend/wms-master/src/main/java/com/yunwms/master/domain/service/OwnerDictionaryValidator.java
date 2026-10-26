@@ -50,18 +50,36 @@ public class OwnerDictionaryValidator {
      *                                  或该地区要求邮编而注册地址未填
      */
     public void validate(NewOwner owner) {
-        if (!dictLookup.isActiveItem(OWNER_TYPE_DICT, owner.ownerType())) {
-            throw new IllegalArgumentException("客户类型不在字典 OWNER_TYPE 的启用项中：" + owner.ownerType());
+        validate(owner.ownerType(), owner.address());
+    }
+
+    /**
+     * 按客户类型与注册地址校验同样的四条字典规则。
+     *
+     * <p>建档（{@link NewOwner}）与编辑（{@link com.yunwms.master.domain.model.OwnerProfile}）是两条入口，
+     * 但判的是同一批规则：客户类型要启用、国家要启用、州省要属于该国、该地区要有邮编。
+     * 两条入口各写一份判定，改一处忘一处时会表现成「建档拦得住、编辑拦不住」——
+     * 而编辑恰好是能把一个合法货主改成脏数据的那个入口。因此两条入口收在这里，
+     * 由用例把事实（客户类型与地址）取出来交给本方法。
+     *
+     * @param ownerType 客户类型，取 {@code OWNER_TYPE} 字典的 value
+     * @param address   注册地址，已通过 {@link OwnerAddress} 的格式校验
+     * @throws IllegalArgumentException 客户类型或国家不在字典的启用项中、州省不属于所选国家，
+     *                                  或该地区要求邮编而注册地址未填
+     */
+    public void validate(String ownerType, OwnerAddress address) {
+        if (!dictLookup.isActiveItem(OWNER_TYPE_DICT, ownerType)) {
+            throw new IllegalArgumentException("客户类型不在字典 OWNER_TYPE 的启用项中：" + ownerType);
         }
-        String country = owner.address().country();
+        String country = address.country();
         if (!dictLookup.isActiveItem(COUNTRY_DICT, country)) {
             throw new IllegalArgumentException("注册国家不在国家字典的启用项中：" + country);
         }
-        String province = owner.address().province();
+        String province = address.province();
         if (province != null && !province.isBlank() && !dictLookup.isProvinceOfCountry(province, country)) {
             throw new IllegalArgumentException("州省不属于所选国家：" + province + " 不属于 " + country);
         }
-        requirePostalCode(owner.address());
+        requirePostalCode(address);
     }
 
     /**

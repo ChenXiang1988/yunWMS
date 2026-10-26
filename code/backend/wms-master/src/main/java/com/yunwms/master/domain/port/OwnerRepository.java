@@ -2,6 +2,7 @@ package com.yunwms.master.domain.port;
 
 import com.yunwms.master.domain.model.NewOwner;
 import com.yunwms.master.domain.model.Owner;
+import com.yunwms.master.domain.model.OwnerProfile;
 import com.yunwms.master.domain.model.OwnerStatus;
 
 import java.util.List;
@@ -50,6 +51,25 @@ public interface OwnerRepository {
      *                                  由调用方翻译成业务错误码
      */
     long insert(NewOwner owner, String code, OwnerStatus initialStatus, long operatorId);
+
+    /**
+     * 覆盖货主档案里可编辑的部分，写入 {@code updated_by} 与 {@code updated_at}。
+     *
+     * <p><b>为什么只收 {@link OwnerProfile} 而不是整个 {@code Owner}：</b>可编辑范围由类型决定。
+     * 编码、SKU 前缀与状态不在 {@link OwnerProfile} 里，调用方因此没有机会把这三个值传到写语句上——
+     * 靠「记得别写那三列」的注释约束不住下一次顺手加字段。
+     *
+     * <p><b>没有「货主不存在」的返回值：</b>调用方先用 {@link #findById} 判过，命中零行只可能是
+     * 这一行在两次调用之间被软删除。那不是一个需要纠正的失败，也不该被当成并发冲突；
+     * 影响行数因此不作为成功与否的判据（见 {@code docs/coding.md}「持久化与副作用」）。
+     *
+     * @param id         货主标识，调用方保证该货主存在
+     * @param profile    覆盖后的档案属性，已由 {@link OwnerProfile} 校验
+     * @param operatorId 操作人标识，写入 {@code updated_by}
+     * @throws RuntimeException 违反库约束（外部码唯一、CHECK、外键）时由实现原样上抛，
+     *                          由调用方翻译成业务错误码
+     */
+    void update(long id, OwnerProfile profile, long operatorId);
 
     /**
      * 按标识读取货主。

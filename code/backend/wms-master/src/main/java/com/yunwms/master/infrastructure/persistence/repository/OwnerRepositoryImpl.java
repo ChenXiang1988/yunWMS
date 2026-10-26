@@ -3,6 +3,7 @@ package com.yunwms.master.infrastructure.persistence.repository;
 import com.yunwms.master.domain.model.NewOwner;
 import com.yunwms.master.domain.model.Owner;
 import com.yunwms.master.domain.model.OwnerAddress;
+import com.yunwms.master.domain.model.OwnerProfile;
 import com.yunwms.master.domain.model.OwnerStatus;
 import com.yunwms.master.domain.model.SkuPrefix;
 import com.yunwms.master.domain.port.OwnerRepository;
@@ -21,6 +22,10 @@ import java.util.Optional;
  * 同一行的创建与修改时间同源；应用侧再取一次时钟只会引入两个可能相差几毫秒的来源。
  * {@code status} 则必须由应用侧写入：它是建档入口的决定（草稿 / 直接提交），交给列默认值
  * 会让第二条入口落到错误的状态上，理由见端口上的说明。
+ *
+ * <p><b>更新：</b>走 XML 的 {@code updateProfile} 而不是 {@code updateById}——后者会略过空字段，
+ * 使「清空外部码」变成一次静默的空操作。SET 列表里没有编码、SKU 前缀与状态，
+ * 编辑因此改不到它们。
  *
  * <p><b>重建：</b>{@link #toDomain} 把行搬成聚合，聚合的构造器会拒绝残缺数据
  * （状态、前缀、地址缺失，或名称、结算主体为空）。因此读投影漏列不会变成「读出来一个字段全空
@@ -62,6 +67,18 @@ public class OwnerRepositoryImpl implements OwnerRepository {
             throw new IllegalStateException("货主建档后未取回主键，编码为：" + code);
         }
         return id;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>影响行数不参与判定：调用方已经读过这一行，命中零行只可能是它在两次调用之间被软删除。
+     * 那不是需要纠正的失败，也不是并发冲突——{@code docs/coding.md} 明确规定不得依据影响行数
+     * 判断成功或冲突，这里的写法就是那条规则的落点。
+     */
+    @Override
+    public void update(long id, OwnerProfile profile, long operatorId) {
+        ownerMapper.updateProfile(toEntity(id, profile, operatorId));
     }
 
     /**
@@ -137,6 +154,38 @@ public class OwnerRepositoryImpl implements OwnerRepository {
         entity.setAddressLine(address.addressLine());
         entity.setRemark(owner.remark());
         entity.setCreatedBy(operatorId);
+        entity.setUpdatedBy(operatorId);
+        return entity;
+    }
+
+    /**
+     * 把编辑入参搬成待更新的行。
+     *
+     * <p>只填标识、可编辑列与操作人：{@code code}、{@code sku_prefix}、{@code status} 留空，
+     * 而 {@code updateProfile} 的 SET 列表里也没有它们——两层都不写，才能保证编辑改不到这三列。
+     *
+     * @param id         货主标识
+     * @param profile    覆盖后的档案属性
+     * @param operatorId 操作人标识
+     * @return 待更新的行
+     */
+    private static OwnerEntity toEntity(long id, OwnerProfile profile, long operatorId) {
+        OwnerAddress address = profile.address();
+        OwnerEntity entity = new OwnerEntity();
+        entity.setId(id);
+        entity.setName(profile.name());
+        entity.setShortName(profile.shortName());
+        entity.setNameEn(profile.nameEn());
+        entity.setExternalCode(profile.externalCode());
+        entity.setOwnerType(profile.ownerType());
+        entity.setSettlementEntity(profile.settlementEntity());
+        entity.setCountry(address.country());
+        entity.setProvince(address.province());
+        entity.setCity(address.city());
+        entity.setDistrict(address.district());
+        entity.setPostalCode(address.postalCode());
+        entity.setAddressLine(address.addressLine());
+        entity.setRemark(profile.remark());
         entity.setUpdatedBy(operatorId);
         return entity;
     }

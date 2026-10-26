@@ -86,6 +86,43 @@
     </select>
 
     <!--
+        编辑货主的档案列。
+
+        为什么不用 updateById：它按「非空字段才进 SET」的策略生成语句，于是「把外部码清空」
+        「把区县清空」这类 null 值会被整列略过，旧值留在库里而接口回了成功。这里把可编辑列
+        全部写死，null 就是写 NULL——全量替换的语义只有写死才能保证。
+
+        SET 里没有 code / sku_prefix / status：三列在本批不可修改。写死在这里，比依赖调用方
+        「记得不要传」可靠；即使上层把这三列放进了模型，这里也不会更新它们。
+
+        updated_at 用库内 now()，与 insert 走列默认值同源，应用侧不取第二次时钟；
+        updated_by 由调用方给出，为空说明调用方没取到操作人，属于不该发生的情况。
+
+        手写 SQL 必须自己带 deleted_at IS NULL：MyBatis-Plus 的逻辑删除只作用于它生成的语句。
+        已软删除的货主因此不会被改活。
+    -->
+    <update id="updateProfile">
+        UPDATE owner
+        SET name = #{name},
+            short_name = #{shortName},
+            name_en = #{nameEn},
+            external_code = #{externalCode},
+            owner_type = #{ownerType},
+            settlement_entity = #{settlementEntity},
+            country = #{country},
+            province = #{province},
+            city = #{city},
+            district = #{district},
+            postal_code = #{postalCode},
+            address_line = #{addressLine},
+            remark = #{remark},
+            updated_at = now(),
+            updated_by = #{updatedBy}
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+    </update>
+
+    <!--
         SKU 前缀判重：口径是全表，**刻意不带 deleted_at 条件**。
 
         这不是漏写：ux_owner_sku_prefix 是全表唯一索引（V001 里不带 WHERE 子句），
