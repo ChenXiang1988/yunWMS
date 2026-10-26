@@ -67,4 +67,15 @@ public interface SysUserMapper extends BaseMapper<SysUserEntity> {
                                          @Param("windowStart") Instant windowStart,
                                          @Param("failedAt") Instant failedAt,
                                          @Param("lockUntil") Instant lockUntil);
+
+    /**
+     * 判断该账号是否为系统里唯一的可用超级管理员。
+     *
+     * <p>走 XML 而不是 Wrapper：要连 {@code sys_user_role} 与 {@code sys_role} 两张表，
+     * 并且要同时回答「这个账号是不是可用超管」与「除它以外还有没有」，两段子查询用 Wrapper 拼不出来。
+     *
+     * @param userId 用户标识
+     * @return 该账号是可用超管且系统中没有另一个可用超管时返回 {@code true}
+     */
+    boolean isOnlyAvailableSuperAdmin(@Param("userId") long userId);
 }

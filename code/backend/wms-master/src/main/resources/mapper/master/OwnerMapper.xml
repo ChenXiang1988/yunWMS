@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+    放在 mapper/master/ 而不是 mapper/ 根下：MyBatis-Plus 的默认扫描位置是 classpath*:/mapper/**/*.xml，
+    按模块分目录可以在多个模块都加 XML 之后仍然一眼看出归属。
+-->
+<mapper namespace="com.yunwms.master.infrastructure.persistence.mapper.OwnerMapper">
+
+    <!--
+        管理端列表的筛选条件。
+
+        手写 SQL 必须自己带 deleted_at 条件：MyBatis-Plus 的逻辑删除只作用于它生成的语句。
+        漏掉这一条，已删除的货主会重新出现在列表与计数里。
+
+        关键字用 ILIKE 模糊匹配编码、名称与外部码：外部码允许为空，NULL ILIKE ... 结果为 NULL，
+        在 OR 里不影响另外两支；不命中任何唯一索引上，模糊匹配本来就扫。
+
+        external_code 的 ILIKE 不做 NULL 特判，是因为「外部码为空」与「外部码不匹配」对筛选而言
+        是同一个结果——都不会被关键字命中。
+
+        不提供「是否已开主账号」「负责客服」这类筛选：前者属于 3.3，后者属于 3.5，
+        它们的表与本表还没建立起查询关系，先加参数等于先定一个没人验证过的语义。
+    -->
+    <sql id="ownerFilter">
+        <where>
+            o.deleted_at IS NULL
+            <if test="status != null">
+                AND o.status = #{status}
+            </if>
+            <if test="ownerType != null">
+                AND o.owner_type = #{ownerType}
+            </if>
+            <if test="keyword != null">
+                AND (o.code ILIKE '%' || #{keyword} || '%'
+                    OR o.name ILIKE '%' || #{keyword} || '%'
+                    OR o.external_code ILIKE '%' || #{keyword} || '%')
+            </if>
+        </where>
+    </sql>
+
+    <select id="countByFilter" resultType="java.lang.Long">
+        SELECT count(*)
+        FROM owner o
+        <include refid="ownerFilter"/>
+    </select>
+
+    <!--
+        排序只用 id：它是唯一的，翻页不会漏行或重复行。不按 created_at 排——同一毫秒建的货主
+        谁先谁后对使用者没有意义，而为了消除并列还要再补一个排序列。
+
+        LIMIT / OFFSET 用参数而不是拼字符串：拼字符串会引入外部输入，也让「上限 200」这条约束
+        散落到 SQL 里；范围判定在用例层一处完成。
+
+        显式列出全部列（含 deleted_at），不用 SELECT *：新增列时这里不会悄悄多搬一列，
+        而「读出来少一列」与「多一列没人用」都会在代码评审时看得见。deleted_at 也在列内，
+        是因为本查询已经过滤了它，投影保持与表结构完整对应，映射对象不会出现「这列到底有没有读」的疑问。
+    -->
+    <select id="selectPageByFilter"
+            resultType="com.yunwms.master.infrastructure.persistence.entity.OwnerEntity">
+        SELECT o.id,
+               o.code,
+               o.name,
+               o.short_name,
+               o.name_en,
+               o.external_code,
+               o.sku_prefix,
+               o.owner_type,
+               o.settlement_entity,
+               o.status,
+               o.country,
+               o.province,
+               o.city,
+               o.district,
+               o.postal_code,
+               o.address_line,
+               o.remark,
+               o.created_at,
+               o.created_by,
+               o.updated_at,
+               o.updated_by,
+               o.deleted_at
+        FROM owner o
+        <include refid="ownerFilter"/>
+        ORDER BY o.id
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!--
+        编辑货主的档案列。
+
+        为什么不用 updateById：它按「非空字段才进 SET」的策略生成语句，于是「把外部码清空」
+        「把区县清空」这类 null 值会被整列略过，旧值留在库里而接口回了成功。这里把可编辑列
+        全部写死，null 就是写 NULL——全量替换的语义只有写死才能保证。
+
+        SET 里没有 code / sku_prefix / status：三列在本批不可修改。写死在这里，比依赖调用方
+        「记得不要传」可靠；即使上层把这三列放进了模型，这里也不会更新它们。
+
+        updated_at 用库内 now()，与 insert 走列默认值同源，应用侧不取第二次时钟；
+        updated_by 由调用方给出，为空说明调用方没取到操作人，属于不该发生的情况。
+
+        手写 SQL 必须自己带 deleted_at IS NULL：MyBatis-Plus 的逻辑删除只作用于它生成的语句。
+        已软删除的货主因此不会被改活。
+    -->
+    <update id="updateProfile">
+        UPDATE owner
+        SET name = #{name},
+            short_name = #{shortName},
+            name_en = #{nameEn},
+            external_code = #{externalCode},
+            owner_type = #{ownerType},
+            settlement_entity = #{settlementEntity},
+            country = #{country},
+            province = #{province},
+            city = #{city},
+            district = #{district},
+            postal_code = #{postalCode},
+            address_line = #{addressLine},
+            remark = #{remark},
+            updated_at = now(),
+            updated_by = #{updatedBy}
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+    </update>
+
+    <!--
+        状态流转：只写 status 与审计列。
+
+        为什么与 updateProfile 分成两条：编辑不该改状态，流转不该改档案。合成一条之后，
+        两个用例都拿到了改对方字段的能力，只能靠「这次不要传」约束，而那条约束在
+        updateById 式的空字段略过面前根本立不住——这正是 updateProfile 手写全部列的原因。
+
+        status 由调用方按枚举 name() 给出；流转是否允许由 OwnerStatus 判定，SQL 不再判一次。
+        已软删除的货主不能被改活：deleted_at IS NULL 写在 WHERE 里，而 MyBatis-Plus 的逻辑删除
+        只作用于它自己生成的语句。
+    -->
+    <update id="updateStatus">
+        UPDATE owner
+        SET status = #{status},
+            updated_at = now(),
+            updated_by = #{updatedBy}
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+    </update>
+
+    <!--
+        软删除：置 deleted_at，并留下「谁删的」。
+
+        不写 status：删除一个草稿之后它仍是草稿（只是看不见了）。顺带改状态会让
+        「这个货主终止过吗」在数据层面多出第三种答案。
+
+        deleted_at IS NULL 同时是「不重复删除」的判据：第二次删除命中零行，调用方据此回 404，
+        而不是回一个看不出来发生过的成功。这正是 docs/coding.md 要求非插入写入校验实际结果的落点。
+    -->
+    <update id="softDelete">
+        UPDATE owner
+        SET deleted_at = now(),
+            updated_at = now(),
+            updated_by = #{updatedBy}
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+    </update>
+
+    <!--
+        SKU 前缀判重：口径是全表，**刻意不带 deleted_at 条件**。
+
+        这不是漏写：ux_owner_sku_prefix 是全表唯一索引（V001 里不带 WHERE 子句），
+        软删除之后前缀仍被占着。若这里按未删除口径判，界面会说「可以用」，保存时才撞上唯一索引，
+        用户拿到的是一句无法自查的数据库错误。判重口径必须与索引口径一致，这条与下一条正好相反。
+
+        用 EXISTS 而不是 count(*)：只回答「有没有」，不数总数。
+    -->
+    <select id="existsBySkuPrefix" resultType="java.lang.Boolean">
+        SELECT EXISTS (
+            SELECT 1
+            FROM owner o
+            WHERE o.sku_prefix = #{skuPrefix}
+        )
+    </select>
+
+    <!--
+        外部码判重：口径是未删除的货主，与 ux_owner_external_code 的部分唯一索引
+        （WHERE external_code IS NOT NULL AND deleted_at IS NULL）一致。
+        软删除之后外部码可以被新货主使用，这是建表时就定下的规则，判重必须跟着它走。
+    -->
+    <select id="existsByExternalCode" resultType="java.lang.Boolean">
+        SELECT EXISTS (
+            SELECT 1
+            FROM owner o
+            WHERE o.external_code = #{externalCode}
+              AND o.deleted_at IS NULL
+        )
+    </select>
+
+    <!--
+        SKU 前缀的占用方反查，口径与 existsBySkuPrefix 相同：**刻意不带 deleted_at 条件**。
+
+        它与上面那条的差异是刻意的，不是遗漏：前缀是全表唯一索引，已软删除的货主仍占着前缀，
+        按未删除口径反查会得到「数据库说被占用、这里说没人占」，提示只能退回原文案。
+
+        只在 INSERT 撞上 ux_owner_sku_prefix 之后调用，用于把「被谁占着」写进提示。
+        取单列、不做 SELECT *：调用方只需要编码。
+
+        LIMIT 1 不是「随便挑一条」：唯一索引保证至多一行，写上是让「数据被绕过索引写坏」时
+        也只返回一行，而不是抛 TooManyResultsException 把一次本可以解释清楚的冲突变成 50000。
+    -->
+    <select id="selectCodeBySkuPrefix" resultType="java.lang.String">
+        SELECT o.code
+        FROM owner o
+        WHERE o.sku_prefix = #{skuPrefix}
+        LIMIT 1
+    </select>
+
+</mapper>

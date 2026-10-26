@@ -31,6 +31,13 @@
         <sa-token.version>1.46.0</sa-token.version>
         <springdoc.version>2.7.0</springdoc.version>
         <!--
+            OpenAPI 注解的版本，必须跟着 springdoc-openapi-starter-webmvc-ui:2.7.0 实际传递的版本走，
+            不单独挑版本：注解与 swagger-core 的模型类由同一套 jar 发布，两边版本错开时
+            springdoc 解析出来的文档结构会与注解语义不一致，而这类偏差不会在编译期报错。
+            取值来源：./mvnw dependency:tree -pl wms-app -Dincludes=io.swagger.core.v3
+        -->
+        <swagger-annotations.version>2.2.25</swagger-annotations.version>
+        <!--
             模块边界检查依赖。放在父 pom 统一管理，子模块只声明坐标不写版本，
             避免多个模块各自钉版本后漂移出「同一份代码在不同模块跑出不同结论」。
         -->
@@ -68,6 +75,16 @@
                 <groupId>org.springdoc</groupId>
                 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
                 <version>${springdoc.version}</version>
+            </dependency>
+            <!--
+                只有 wms-app 能靠 springdoc 的传递依赖拿到这组注解，wms-auth 的 Controller 与 DTO
+                要写 @Tag / @Operation / @Schema 就必须自己声明。由父 pom 统一管版本，
+                避免注解与 springdoc 传递的那份版本漂移。
+            -->
+            <dependency>
+                <groupId>io.swagger.core.v3</groupId>
+                <artifactId>swagger-annotations-jakarta</artifactId>
+                <version>${swagger-annotations.version}</version>
             </dependency>
             <!--
                 ArchUnit 的 JUnit 5 集成（api + engine 的聚合 pom）。

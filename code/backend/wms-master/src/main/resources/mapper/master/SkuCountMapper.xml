@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+    sku 的只读计数，供终止影响清单使用。
+
+    本模块只有这一处读 sku：它是主数据域（V012），商品档案的完整能力随 implement-sku 落地，
+    届时这条语句应随商品仓储一起搬走，端口（OwnerSkuCounter）不变。
+
+    刻意不做的事：不 join category / brand，不返回明细行，不带任何写入语句。
+    影响清单只需要一个数字，多一列就多一分「master 也能管商品」的错觉。
+-->
+<mapper namespace="com.yunwms.master.infrastructure.persistence.mapper.SkuCountMapper">
+
+    <!--
+        排除 deleted_at：已删除的商品不构成终止的影响。把已删除的算进去，确认弹窗上的数字
+        会比实际情况大，而管理员正是拿这个数字决定要不要终止。
+
+        手写 SQL 必须自己带 deleted_at 条件：MyBatis-Plus 的逻辑删除只作用于它生成的语句。
+    -->
+    <select id="countByOwnerId" resultType="java.lang.Long">
+        SELECT count(*)
+        FROM sku s
+        WHERE s.owner_id = #{ownerId}
+          AND s.deleted_at IS NULL
+    </select>
+
+</mapper>

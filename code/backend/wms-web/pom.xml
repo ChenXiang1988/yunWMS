@@ -23,5 +23,16 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
+        <!--
+          契约注解。仅编译期，无运行时体积。
+
+          为什么 wms-web 也要显式声明：ApiResult 与 PageResult 是本层对外暴露的类型，
+          它们的字段描述属于契约的一部分，写在这里才是唯一权威。靠 wms-app 的 springdoc
+          传递进来属于「偶然可用」——wms-web 单独编译时就会缺注解。
+        -->
+        <dependency>
+            <groupId>io.swagger.core.v3</groupId>
+            <artifactId>swagger-annotations-jakarta</artifactId>
+        </dependency>
     </dependencies>
 </project>

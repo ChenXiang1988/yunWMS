@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 用户管理侧的读取入口：列表与详情。
+ * 用户管理侧的读取入口：列表、详情，以及停用前的「最后一个可用超管」判定。
  *
  * <p>与 {@link UserAccountRepository} 的区别：那个端口服务于登录链路，只读「能登录的那个人」
  * （凭据、状态、锁定）；本端口服务管理界面，要带出货主名称与角色，两者的字段集与失败语义都不同。
@@ -72,4 +72,23 @@ public interface UserQuery {
      * @return 存在返回 {@code true}
      */
     boolean existsById(long userId);
+
+    /**
+     * 判断该账号是否为系统里<b>唯一</b>的可用超级管理员。
+     *
+     * <p>给「停用用户」的保护用：停用最后一个可用超管之后，界面上再也没有能配置权限的账号，
+     * 恢复只能改库。规格没有写这一条，它防的是不可逆后果——误操作一次就没有入口了。
+     *
+     * <p>「可用超级管理员」= 账号 {@code ACTIVE}、未逻辑删除，且持有一个 {@code builtin = true}
+     * 且启用中的角色。角色状态必须一起看：鉴权侧的内置角色动态展开只在角色启用时生效
+     * （{@code UserPermissionQueryImpl} 先按 {@code status = 'ACTIVE'} 过滤角色），
+     * 少判一条就会把「持有已停用内置角色的账号」算成可用超管，从而放过真正最后一次停用。
+     *
+     * <p>回答一次查询完成：本方法一次调用只发一条语句，不在应用层取回全部超管再逐个比对。
+     *
+     * @param userId 用户标识
+     * @return 该账号当前是可用超管、且系统里没有另一个可用超管时返回 {@code true}；
+     *         账号不存在、已停用、不持有内置角色，或另有可用超管时为 {@code false}
+     */
+    boolean isOnlyAvailableSuperAdmin(long userId);
 }

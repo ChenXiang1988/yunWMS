@@ -16,9 +16,24 @@ export default {
   },
   login: {
     title: '登录货主端',
-    mobile: '手机号',
+    account: '货主编码',
+    accountPlaceholder: '例如 OWNER0001',
     password: '密码',
     submit: '登录',
-    tip: '骨架阶段：登录为本地模拟，尚未接入后端'
+    tip: '首次登录需先修改初始密码',
+    portalDenied: '该账号无法登录货主端，请前往仓网端登录',
+    failed: '登录失败，请稍后重试'
+  },
+  changePassword: {
+    title: '修改初始密码',
+    subtitle: '首次登录需先修改初始密码，之后才能进入系统',
+    oldPassword: '当前密码',
+    newPassword: '新密码',
+    confirmPassword: '确认新密码',
+    strengthHint: '8–20 位，且同时包含大写字母、小写字母与数字',
+    submit: '确认修改',
+    success: '密码修改成功',
+    mismatch: '两次输入的新密码不一致',
+    failed: '修改失败，请稍后重试'
   }
 }

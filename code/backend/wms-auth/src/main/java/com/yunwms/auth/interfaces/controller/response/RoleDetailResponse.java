@@ -1,5 +1,7 @@
 package com.yunwms.auth.interfaces.controller.response;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.util.List;
 
 /**
@@ -18,13 +20,32 @@ import java.util.List;
  * @param remark          备注，可为 {@code null}
  * @param menuIds         已勾选的菜单与权限点标识；未勾选时为空数组
  */
-public record RoleDetailResponse(String id,
-                                 String code,
-                                 String name,
-                                 boolean builtin,
-                                 String status,
-                                 long userCount,
-                                 long permissionCount,
-                                 String remark,
-                                 List<String> menuIds) {
+public record RoleDetailResponse(
+        @Schema(description = "角色标识，字符串形式的十进制整数；与列表行同名字段含义一致")
+        String id,
+
+        @Schema(description = "角色编码，程序按它引用角色，不可修改")
+        String code,
+
+        @Schema(description = "角色名称，可编辑")
+        String name,
+
+        @Schema(description = "是否内置角色：true 表示系统自带角色，不可编辑、不可停用、不可删除")
+        boolean builtin,
+
+        @Schema(description = "角色状态编码：ACTIVE 启用，DISABLED 停用")
+        String status,
+
+        @Schema(description = "已分配该角色的用户数，取值为整数；大于 0 时该角色不可删除")
+        long userCount,
+
+        @Schema(description = "该角色已勾选的菜单与权限点数量，取值为整数")
+        long permissionCount,
+
+        @Schema(description = "备注，可为 null")
+        String remark,
+
+        @Schema(description = "已勾选的菜单与权限点标识（字符串形式的十进制整数），含菜单与操作两级；"
+                + "未勾选时为空数组。用于回填授权配置页的勾选状态")
+        List<String> menuIds) {
 }

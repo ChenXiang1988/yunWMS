@@ -22,6 +22,20 @@ export default {
     account: 'Account',
     password: 'Password',
     submit: 'Sign in',
-    tip: 'Skeleton stage: sign-in is mocked locally'
+    tip: 'The initial password must be changed after the first sign-in',
+    portalDenied: 'This account cannot sign in to the network console. Please use the owner portal.',
+    failed: 'Sign-in failed. Please try again later.'
+  },
+  changePassword: {
+    title: 'Change initial password',
+    subtitle: 'The initial password must be changed before you can use the system',
+    oldPassword: 'Current password',
+    newPassword: 'New password',
+    confirmPassword: 'Confirm new password',
+    strengthHint: '8–20 characters, including uppercase letters, lowercase letters and digits',
+    submit: 'Change password',
+    success: 'Password changed',
+    mismatch: 'The two new passwords do not match',
+    failed: 'Failed to change the password. Please try again later.'
   }
 }

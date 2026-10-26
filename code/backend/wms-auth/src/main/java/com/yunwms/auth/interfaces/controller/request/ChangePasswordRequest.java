@@ -1,5 +1,6 @@
 package com.yunwms.auth.interfaces.controller.request;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 /**
@@ -16,8 +17,11 @@ import jakarta.validation.constraints.NotBlank;
  */
 public record ChangePasswordRequest(
         @NotBlank(message = "当前密码不能为空")
+        @Schema(description = "当前密码明文，不能为空；用于证明操作人本人，与登录共用同一套失败计数，连续错误会触发锁定")
         String oldPassword,
 
         @NotBlank(message = "新密码不能为空")
+        @Schema(description = "新密码明文，不能为空，需满足密码策略：8–20 位且同时包含大写字母、小写字母与数字，"
+                + "且不能与当前密码相同；不合规时一次返回全部违规项")
         String newPassword) {
 }

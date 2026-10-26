@@ -143,15 +143,15 @@ class RoleCreationServiceTest {
     }
 
     @Test
-    @DisplayName("编码已被占用：转成 409 段错误码，供前端在编码字段就地提示")
+    @DisplayName("编码已被占用：转成 40902，供前端在编码字段就地提示")
     void shouldTranslateDuplicateCode() {
         given(roleRegistrar.register(any(NewRole.class), anyLong()))
                 .willThrow(constraintViolation("ux_sys_role_code"));
 
         BizException failure = failureOf(command(CODE, NAME, null, List.of()));
 
-        assertThat(failure.errorCode()).isEqualTo(ErrorCode.CONFLICT);
-        assertThat(failure.getMessage()).isEqualTo("角色编码已被占用");
+        assertThat(failure.errorCode()).isEqualTo(ErrorCode.ROLE_CODE_TAKEN);
+        assertThat(failure.getMessage()).isEqualTo("角色编码已被占用（含已删除的角色）");
     }
 
     @Test

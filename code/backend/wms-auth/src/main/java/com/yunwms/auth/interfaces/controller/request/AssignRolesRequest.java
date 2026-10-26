@@ -1,5 +1,6 @@
 package com.yunwms.auth.interfaces.controller.request;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
@@ -20,5 +21,8 @@ import java.util.List;
  */
 public record AssignRolesRequest(
         @NotNull(message = "角色标识集合不能省略，移除全部角色请传空数组")
+        @Schema(description = "替换后的角色标识集合，必传，元素为字符串形式的十进制整数；"
+                + "语义是整批替换而非增量，空数组合法且表示移除该用户的全部角色，"
+                + "省略字段则被拒绝——省略更可能是没想清楚要提交什么，后果却是悄悄清空了全部角色")
         List<@NotNull(message = "角色标识不能为空") Long> roleIds) {
 }
