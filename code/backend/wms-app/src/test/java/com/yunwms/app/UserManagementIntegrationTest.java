@@ -54,10 +54,17 @@ class UserManagementIntegrationTest extends AbstractIntegrationTest {
     /** 无权限点角色编码，用例自造；迁移里除超管外不预置角色。 */
     private static final String NO_PERMISSION_ROLE = "TEST_USER_MGMT_NO_PERMISSION";
 
-    /** 用例自造的货主：{@code code} 唯一，{@code sku_prefix} 受 CHECK 约束必须是 4 位大写字母或数字。 */
+    /**
+     * 用例自造的货主：{@code code} 唯一，{@code sku_prefix} 必须是 4 位大写字母或数字。
+     *
+     * <p>前缀以 {@code X} 结尾而不是数字 {@code 1}：库里的 {@code ck_owner_sku_prefix} 只要求
+     * {@code [A-Z0-9]{4}}，而规格与 {@code SkuPrefix} 值对象额外排除 {@code 0}/{@code O}/{@code 1}/{@code I}。
+     * 本行是绕过值对象直接写库的种子数据，用 {@code 1} 会让货主列表在读到它时按「库里的前缀不合规」
+     * 当场失败——那条约束是刻意的，脏数据该在读取时暴露，种子因此必须是合规值。
+     */
     private static final String OWNER_CODE = "OWNER-UMT";
     private static final String OWNER_NAME = "集成测试货主";
-    private static final String OWNER_SKU_PREFIX = "UMT1";
+    private static final String OWNER_SKU_PREFIX = "UMTX";
 
     /** 错误码来自 {@code ErrorCode}：40000 参数问题，40300 无权访问，40400 不存在，40900 状态不允许。 */
     private static final int BAD_REQUEST_CODE = 40000;

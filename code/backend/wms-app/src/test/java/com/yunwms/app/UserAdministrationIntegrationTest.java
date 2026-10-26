@@ -56,7 +56,12 @@ class UserAdministrationIntegrationTest extends AbstractIntegrationTest {
 
     private static final String OWNER_CODE = "OWNER-UAD";
     private static final String OWNER_NAME = "编辑用例货主";
-    private static final String OWNER_SKU_PREFIX = "UAD1";
+    /**
+     * 前缀以 {@code X} 结尾而不是数字 {@code 1}：{@code ck_owner_sku_prefix} 只要求 {@code [A-Z0-9]{4}}，
+     * 而规格与 {@code SkuPrefix} 值对象额外排除 {@code 0}/{@code O}/{@code 1}/{@code I}。
+     * 本行绕过值对象直接写库，用 {@code 1} 会让货主列表读到它时按「库里的前缀不合规」当场失败。
+     */
+    private static final String OWNER_SKU_PREFIX = "UADX";
 
     /** 错误码来自 {@code ErrorCode}：40000 参数问题，40100 未登录，40102 账号停用，40900 状态不允许。 */
     private static final int BAD_REQUEST_CODE = 40000;
