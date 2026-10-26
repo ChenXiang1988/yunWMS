@@ -1,8 +1,8 @@
 # 接口台账
 
 > **生成物，禁止手改。** 由 `code/tools/api-inventory/gen_api_inventory.py` 生成。
-> 来源：实时拉取 `http://localhost:18084/v3/api-docs`
-> 源 commit：`8391cf5`
+> 来源：实时拉取 `http://localhost:18087/v3/api-docs`
+> 源 commit：`4b961d2`
 > 计数口径：OpenAPI operation（path × method），不是 Java 方法数
 > 字段记号：`a.b` 嵌套，`a[]` 数组元素，`↻` 自引用已截断，`…` 嵌套过深已截断
 
@@ -39,6 +39,10 @@
 
 ### 1. `POST /api/auth/login`
 
+账号密码登录，签发会话令牌
+
+用登录名与密码换取令牌及本次登录的权限上下文。这是唯一免鉴权的业务入口：拿不到第一张令牌就无从调用其他接口，因此不要求登录。凭据错误统一返回 40101（不区分登录名不存在与密码错误），账号停用返回 40102，连续失败命中锁定返回 40103。登录不区分两端，主体类型由后端判定。成功后返回令牌、可进入的前端应用与是否需要先改密；mustChangePassword 为 true 时前端应直接进改密页，其余业务接口会返回 40104。
+
 - 主体：共用
 - 分页：否
 - 响应外壳：`ApiResult`
@@ -47,22 +51,26 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `loginName` | string | 是 | — |
-| `password` | string | 是 | — |
+| `loginName` | string | 是 | 登录名，不能为空；员工账号由管理员在仓网端指定，货主账号由系统生成。全局唯一且不区分大小写 |
+| `password` | string | 是 | 明文密码，不能为空，仅在本次请求体中出现；服务端只保存哈希，不落库明文、不写日志、不回显 |
 
 **返回字段**
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `token` | string | — |
-| `subjectType` | string | — |
-| `ownerId` | string | — |
-| `displayName` | string | — |
-| `mustChangePassword` | boolean | — |
-| `roles` | string[] | — |
-| `accessiblePortals` | string[] | — |
+| `token` | string | 访问令牌，调用方放入请求头 Authorization: Bearer <token>。有效期由服务端配置（默认 2 小时），过期或账号被停用后失效，需重新登录换取 |
+| `subjectType` | string | 主体类型编码：STAFF 内部员工，OWNER 货主账号。前端据此决定界面形态 |
+| `ownerId` | string | 所属货主标识，字符串形式的十进制整数；内部员工为 null。以字符串传输是因为超过 2^53 的整数在 JS 里会丢精度 |
+| `displayName` | string | 展示名，登录后显示在页头 |
+| `mustChangePassword` | boolean | 是否需要先改密：true 表示本次登录只放行改密接口，其余业务接口返回 40104，前端应直接跳改密页而不是首页 |
+| `roles` | string[] | 生效中的角色编码列表（不是角色标识）；没有角色时为空数组。停用中的角色不会出现在这里 |
+| `accessiblePortals` | string[] | 可进入的前端应用编码：console 仓网端，portal 货主端；前端据此选择登录后跳转的端。由主体类型决定，内部员工只能进仓网端，货主账号只能进货主端 |
 
 ### 2. `PUT /api/auth/password`
+
+修改本人密码
+
+已登录用户修改自己的密码，是「待改密」状态下唯一被放行的业务接口：用初始密码或管理员重置的密码登录后，其他接口一律返回 40104，必须先走这里，否则该账号既改不了密也用不了系统。只要求登录、不要求权限点——这是每个人维护自己凭据的入口，加权限点会让新账号卡在第一步。判定顺序为：锁定期（40103）→ 旧密码（40101）→ 新密码策略（40000），先验旧密码是为了不把口令策略细节透露给持有待改密令牌的人。成功后清空「需改密」标记与失败计数，并让该账号的其他会话失效；当前会话继续可用。
 
 - 主体：共用
 - 分页：否
@@ -72,8 +80,8 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `oldPassword` | string | 是 | — |
-| `newPassword` | string | 是 | — |
+| `oldPassword` | string | 是 | 当前密码明文，不能为空；用于证明操作人本人，与登录共用同一套失败计数，连续错误会触发锁定 |
+| `newPassword` | string | 是 | 新密码明文，不能为空，需满足密码策略：8–20 位且同时包含大写字母、小写字母与数字，且不能与当前密码相同；不合规时一次返回全部违规项 |
 
 **返回字段**
 
@@ -82,6 +90,10 @@
 | `—` | object | 无字段声明 |
 
 ### 3. `GET /api/console/roles`
+
+分页查询角色
+
+按状态筛选角色，支持按编码或名称模糊匹配，返回每行的占用人数与权限点数量，供管理端角色列表页使用。两个计数由同一条 SQL 聚合得出，前端可以直接用 userCount 判断「该角色还能不能删」而不再发一次请求。筛选条件均可省略，全部省略即返回全量分页；页码从 1 开始，每页条数上限 200，越界返回 40000。
 
 - 主体：console（仓网端）
 - 分页：是
@@ -95,20 +107,24 @@
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `pageNo` | integer(int32) | — |
-| `pageSize` | integer(int32) | — |
-| `total` | integer(int64) | — |
-| `records` | RoleListItemResponse[] | — |
-| `records[].id` | string | — |
-| `records[].code` | string | — |
-| `records[].name` | string | — |
-| `records[].builtin` | boolean | — |
-| `records[].status` | string | — |
-| `records[].userCount` | integer(int64) | — |
-| `records[].permissionCount` | integer(int64) | — |
-| `records[].remark` | string | — |
+| `pageNo` | integer(int32) | 页码，从 1 开始 |
+| `pageSize` | integer(int32) | 每页条数，取值 1 至 200，超出范围时接口返回 40000 |
+| `total` | integer(int64) | 满足筛选条件的总条数，不是本页条数 |
+| `records` | RoleListItemResponse[] | 本页数据；无数据时为空数组，不会是 null |
+| `records[].id` | string | 角色标识，字符串形式的十进制整数；详情、编辑、启停、删除都用它定位 |
+| `records[].code` | string | 角色编码，程序按它引用角色，创建后不可修改 |
+| `records[].name` | string | 角色名称，界面展示用，可重名 |
+| `records[].builtin` | boolean | 是否内置角色：true 表示超级管理员一类的系统自带角色，不可编辑、不可停用、不可删除 |
+| `records[].status` | string | 角色状态编码：ACTIVE 启用，DISABLED 停用。停用的角色仍会出现在列表里，但其权限点在下一次请求起不再生效 |
+| `records[].userCount` | integer(int64) | 已分配该角色的用户数，取值为整数；大于 0 时该角色不可删除 |
+| `records[].permissionCount` | integer(int64) | 该角色已勾选的菜单与权限点数量，取值为整数（菜单与操作两级都计入） |
+| `records[].remark` | string | 备注，可为 null |
 
 ### 4. `POST /api/console/roles`
+
+创建角色
+
+新建一个自定义角色并同时写入它勾选的菜单与权限点。三个属性不在请求体里、也不能由调用方指定：新角色一律启用、builtin 恒为 false、数据范围固定 CUSTOM——接口不能创建内置角色，否则等于绕开权限体系造一个超级管理员。角色编码是程序引用角色的标识，格式不合规或已被占用（含已删除的角色，因为唯一索引不带删除条件）返回 40000/40902；勾选的菜单或权限点不存在同样返回 40000。响应只回带标识与编码。
 
 - 主体：console（仓网端）
 - 分页：否
@@ -118,19 +134,23 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `code` | string | 是 | — |
-| `name` | string | 是 | — |
-| `remark` | string | 否 | — |
-| `menuIds` | integer(int64)[] | 否 | — |
+| `code` | string | 是 | 角色编码，必填：需以大写字母开头，只能包含大写字母、数字与下划线，长度 2 到 32 位。程序按编码引用角色，创建后不可修改；全局唯一（含已删除的角色），已被占用返回 40902 |
+| `name` | string | 是 | 角色名称，必填，最长 64 个字符；给人看的名字，可重名 |
+| `remark` | string | 否 | 备注，最长 255 个字符，可为空 |
+| `menuIds` | integer(int64)[] | 否 | 勾选的菜单与权限点标识（数组元素为字符串形式的十进制整数）；为空或省略表示不授权任何权限。元素必须存在，否则返回 40000 |
 
 **返回字段**
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `id` | string | — |
-| `code` | string | — |
+| `id` | string | 新角色的标识，字符串形式的十进制整数；后续详情、编辑、启停、删除都用它定位 |
+| `code` | string | 新角色编码，按落库值返回；程序按编码引用角色，创建后不可修改 |
 
 ### 5. `GET /api/console/roles/{id}`
+
+查询角色详情
+
+取单个角色的完整信息：列表行已有的字段之外，再带出该角色已勾选的菜单与权限点标识，供授权配置页回显勾选状态。menuIds 同时含菜单（C）与操作（F）两级——只回操作级会让菜单节点无法回显。角色不存在或已被逻辑删除返回 40400。
 
 - 主体：console（仓网端）
 - 分页：否
@@ -144,17 +164,21 @@
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `id` | string | — |
-| `code` | string | — |
-| `name` | string | — |
-| `builtin` | boolean | — |
-| `status` | string | — |
-| `userCount` | integer(int64) | — |
-| `permissionCount` | integer(int64) | — |
-| `remark` | string | — |
-| `menuIds` | string[] | — |
+| `id` | string | 角色标识，字符串形式的十进制整数；与列表行同名字段含义一致 |
+| `code` | string | 角色编码，程序按它引用角色，不可修改 |
+| `name` | string | 角色名称，可编辑 |
+| `builtin` | boolean | 是否内置角色：true 表示系统自带角色，不可编辑、不可停用、不可删除 |
+| `status` | string | 角色状态编码：ACTIVE 启用，DISABLED 停用 |
+| `userCount` | integer(int64) | 已分配该角色的用户数，取值为整数；大于 0 时该角色不可删除 |
+| `permissionCount` | integer(int64) | 该角色已勾选的菜单与权限点数量，取值为整数 |
+| `remark` | string | 备注，可为 null |
+| `menuIds` | string[] | 已勾选的菜单与权限点标识（字符串形式的十进制整数），含菜单与操作两级；未勾选时为空数组。用于回填授权配置页的勾选状态 |
 
 ### 6. `PUT /api/console/roles/{id}`
+
+编辑角色
+
+全量替换角色名称、备注与授权：menuIds 提交的就是这个角色之后拥有的全部权限点，空数组表示清空全部授权，名称与授权在同一个事务里落库，不存在只改了一半的中间态。编码不在可编辑范围内——配置与代码按编码引用角色，改了等于换一个角色，因此多传 code 会被拒绝而不是静默忽略。内置角色不可编辑（40900）；角色不存在返回 40400，名称为空或菜单不存在返回 40000。成功后不回带详情。
 
 - 主体：console（仓网端）
 - 分页：否
@@ -164,9 +188,9 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `name` | string | 是 | — |
-| `remark` | string | 否 | — |
-| `menuIds` | integer(int64)[] | 是 | — |
+| `name` | string | 是 | 角色名称，必填，最长 64 个字符。全量替换语义：提交什么就是改后的值 |
+| `remark` | string | 否 | 备注，最长 255 个字符。全量替换语义：传 null 表示清空，不传同样按 null 处理 |
+| `menuIds` | integer(int64)[] | 是 | 替换后的菜单与权限点标识集合，必传，元素为字符串形式的十进制整数；语义是整批替换而非增量，空数组合法且表示清空该角色的全部授权，省略字段则被拒绝 |
 
 **返回字段**
 
@@ -175,6 +199,10 @@
 | `—` | object | 无字段声明 |
 
 ### 7. `DELETE /api/console/roles/{id}`
+
+删除角色
+
+删除一个自定义角色，采用软删除（库里留 deleted_at），与账号的删除模式一致，将来审计日志里的角色编码才对得上真实对象；删除后列表与详情立即查不到它。仍被用户占用的角色一律拒绝并在提示里带出占用人数（40900）：关联表是级联删除，少了这道校验，删除会静默带走关联记录，那些用户会静默失去该角色带来的权限。内置角色不可删除（40900），角色不存在返回 40400。副作用需提前知道：角色编码的唯一索引不带删除条件，删除后该编码仍被占用，重建同名角色会被拒绝。成功后不回带被删对象。
 
 - 主体：console（仓网端）
 - 分页：否
@@ -192,6 +220,10 @@
 
 ### 8. `PUT /api/console/roles/{id}/status`
 
+启用或停用角色
+
+切换角色状态。停用立即生效：鉴权侧每次请求都按角色状态过滤，持有该角色的用户下一次请求就不再拥有它带来的权限点，不必等会话过期；启用同样立即恢复。目标状态与当前状态相同时返回成功，不报错。内置角色不可停用（40900）——停完之后没有任何账号能配置权限，而界面上没有恢复入口。角色不存在返回 40400。
+
 - 主体：console（仓网端）
 - 分页：否
 - 响应外壳：`ApiResult`
@@ -200,7 +232,7 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `status` | string enum(ACTIVE, DISABLED) | 是 | — |
+| `status` | string enum(ACTIVE, DISABLED) | 是 | 目标状态，必传：ACTIVE 启用，DISABLED 停用。传 null 与传未知编码都会被拒绝，不按「不传就不改」处理；与当前状态相同时返回成功 |
 
 **返回字段**
 
@@ -209,6 +241,10 @@
 | `—` | object | 无字段声明 |
 
 ### 9. `GET /api/console/users`
+
+分页查询用户账号
+
+按主体类型与状态筛选账号，支持按登录名或姓名模糊匹配，返回每行的角色编码与所属货主名称，供管理端列表页使用。角色与货主由固定条数的查询随行带出，前端不必再逐个用户查一次。所有筛选条件都可省略，全部省略即返回全量分页；页码从 1 开始，每页条数上限 200，越界返回 40000 而不是静默截断。
 
 - 主体：console（仓网端）
 - 分页：是
@@ -222,21 +258,25 @@
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `pageNo` | integer(int32) | — |
-| `pageSize` | integer(int32) | — |
-| `total` | integer(int64) | — |
-| `records` | UserListItemResponse[] | — |
-| `records[].id` | string | — |
-| `records[].loginName` | string | — |
-| `records[].displayName` | string | — |
-| `records[].subjectType` | string | — |
-| `records[].ownerId` | string | — |
-| `records[].ownerName` | string | — |
-| `records[].status` | string | — |
-| `records[].roles` | string[] | — |
-| `records[].lastLoginAt` | string(date-time) | — |
+| `pageNo` | integer(int32) | 页码，从 1 开始 |
+| `pageSize` | integer(int32) | 每页条数，取值 1 至 200，超出范围时接口返回 40000 |
+| `total` | integer(int64) | 满足筛选条件的总条数，不是本页条数 |
+| `records` | UserListItemResponse[] | 本页数据；无数据时为空数组，不会是 null |
+| `records[].id` | string | 用户标识，字符串形式的十进制整数；详情、编辑、启停、分配角色都用它定位 |
+| `records[].loginName` | string | 登录名，全局唯一且不区分大小写 |
+| `records[].displayName` | string | 展示名，列表上显示给人看的名字 |
+| `records[].subjectType` | string | 主体类型编码：STAFF 内部员工，OWNER 货主用户 |
+| `records[].ownerId` | string | 所属货主标识，字符串形式的十进制整数；内部员工为 null，前端据此显示「—」而不是空白 |
+| `records[].ownerName` | string | 所属货主名称；内部员工，或货主已被逻辑删除时为 null |
+| `records[].status` | string | 账号状态编码：ACTIVE 启用，DISABLED 停用 |
+| `records[].roles` | string[] | 已分配的角色编码列表（含停用中的角色）；没有角色时为空数组。列表要显示人能读的编码，编辑表单回填用的角色标识在详情接口的 roleIds 里给 |
+| `records[].lastLoginAt` | string(date-time) | 最后登录时刻，ISO 8601 带时区（UTC），如 2026-10-24T08:30:00Z；从未登录过为 null |
 
 ### 10. `POST /api/console/users`
+
+创建用户账号
+
+由管理员开通一个账号，供内部员工或货主用户登录。新账号一律启用，初始密码由管理员给出，并标记为「首次登录必须改密」：登录后除改密外调不到任何业务接口。主体与货主必须匹配——货主账号要带 ownerId，内部员工必须不传；内部员工还必须留邮箱，用于自助找回密码。登录名与邮箱都全局唯一，被占用分别返回 40901、40903，密码不满足策略返回 40000。响应只回带标识与登录名，口令不回显。
 
 - 主体：console（仓网端）
 - 分页：否
@@ -246,23 +286,27 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `loginName` | string | 是 | — |
-| `displayName` | string | 是 | — |
-| `subjectType` | string enum(STAFF, OWNER) | 是 | — |
-| `ownerId` | integer(int64) | 否 | — |
-| `email` | string | 否 | — |
-| `wecomUserId` | string | 否 | — |
-| `initialPassword` | string | 是 | — |
-| `roleIds` | integer(int64)[] | 否 | — |
+| `loginName` | string | 是 | 登录名，必填，最长 64 个字符；全局唯一且不区分大小写，已被占用返回 40901 |
+| `displayName` | string | 是 | 展示名，必填，最长 64 个字符；界面上显示给人看的名字，可与登录名不同 |
+| `subjectType` | string enum(STAFF, OWNER) | 是 | 主体类型，必填：STAFF 内部员工，OWNER 货主用户。决定下面 ownerId 与 email 是否必填，创建后不可修改 |
+| `ownerId` | integer(int64) | 否 | 所属货主标识，以字符串传输：货主用户必填，内部员工必须不传。取值来自货主列表，创建后不可修改 |
+| `email` | string | 否 | 邮箱，最长 128 个字符，格式需合法：内部员工必填（用于自助找回密码），货主用户可为空；全局唯一，已被其他账号使用返回 40903 |
+| `wecomUserId` | string | 否 | 企业微信 userid，最长 64 个字符，内部员工用于应用消息推送，可为空 |
+| `initialPassword` | string | 是 | 初始密码明文，必填，需满足密码策略：8–20 位且同时包含大写字母、小写字母与数字；账号落地时只存哈希，且被标记为首次登录必须修改 |
+| `roleIds` | integer(int64)[] | 否 | 要分配的角色标识（数组元素为字符串形式的十进制整数）；为空或省略表示不分配角色。角色必须存在，否则返回 40000 |
 
 **返回字段**
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `id` | string | — |
-| `loginName` | string | — |
+| `id` | string | 新账号的用户标识，字符串形式的十进制整数；后续详情、编辑、启停、分配角色都用它定位，同时用于跳转到详情页 |
+| `loginName` | string | 新账号的登录名，按落库值返回（未做大小写改写）；与请求里的登录名一致，便于前端核对 |
 
 ### 11. `GET /api/console/users/{id}`
+
+查询用户详情
+
+取单个账号的完整信息：列表行里已有的字段之外，再带出邮箱、企业微信 userid、用户级数据范围覆盖值与用于回填编辑表单的角色标识（roleIds）。角色编码与角色标识两种表示同时返回，前端保存后刷新详情时不必再发一次列表请求。账号不存在或已被逻辑删除返回 40400。
 
 - 主体：console（仓网端）
 - 分页：否
@@ -276,22 +320,26 @@
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `id` | string | — |
-| `loginName` | string | — |
-| `displayName` | string | — |
-| `subjectType` | string | — |
-| `ownerId` | string | — |
-| `ownerName` | string | — |
-| `status` | string | — |
-| `roles` | string[] | — |
-| `lastLoginAt` | string(date-time) | — |
-| `email` | string | — |
-| `wecomUserId` | string | — |
-| `dataScopeType` | string | — |
-| `createdAt` | string(date-time) | — |
-| `roleIds` | string[] | — |
+| `id` | string | 用户标识，字符串形式的十进制整数；与列表行同名字段含义一致 |
+| `loginName` | string | 登录名，全局唯一且不区分大小写；不可编辑 |
+| `displayName` | string | 展示名，可编辑 |
+| `subjectType` | string | 主体类型编码：STAFF 内部员工，OWNER 货主用户；决定 ownerId 与 email 的必填口径，不可编辑 |
+| `ownerId` | string | 所属货主标识，字符串形式的十进制整数；内部员工为 null，不可编辑 |
+| `ownerName` | string | 所属货主名称；内部员工，或货主已被逻辑删除时为 null |
+| `status` | string | 账号状态编码：ACTIVE 启用，DISABLED 停用 |
+| `roles` | string[] | 已分配的角色编码列表（含停用中的角色），供只读展示；没有角色时为空数组 |
+| `lastLoginAt` | string(date-time) | 最后登录时刻，ISO 8601 带时区（UTC）；从未登录过为 null |
+| `email` | string | 邮箱；货主账号可为 null，内部员工必有值（用于自助找回密码）。编辑接口按全量替换处理 |
+| `wecomUserId` | string | 企业微信 userid，用于应用消息推送；可为 null。编辑接口按全量替换处理 |
+| `dataScopeType` | string | 用户级数据范围覆盖值；null 表示继承角色默认。本批只读，配置入口在后续任务 |
+| `createdAt` | string(date-time) | 账号创建时刻，ISO 8601 带时区（UTC） |
+| `roleIds` | string[] | 已分配的角色标识列表（字符串形式的十进制整数），用于回填编辑表单的勾选状态；没有角色时为空数组。与 roles 是同一批角色的两种表示 |
 
 ### 12. `PUT /api/console/users/{id}`
+
+编辑用户基本信息
+
+全量替换展示名、邮箱与企业微信 userid：字段传 null 表示清空，不传表示按 null 处理，即调用方必须提交自己希望保留的全部值。登录名、主体类型与所属货主不在可编辑范围内——它们决定账号身份与数据归属，改动属于另一件事（换账号或迁移归属），因此请求体里没有这些字段，多传会被拒绝而不是静默忽略。内部员工清空邮箱返回 40000，邮箱被他人占用返回 40903，账号不存在返回 40400。成功后不回带详情，需要最新值时重新取。
 
 - 主体：console（仓网端）
 - 分页：否
@@ -301,9 +349,9 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `displayName` | string | 是 | — |
-| `email` | string | 否 | — |
-| `wecomUserId` | string | 否 | — |
+| `displayName` | string | 是 | 展示名，必填，最长 64 个字符。全量替换语义：提交什么就是改后的值 |
+| `email` | string | 否 | 邮箱，最长 128 个字符，格式需合法。全量替换语义：传 null 表示清空；内部员工必须保留非空邮箱，清空返回 40000；被其他账号占用返回 40903 |
+| `wecomUserId` | string | 否 | 企业微信 userid，最长 64 个字符。全量替换语义：传 null 表示清空，不传同样按 null 处理 |
 
 **返回字段**
 
@@ -313,6 +361,10 @@
 
 ### 13. `PUT /api/console/users/{id}/password`
 
+重置他人密码
+
+管理员为指定账号设置新密码，不校验旧密码，用于员工忘记密码的情形。正因为不验旧密码，它不能作用于调用者自己（返回 40900）——否则这就是一条绕过旧密码校验的通道，改自己的密码请走 PUT /api/auth/password。成功后该账号的全部会话立即失效，并重新标记为「首次登录必须改密」，下次登录只能先改密。新密码不满足策略时一次返回全部违规项（40000），账号不存在返回 40400；新密码不回显，响应无业务数据。
+
 - 主体：console（仓网端）
 - 分页：否
 - 响应外壳：`ApiResult`
@@ -321,7 +373,7 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `newPassword` | string | 是 | — |
+| `newPassword` | string | 是 | 为对方设置的新密码明文，不能为空，需满足密码策略：8–20 位且同时包含大写字母、小写字母与数字；不合规时一次返回全部违规项。服务端只存哈希，响应体不回显该密码 |
 
 **返回字段**
 
@@ -331,6 +383,10 @@
 
 ### 14. `PUT /api/console/users/{id}/roles`
 
+分配用户角色（整批替换）
+
+把账号的角色集合整体替换为提交的这一组：请求体里的 roleIds 就是这个人之后拥有的全部角色，空数组表示移除全部角色。先删后插在同一个事务里完成，不会出现「删掉了但没插进去」的中间态，因此重复提交同一组角色是幂等的。这是唯一会改变「谁能做什么」的入口，权限点不可与其他写操作共用。被拒绝的情形：用户不存在（40400）、请求里有不存在或已删除的角色（40000）、操作人把自己替换成不含内置角色的组合（40900，否则系统可能不再有能配置权限的账号）。成功后不回带角色列表，需要最新值时重新取详情。
+
 - 主体：console（仓网端）
 - 分页：否
 - 响应外壳：`ApiResult`
@@ -339,7 +395,7 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `roleIds` | integer(int64)[] | 是 | — |
+| `roleIds` | integer(int64)[] | 是 | 替换后的角色标识集合，必传，元素为字符串形式的十进制整数；语义是整批替换而非增量，空数组合法且表示移除该用户的全部角色，省略字段则被拒绝——省略更可能是没想清楚要提交什么，后果却是悄悄清空了全部角色 |
 
 **返回字段**
 
@@ -349,6 +405,10 @@
 
 ### 15. `PUT /api/console/users/{id}/status`
 
+启用或停用用户账号
+
+切换账号状态。停用立即生效：该账号的既有会话随即失效，且无法再次登录，不必等令牌过期。目标状态与当前状态相同时返回成功，不报错——重复提交同一次启停是正常的重放。两条业务保护：不能停用自己，也不能停用最后一个可用的超级管理员（返回 40900），否则系统会失去唯一能配置权限的账号。账号不存在返回 40400。
+
 - 主体：console（仓网端）
 - 分页：否
 - 响应外壳：`ApiResult`
@@ -357,7 +417,7 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `status` | string enum(ACTIVE, DISABLED) | 是 | — |
+| `status` | string enum(ACTIVE, DISABLED) | 是 | 目标状态，必传：ACTIVE 启用，DISABLED 停用。传 null 与传未知编码都会被拒绝，不按「不传就不改」处理；与当前状态相同时返回成功 |
 
 **返回字段**
 

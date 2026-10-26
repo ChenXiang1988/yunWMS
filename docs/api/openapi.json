@@ -1,26 +1,44 @@
 {
   "openapi": "3.0.1",
   "info": {
-    "title": "OpenAPI definition",
+    "title": "yunWMS 后端接口",
+    "description": "yunWMS 分两端，靠路径前缀区分鉴权主体：`/api/console` 供仓网管理端使用，\n`/api/portal` 供货主端使用；`/api/auth` 由两端共用，登录的主体类型由后端按账号判定，\n调用方不传也不允许传。\n\n除未认证（401）、无权限（403）与服务内部错误（500）外，所有接口一律返回 HTTP 200，\n业务结果由响应体 `ApiResult` 的 `code` 表达（0 表示成功，非 0 见错误码表）。\n这三类通用响应在 `components.responses` 中统一声明，各接口直接引用，不再重复描述。\n",
     "version": "v0"
   },
   "servers": [
     {
-      "url": "http://localhost:18084",
+      "url": "http://localhost:18087",
       "description": "Generated server url"
+    }
+  ],
+  "tags": [
+    {
+      "name": "角色管理",
+      "description": "仓网端的角色管理：建、读、改、启停、删在这里闭环。角色是授权数据的来源，能改角色就等于能给自己加权限，因此全部接口都要求权限点而不是只要求登录。货主端没有角色管理能力，权限由管理员在这里配置。"
+    },
+    {
+      "name": "认证",
+      "description": "两端共用的登录与本人改密入口。登录时的主体类型（内部员工或货主账号）由后端按账号判定，调用方不传也不允许传。"
+    },
+    {
+      "name": "用户管理",
+      "description": "仓网端的账号管理：建号、查询、编辑基本信息、启停、重置密码与分配角色。货主端没有建号能力，货主账号由管理员在这里开通。全部接口都要求对应权限点，只登录但没有权限点的账号会拿到 403。"
     }
   ],
   "paths": {
     "/api/console/users/{id}": {
       "get": {
         "tags": [
-          "user-controller"
+          "用户管理"
         ],
+        "summary": "查询用户详情",
+        "description": "取单个账号的完整信息：列表行里已有的字段之外，再带出邮箱、企业微信 userid、用户级数据范围覆盖值与用于回填编辑表单的角色标识（roleIds）。角色编码与角色标识两种表示同时返回，前端保存后刷新详情时不必再发一次列表请求。账号不存在或已被逻辑删除返回 40400。",
         "operationId": "detail",
         "parameters": [
           {
             "name": "id",
             "in": "path",
+            "description": "用户标识，取自列表或详情响应里的 id",
             "required": true,
             "schema": {
               "type": "integer",
@@ -38,18 +56,30 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       },
       "put": {
         "tags": [
-          "user-controller"
+          "用户管理"
         ],
+        "summary": "编辑用户基本信息",
+        "description": "全量替换展示名、邮箱与企业微信 userid：字段传 null 表示清空，不传表示按 null 处理，即调用方必须提交自己希望保留的全部值。登录名、主体类型与所属货主不在可编辑范围内——它们决定账号身份与数据归属，改动属于另一件事（换账号或迁移归属），因此请求体里没有这些字段，多传会被拒绝而不是静默忽略。内部员工清空邮箱返回 40000，邮箱被他人占用返回 40903，账号不存在返回 40400。成功后不回带详情，需要最新值时重新取。",
         "operationId": "update",
         "parameters": [
           {
             "name": "id",
             "in": "path",
+            "description": "用户标识，取自列表或详情响应里的 id",
             "required": true,
             "schema": {
               "type": "integer",
@@ -77,6 +107,15 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       }
@@ -84,13 +123,16 @@
     "/api/console/users/{id}/status": {
       "put": {
         "tags": [
-          "user-controller"
+          "用户管理"
         ],
+        "summary": "启用或停用用户账号",
+        "description": "切换账号状态。停用立即生效：该账号的既有会话随即失效，且无法再次登录，不必等令牌过期。目标状态与当前状态相同时返回成功，不报错——重复提交同一次启停是正常的重放。两条业务保护：不能停用自己，也不能停用最后一个可用的超级管理员（返回 40900），否则系统会失去唯一能配置权限的账号。账号不存在返回 40400。",
         "operationId": "changeStatus",
         "parameters": [
           {
             "name": "id",
             "in": "path",
+            "description": "用户标识，取自列表或详情响应里的 id",
             "required": true,
             "schema": {
               "type": "integer",
@@ -118,6 +160,15 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       }
@@ -125,13 +176,16 @@
     "/api/console/users/{id}/roles": {
       "put": {
         "tags": [
-          "user-controller"
+          "用户管理"
         ],
+        "summary": "分配用户角色（整批替换）",
+        "description": "把账号的角色集合整体替换为提交的这一组：请求体里的 roleIds 就是这个人之后拥有的全部角色，空数组表示移除全部角色。先删后插在同一个事务里完成，不会出现「删掉了但没插进去」的中间态，因此重复提交同一组角色是幂等的。这是唯一会改变「谁能做什么」的入口，权限点不可与其他写操作共用。被拒绝的情形：用户不存在（40400）、请求里有不存在或已删除的角色（40000）、操作人把自己替换成不含内置角色的组合（40900，否则系统可能不再有能配置权限的账号）。成功后不回带角色列表，需要最新值时重新取详情。",
         "operationId": "assignRoles",
         "parameters": [
           {
             "name": "id",
             "in": "path",
+            "description": "用户标识，取自列表或详情响应里的 id",
             "required": true,
             "schema": {
               "type": "integer",
@@ -159,6 +213,15 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       }
@@ -166,13 +229,16 @@
     "/api/console/users/{id}/password": {
       "put": {
         "tags": [
-          "user-controller"
+          "用户管理"
         ],
+        "summary": "重置他人密码",
+        "description": "管理员为指定账号设置新密码，不校验旧密码，用于员工忘记密码的情形。正因为不验旧密码，它不能作用于调用者自己（返回 40900）——否则这就是一条绕过旧密码校验的通道，改自己的密码请走 PUT /api/auth/password。成功后该账号的全部会话立即失效，并重新标记为「首次登录必须改密」，下次登录只能先改密。新密码不满足策略时一次返回全部违规项（40000），账号不存在返回 40400；新密码不回显，响应无业务数据。",
         "operationId": "resetPassword",
         "parameters": [
           {
             "name": "id",
             "in": "path",
+            "description": "被重置密码的用户标识，不能是当前登录账号",
             "required": true,
             "schema": {
               "type": "integer",
@@ -200,6 +266,15 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       }
@@ -207,13 +282,16 @@
     "/api/console/roles/{id}": {
       "get": {
         "tags": [
-          "role-controller"
+          "角色管理"
         ],
+        "summary": "查询角色详情",
+        "description": "取单个角色的完整信息：列表行已有的字段之外，再带出该角色已勾选的菜单与权限点标识，供授权配置页回显勾选状态。menuIds 同时含菜单（C）与操作（F）两级——只回操作级会让菜单节点无法回显。角色不存在或已被逻辑删除返回 40400。",
         "operationId": "detail_1",
         "parameters": [
           {
             "name": "id",
             "in": "path",
+            "description": "角色标识，取自列表响应里的 id",
             "required": true,
             "schema": {
               "type": "integer",
@@ -231,18 +309,30 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       },
       "put": {
         "tags": [
-          "role-controller"
+          "角色管理"
         ],
+        "summary": "编辑角色",
+        "description": "全量替换角色名称、备注与授权：menuIds 提交的就是这个角色之后拥有的全部权限点，空数组表示清空全部授权，名称与授权在同一个事务里落库，不存在只改了一半的中间态。编码不在可编辑范围内——配置与代码按编码引用角色，改了等于换一个角色，因此多传 code 会被拒绝而不是静默忽略。内置角色不可编辑（40900）；角色不存在返回 40400，名称为空或菜单不存在返回 40000。成功后不回带详情。",
         "operationId": "update_1",
         "parameters": [
           {
             "name": "id",
             "in": "path",
+            "description": "角色标识，取自列表响应里的 id",
             "required": true,
             "schema": {
               "type": "integer",
@@ -270,18 +360,30 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       },
       "delete": {
         "tags": [
-          "role-controller"
+          "角色管理"
         ],
+        "summary": "删除角色",
+        "description": "删除一个自定义角色，采用软删除（库里留 deleted_at），与账号的删除模式一致，将来审计日志里的角色编码才对得上真实对象；删除后列表与详情立即查不到它。仍被用户占用的角色一律拒绝并在提示里带出占用人数（40900）：关联表是级联删除，少了这道校验，删除会静默带走关联记录，那些用户会静默失去该角色带来的权限。内置角色不可删除（40900），角色不存在返回 40400。副作用需提前知道：角色编码的唯一索引不带删除条件，删除后该编码仍被占用，重建同名角色会被拒绝。成功后不回带被删对象。",
         "operationId": "delete",
         "parameters": [
           {
             "name": "id",
             "in": "path",
+            "description": "角色标识，取自列表响应里的 id",
             "required": true,
             "schema": {
               "type": "integer",
@@ -299,6 +401,15 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       }
@@ -306,13 +417,16 @@
     "/api/console/roles/{id}/status": {
       "put": {
         "tags": [
-          "role-controller"
+          "角色管理"
         ],
+        "summary": "启用或停用角色",
+        "description": "切换角色状态。停用立即生效：鉴权侧每次请求都按角色状态过滤，持有该角色的用户下一次请求就不再拥有它带来的权限点，不必等会话过期；启用同样立即恢复。目标状态与当前状态相同时返回成功，不报错。内置角色不可停用（40900）——停完之后没有任何账号能配置权限，而界面上没有恢复入口。角色不存在返回 40400。",
         "operationId": "changeStatus_1",
         "parameters": [
           {
             "name": "id",
             "in": "path",
+            "description": "角色标识，取自列表响应里的 id",
             "required": true,
             "schema": {
               "type": "integer",
@@ -340,6 +454,15 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       }
@@ -347,8 +470,10 @@
     "/api/auth/password": {
       "put": {
         "tags": [
-          "auth-controller"
+          "认证"
         ],
+        "summary": "修改本人密码",
+        "description": "已登录用户修改自己的密码，是「待改密」状态下唯一被放行的业务接口：用初始密码或管理员重置的密码登录后，其他接口一律返回 40104，必须先走这里，否则该账号既改不了密也用不了系统。只要求登录、不要求权限点——这是每个人维护自己凭据的入口，加权限点会让新账号卡在第一步。判定顺序为：锁定期（40103）→ 旧密码（40101）→ 新密码策略（40000），先验旧密码是为了不把口令策略细节透露给持有待改密令牌的人。成功后清空「需改密」标记与失败计数，并让该账号的其他会话失效；当前会话继续可用。",
         "operationId": "changePassword",
         "requestBody": {
           "content": {
@@ -370,6 +495,15 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       }
@@ -377,13 +511,16 @@
     "/api/console/users": {
       "get": {
         "tags": [
-          "user-controller"
+          "用户管理"
         ],
+        "summary": "分页查询用户账号",
+        "description": "按主体类型与状态筛选账号，支持按登录名或姓名模糊匹配，返回每行的角色编码与所属货主名称，供管理端列表页使用。角色与货主由固定条数的查询随行带出，前端不必再逐个用户查一次。所有筛选条件都可省略，全部省略即返回全量分页；页码从 1 开始，每页条数上限 200，越界返回 40000 而不是静默截断。",
         "operationId": "page",
         "parameters": [
           {
             "name": "pageNo",
             "in": "query",
+            "description": "页码，从 1 开始；省略时取 1",
             "required": false,
             "schema": {
               "type": "integer",
@@ -393,6 +530,7 @@
           {
             "name": "pageSize",
             "in": "query",
+            "description": "每页条数，上限 200；省略时取 20，超出上限返回 40000",
             "required": false,
             "schema": {
               "type": "integer",
@@ -402,6 +540,7 @@
           {
             "name": "subjectType",
             "in": "query",
+            "description": "主体类型：STAFF 内部员工，OWNER 货主用户；省略表示全部主体",
             "required": false,
             "schema": {
               "type": "string",
@@ -414,6 +553,7 @@
           {
             "name": "status",
             "in": "query",
+            "description": "账号状态：ACTIVE 启用，DISABLED 停用；省略表示全部状态",
             "required": false,
             "schema": {
               "type": "string",
@@ -426,6 +566,7 @@
           {
             "name": "keyword",
             "in": "query",
+            "description": "按登录名或展示名模糊匹配的关键词；省略或全空白表示不筛选",
             "required": false,
             "schema": {
               "type": "string"
@@ -442,13 +583,24 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       },
       "post": {
         "tags": [
-          "user-controller"
+          "用户管理"
         ],
+        "summary": "创建用户账号",
+        "description": "由管理员开通一个账号，供内部员工或货主用户登录。新账号一律启用，初始密码由管理员给出，并标记为「首次登录必须改密」：登录后除改密外调不到任何业务接口。主体与货主必须匹配——货主账号要带 ownerId，内部员工必须不传；内部员工还必须留邮箱，用于自助找回密码。登录名与邮箱都全局唯一，被占用分别返回 40901、40903，密码不满足策略返回 40000。响应只回带标识与登录名，口令不回显。",
         "operationId": "create",
         "requestBody": {
           "content": {
@@ -470,6 +622,15 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       }
@@ -477,13 +638,16 @@
     "/api/console/roles": {
       "get": {
         "tags": [
-          "role-controller"
+          "角色管理"
         ],
+        "summary": "分页查询角色",
+        "description": "按状态筛选角色，支持按编码或名称模糊匹配，返回每行的占用人数与权限点数量，供管理端角色列表页使用。两个计数由同一条 SQL 聚合得出，前端可以直接用 userCount 判断「该角色还能不能删」而不再发一次请求。筛选条件均可省略，全部省略即返回全量分页；页码从 1 开始，每页条数上限 200，越界返回 40000。",
         "operationId": "page_1",
         "parameters": [
           {
             "name": "pageNo",
             "in": "query",
+            "description": "页码，从 1 开始；省略时取 1",
             "required": false,
             "schema": {
               "type": "integer",
@@ -493,6 +657,7 @@
           {
             "name": "pageSize",
             "in": "query",
+            "description": "每页条数，上限 200；省略时取 20，超出上限返回 40000",
             "required": false,
             "schema": {
               "type": "integer",
@@ -502,6 +667,7 @@
           {
             "name": "keyword",
             "in": "query",
+            "description": "按角色编码或名称模糊匹配的关键词；省略或全空白表示不筛选",
             "required": false,
             "schema": {
               "type": "string"
@@ -510,6 +676,7 @@
           {
             "name": "status",
             "in": "query",
+            "description": "角色状态：ACTIVE 启用，DISABLED 停用；省略表示全部状态",
             "required": false,
             "schema": {
               "type": "string",
@@ -530,13 +697,24 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       },
       "post": {
         "tags": [
-          "role-controller"
+          "角色管理"
         ],
+        "summary": "创建角色",
+        "description": "新建一个自定义角色并同时写入它勾选的菜单与权限点。三个属性不在请求体里、也不能由调用方指定：新角色一律启用、builtin 恒为 false、数据范围固定 CUSTOM——接口不能创建内置角色，否则等于绕开权限体系造一个超级管理员。角色编码是程序引用角色的标识，格式不合规或已被占用（含已删除的角色，因为唯一索引不带删除条件）返回 40000/40902；勾选的菜单或权限点不存在同样返回 40000。响应只回带标识与编码。",
         "operationId": "create_1",
         "requestBody": {
           "content": {
@@ -558,6 +736,15 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       }
@@ -565,8 +752,10 @@
     "/api/auth/login": {
       "post": {
         "tags": [
-          "auth-controller"
+          "认证"
         ],
+        "summary": "账号密码登录，签发会话令牌",
+        "description": "用登录名与密码换取令牌及本次登录的权限上下文。这是唯一免鉴权的业务入口：拿不到第一张令牌就无从调用其他接口，因此不要求登录。凭据错误统一返回 40101（不区分登录名不存在与密码错误），账号停用返回 40102，连续失败命中锁定返回 40103。登录不区分两端，主体类型由后端判定。成功后返回令牌、可进入的前端应用与是否需要先改密；mustChangePassword 为 true 时前端应直接进改密页，其余业务接口会返回 40104。",
         "operationId": "login",
         "requestBody": {
           "content": {
@@ -588,6 +777,15 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
       }
@@ -600,13 +798,18 @@
         "properties": {
           "code": {
             "type": "integer",
-            "format": "int32"
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
           },
           "message": {
-            "type": "string"
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
           },
           "data": {
-            "type": "object"
+            "type": "object",
+            "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
           }
         }
       },
@@ -619,17 +822,20 @@
           "displayName": {
             "maxLength": 64,
             "minLength": 0,
-            "type": "string"
+            "type": "string",
+            "description": "展示名，必填，最长 64 个字符。全量替换语义：提交什么就是改后的值"
           },
           "email": {
             "maxLength": 128,
             "minLength": 0,
-            "type": "string"
+            "type": "string",
+            "description": "邮箱，最长 128 个字符，格式需合法。全量替换语义：传 null 表示清空；内部员工必须保留非空邮箱，清空返回 40000；被其他账号占用返回 40903"
           },
           "wecomUserId": {
             "maxLength": 64,
             "minLength": 0,
-            "type": "string"
+            "type": "string",
+            "description": "企业微信 userid，最长 64 个字符。全量替换语义：传 null 表示清空，不传同样按 null 处理"
           }
         }
       },
@@ -641,6 +847,7 @@
         "properties": {
           "status": {
             "type": "string",
+            "description": "目标状态，必传：ACTIVE 启用，DISABLED 停用。传 null 与传未知编码都会被拒绝，不按「不传就不改」处理；与当前状态相同时返回成功",
             "enum": [
               "ACTIVE",
               "DISABLED"
@@ -656,8 +863,10 @@
         "properties": {
           "roleIds": {
             "type": "array",
+            "description": "替换后的角色标识集合，必传，元素为字符串形式的十进制整数；语义是整批替换而非增量，空数组合法且表示移除该用户的全部角色，省略字段则被拒绝——省略更可能是没想清楚要提交什么，后果却是悄悄清空了全部角色",
             "items": {
               "type": "integer",
+              "description": "替换后的角色标识集合，必传，元素为字符串形式的十进制整数；语义是整批替换而非增量，空数组合法且表示移除该用户的全部角色，省略字段则被拒绝——省略更可能是没想清楚要提交什么，后果却是悄悄清空了全部角色",
               "format": "int64"
             }
           }
@@ -670,7 +879,8 @@
         "type": "object",
         "properties": {
           "newPassword": {
-            "type": "string"
+            "type": "string",
+            "description": "为对方设置的新密码明文，不能为空，需满足密码策略：8–20 位且同时包含大写字母、小写字母与数字；不合规时一次返回全部违规项。服务端只存哈希，响应体不回显该密码"
           }
         }
       },
@@ -684,17 +894,21 @@
           "name": {
             "maxLength": 64,
             "minLength": 0,
-            "type": "string"
+            "type": "string",
+            "description": "角色名称，必填，最长 64 个字符。全量替换语义：提交什么就是改后的值"
           },
           "remark": {
             "maxLength": 255,
             "minLength": 0,
-            "type": "string"
+            "type": "string",
+            "description": "备注，最长 255 个字符。全量替换语义：传 null 表示清空，不传同样按 null 处理"
           },
           "menuIds": {
             "type": "array",
+            "description": "替换后的菜单与权限点标识集合，必传，元素为字符串形式的十进制整数；语义是整批替换而非增量，空数组合法且表示清空该角色的全部授权，省略字段则被拒绝",
             "items": {
               "type": "integer",
+              "description": "替换后的菜单与权限点标识集合，必传，元素为字符串形式的十进制整数；语义是整批替换而非增量，空数组合法且表示清空该角色的全部授权，省略字段则被拒绝",
               "format": "int64"
             }
           }
@@ -708,6 +922,7 @@
         "properties": {
           "status": {
             "type": "string",
+            "description": "目标状态，必传：ACTIVE 启用，DISABLED 停用。传 null 与传未知编码都会被拒绝，不按「不传就不改」处理；与当前状态相同时返回成功",
             "enum": [
               "ACTIVE",
               "DISABLED"
@@ -723,10 +938,12 @@
         "type": "object",
         "properties": {
           "oldPassword": {
-            "type": "string"
+            "type": "string",
+            "description": "当前密码明文，不能为空；用于证明操作人本人，与登录共用同一套失败计数，连续错误会触发锁定"
           },
           "newPassword": {
-            "type": "string"
+            "type": "string",
+            "description": "新密码明文，不能为空，需满足密码策略：8–20 位且同时包含大写字母、小写字母与数字，且不能与当前密码相同；不合规时一次返回全部违规项"
           }
         }
       },
@@ -742,15 +959,18 @@
           "loginName": {
             "maxLength": 64,
             "minLength": 0,
-            "type": "string"
+            "type": "string",
+            "description": "登录名，必填，最长 64 个字符；全局唯一且不区分大小写，已被占用返回 40901"
           },
           "displayName": {
             "maxLength": 64,
             "minLength": 0,
-            "type": "string"
+            "type": "string",
+            "description": "展示名，必填，最长 64 个字符；界面上显示给人看的名字，可与登录名不同"
           },
           "subjectType": {
             "type": "string",
+            "description": "主体类型，必填：STAFF 内部员工，OWNER 货主用户。决定下面 ownerId 与 email 是否必填，创建后不可修改",
             "enum": [
               "STAFF",
               "OWNER"
@@ -758,25 +978,31 @@
           },
           "ownerId": {
             "type": "integer",
+            "description": "所属货主标识，以字符串传输：货主用户必填，内部员工必须不传。取值来自货主列表，创建后不可修改",
             "format": "int64"
           },
           "email": {
             "maxLength": 128,
             "minLength": 0,
-            "type": "string"
+            "type": "string",
+            "description": "邮箱，最长 128 个字符，格式需合法：内部员工必填（用于自助找回密码），货主用户可为空；全局唯一，已被其他账号使用返回 40903"
           },
           "wecomUserId": {
             "maxLength": 64,
             "minLength": 0,
-            "type": "string"
+            "type": "string",
+            "description": "企业微信 userid，最长 64 个字符，内部员工用于应用消息推送，可为空"
           },
           "initialPassword": {
-            "type": "string"
+            "type": "string",
+            "description": "初始密码明文，必填，需满足密码策略：8–20 位且同时包含大写字母、小写字母与数字；账号落地时只存哈希，且被标记为首次登录必须修改"
           },
           "roleIds": {
             "type": "array",
+            "description": "要分配的角色标识（数组元素为字符串形式的十进制整数）；为空或省略表示不分配角色。角色必须存在，否则返回 40000",
             "items": {
               "type": "integer",
+              "description": "要分配的角色标识（数组元素为字符串形式的十进制整数）；为空或省略表示不分配角色。角色必须存在，否则返回 40000",
               "format": "int64"
             }
           }
@@ -787,10 +1013,14 @@
         "properties": {
           "code": {
             "type": "integer",
-            "format": "int32"
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
           },
           "message": {
-            "type": "string"
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
           },
           "data": {
             "$ref": "#/components/schemas/CreatedUserResponse"
@@ -801,12 +1031,15 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "新账号的用户标识，字符串形式的十进制整数；后续详情、编辑、启停、分配角色都用它定位，同时用于跳转到详情页"
           },
           "loginName": {
-            "type": "string"
+            "type": "string",
+            "description": "新账号的登录名，按落库值返回（未做大小写改写）；与请求里的登录名一致，便于前端核对"
           }
-        }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
       },
       "CreateRoleRequest": {
         "required": [
@@ -817,22 +1050,27 @@
         "properties": {
           "code": {
             "pattern": "^[A-Z][A-Z0-9_]{1,31}$",
-            "type": "string"
+            "type": "string",
+            "description": "角色编码，必填：需以大写字母开头，只能包含大写字母、数字与下划线，长度 2 到 32 位。程序按编码引用角色，创建后不可修改；全局唯一（含已删除的角色），已被占用返回 40902"
           },
           "name": {
             "maxLength": 64,
             "minLength": 0,
-            "type": "string"
+            "type": "string",
+            "description": "角色名称，必填，最长 64 个字符；给人看的名字，可重名"
           },
           "remark": {
             "maxLength": 255,
             "minLength": 0,
-            "type": "string"
+            "type": "string",
+            "description": "备注，最长 255 个字符，可为空"
           },
           "menuIds": {
             "type": "array",
+            "description": "勾选的菜单与权限点标识（数组元素为字符串形式的十进制整数）；为空或省略表示不授权任何权限。元素必须存在，否则返回 40000",
             "items": {
               "type": "integer",
+              "description": "勾选的菜单与权限点标识（数组元素为字符串形式的十进制整数）；为空或省略表示不授权任何权限。元素必须存在，否则返回 40000",
               "format": "int64"
             }
           }
@@ -843,10 +1081,14 @@
         "properties": {
           "code": {
             "type": "integer",
-            "format": "int32"
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
           },
           "message": {
-            "type": "string"
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
           },
           "data": {
             "$ref": "#/components/schemas/CreatedRoleResponse"
@@ -857,12 +1099,15 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "新角色的标识，字符串形式的十进制整数；后续详情、编辑、启停、删除都用它定位"
           },
           "code": {
-            "type": "string"
+            "type": "string",
+            "description": "新角色编码，按落库值返回；程序按编码引用角色，创建后不可修改"
           }
-        }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
       },
       "LoginRequest": {
         "required": [
@@ -872,10 +1117,12 @@
         "type": "object",
         "properties": {
           "loginName": {
-            "type": "string"
+            "type": "string",
+            "description": "登录名，不能为空；员工账号由管理员在仓网端指定，货主账号由系统生成。全局唯一且不区分大小写"
           },
           "password": {
-            "type": "string"
+            "type": "string",
+            "description": "明文密码，不能为空，仅在本次请求体中出现；服务端只保存哈希，不落库明文、不写日志、不回显"
           }
         }
       },
@@ -884,10 +1131,14 @@
         "properties": {
           "code": {
             "type": "integer",
-            "format": "int32"
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
           },
           "message": {
-            "type": "string"
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
           },
           "data": {
             "$ref": "#/components/schemas/LoginResponse"
@@ -898,43 +1149,57 @@
         "type": "object",
         "properties": {
           "token": {
-            "type": "string"
+            "type": "string",
+            "description": "访问令牌，调用方放入请求头 Authorization: Bearer <token>。有效期由服务端配置（默认 2 小时），过期或账号被停用后失效，需重新登录换取"
           },
           "subjectType": {
-            "type": "string"
+            "type": "string",
+            "description": "主体类型编码：STAFF 内部员工，OWNER 货主账号。前端据此决定界面形态"
           },
           "ownerId": {
-            "type": "string"
+            "type": "string",
+            "description": "所属货主标识，字符串形式的十进制整数；内部员工为 null。以字符串传输是因为超过 2^53 的整数在 JS 里会丢精度"
           },
           "displayName": {
-            "type": "string"
+            "type": "string",
+            "description": "展示名，登录后显示在页头"
           },
           "mustChangePassword": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "是否需要先改密：true 表示本次登录只放行改密接口，其余业务接口返回 40104，前端应直接跳改密页而不是首页"
           },
           "roles": {
             "type": "array",
+            "description": "生效中的角色编码列表（不是角色标识）；没有角色时为空数组。停用中的角色不会出现在这里",
             "items": {
-              "type": "string"
+              "type": "string",
+              "description": "生效中的角色编码列表（不是角色标识）；没有角色时为空数组。停用中的角色不会出现在这里"
             }
           },
           "accessiblePortals": {
             "type": "array",
+            "description": "可进入的前端应用编码：console 仓网端，portal 货主端；前端据此选择登录后跳转的端。由主体类型决定，内部员工只能进仓网端，货主账号只能进货主端",
             "items": {
-              "type": "string"
+              "type": "string",
+              "description": "可进入的前端应用编码：console 仓网端，portal 货主端；前端据此选择登录后跳转的端。由主体类型决定，内部员工只能进仓网端，货主账号只能进货主端"
             }
           }
-        }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
       },
       "ApiResultPageResultUserListItemResponse": {
         "type": "object",
         "properties": {
           "code": {
             "type": "integer",
-            "format": "int32"
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
           },
           "message": {
-            "type": "string"
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
           },
           "data": {
             "$ref": "#/components/schemas/PageResultUserListItemResponse"
@@ -946,69 +1211,92 @@
         "properties": {
           "pageNo": {
             "type": "integer",
-            "format": "int32"
+            "description": "页码，从 1 开始",
+            "format": "int32",
+            "example": 1
           },
           "pageSize": {
             "type": "integer",
-            "format": "int32"
+            "description": "每页条数，取值 1 至 200，超出范围时接口返回 40000",
+            "format": "int32",
+            "example": 20
           },
           "total": {
             "type": "integer",
-            "format": "int64"
+            "description": "满足筛选条件的总条数，不是本页条数",
+            "format": "int64",
+            "example": 137
           },
           "records": {
             "type": "array",
+            "description": "本页数据；无数据时为空数组，不会是 null",
             "items": {
               "$ref": "#/components/schemas/UserListItemResponse"
             }
           }
-        }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
       },
       "UserListItemResponse": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "用户标识，字符串形式的十进制整数；详情、编辑、启停、分配角色都用它定位"
           },
           "loginName": {
-            "type": "string"
+            "type": "string",
+            "description": "登录名，全局唯一且不区分大小写"
           },
           "displayName": {
-            "type": "string"
+            "type": "string",
+            "description": "展示名，列表上显示给人看的名字"
           },
           "subjectType": {
-            "type": "string"
+            "type": "string",
+            "description": "主体类型编码：STAFF 内部员工，OWNER 货主用户"
           },
           "ownerId": {
-            "type": "string"
+            "type": "string",
+            "description": "所属货主标识，字符串形式的十进制整数；内部员工为 null，前端据此显示「—」而不是空白"
           },
           "ownerName": {
-            "type": "string"
+            "type": "string",
+            "description": "所属货主名称；内部员工，或货主已被逻辑删除时为 null"
           },
           "status": {
-            "type": "string"
+            "type": "string",
+            "description": "账号状态编码：ACTIVE 启用，DISABLED 停用"
           },
           "roles": {
             "type": "array",
+            "description": "已分配的角色编码列表（含停用中的角色）；没有角色时为空数组。列表要显示人能读的编码，编辑表单回填用的角色标识在详情接口的 roleIds 里给",
             "items": {
-              "type": "string"
+              "type": "string",
+              "description": "已分配的角色编码列表（含停用中的角色）；没有角色时为空数组。列表要显示人能读的编码，编辑表单回填用的角色标识在详情接口的 roleIds 里给"
             }
           },
           "lastLoginAt": {
             "type": "string",
+            "description": "最后登录时刻，ISO 8601 带时区（UTC），如 2026-10-24T08:30:00Z；从未登录过为 null",
             "format": "date-time"
           }
-        }
+        },
+        "description": "本页数据；无数据时为空数组，不会是 null"
       },
       "ApiResultUserDetailResponse": {
         "type": "object",
         "properties": {
           "code": {
             "type": "integer",
-            "format": "int32"
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
           },
           "message": {
-            "type": "string"
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
           },
           "data": {
             "$ref": "#/components/schemas/UserDetailResponse"
@@ -1019,66 +1307,87 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "用户标识，字符串形式的十进制整数；与列表行同名字段含义一致"
           },
           "loginName": {
-            "type": "string"
+            "type": "string",
+            "description": "登录名，全局唯一且不区分大小写；不可编辑"
           },
           "displayName": {
-            "type": "string"
+            "type": "string",
+            "description": "展示名，可编辑"
           },
           "subjectType": {
-            "type": "string"
+            "type": "string",
+            "description": "主体类型编码：STAFF 内部员工，OWNER 货主用户；决定 ownerId 与 email 的必填口径，不可编辑"
           },
           "ownerId": {
-            "type": "string"
+            "type": "string",
+            "description": "所属货主标识，字符串形式的十进制整数；内部员工为 null，不可编辑"
           },
           "ownerName": {
-            "type": "string"
+            "type": "string",
+            "description": "所属货主名称；内部员工，或货主已被逻辑删除时为 null"
           },
           "status": {
-            "type": "string"
+            "type": "string",
+            "description": "账号状态编码：ACTIVE 启用，DISABLED 停用"
           },
           "roles": {
             "type": "array",
+            "description": "已分配的角色编码列表（含停用中的角色），供只读展示；没有角色时为空数组",
             "items": {
-              "type": "string"
+              "type": "string",
+              "description": "已分配的角色编码列表（含停用中的角色），供只读展示；没有角色时为空数组"
             }
           },
           "lastLoginAt": {
             "type": "string",
+            "description": "最后登录时刻，ISO 8601 带时区（UTC）；从未登录过为 null",
             "format": "date-time"
           },
           "email": {
-            "type": "string"
+            "type": "string",
+            "description": "邮箱；货主账号可为 null，内部员工必有值（用于自助找回密码）。编辑接口按全量替换处理"
           },
           "wecomUserId": {
-            "type": "string"
+            "type": "string",
+            "description": "企业微信 userid，用于应用消息推送；可为 null。编辑接口按全量替换处理"
           },
           "dataScopeType": {
-            "type": "string"
+            "type": "string",
+            "description": "用户级数据范围覆盖值；null 表示继承角色默认。本批只读，配置入口在后续任务"
           },
           "createdAt": {
             "type": "string",
+            "description": "账号创建时刻，ISO 8601 带时区（UTC）",
             "format": "date-time"
           },
           "roleIds": {
             "type": "array",
+            "description": "已分配的角色标识列表（字符串形式的十进制整数），用于回填编辑表单的勾选状态；没有角色时为空数组。与 roles 是同一批角色的两种表示",
             "items": {
-              "type": "string"
+              "type": "string",
+              "description": "已分配的角色标识列表（字符串形式的十进制整数），用于回填编辑表单的勾选状态；没有角色时为空数组。与 roles 是同一批角色的两种表示"
             }
           }
-        }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
       },
       "ApiResultPageResultRoleListItemResponse": {
         "type": "object",
         "properties": {
           "code": {
             "type": "integer",
-            "format": "int32"
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
           },
           "message": {
-            "type": "string"
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
           },
           "data": {
             "$ref": "#/components/schemas/PageResultRoleListItemResponse"
@@ -1090,64 +1399,85 @@
         "properties": {
           "pageNo": {
             "type": "integer",
-            "format": "int32"
+            "description": "页码，从 1 开始",
+            "format": "int32",
+            "example": 1
           },
           "pageSize": {
             "type": "integer",
-            "format": "int32"
+            "description": "每页条数，取值 1 至 200，超出范围时接口返回 40000",
+            "format": "int32",
+            "example": 20
           },
           "total": {
             "type": "integer",
-            "format": "int64"
+            "description": "满足筛选条件的总条数，不是本页条数",
+            "format": "int64",
+            "example": 137
           },
           "records": {
             "type": "array",
+            "description": "本页数据；无数据时为空数组，不会是 null",
             "items": {
               "$ref": "#/components/schemas/RoleListItemResponse"
             }
           }
-        }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
       },
       "RoleListItemResponse": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "角色标识，字符串形式的十进制整数；详情、编辑、启停、删除都用它定位"
           },
           "code": {
-            "type": "string"
+            "type": "string",
+            "description": "角色编码，程序按它引用角色，创建后不可修改"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "角色名称，界面展示用，可重名"
           },
           "builtin": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "是否内置角色：true 表示超级管理员一类的系统自带角色，不可编辑、不可停用、不可删除"
           },
           "status": {
-            "type": "string"
+            "type": "string",
+            "description": "角色状态编码：ACTIVE 启用，DISABLED 停用。停用的角色仍会出现在列表里，但其权限点在下一次请求起不再生效"
           },
           "userCount": {
             "type": "integer",
+            "description": "已分配该角色的用户数，取值为整数；大于 0 时该角色不可删除",
             "format": "int64"
           },
           "permissionCount": {
             "type": "integer",
+            "description": "该角色已勾选的菜单与权限点数量，取值为整数（菜单与操作两级都计入）",
             "format": "int64"
           },
           "remark": {
-            "type": "string"
+            "type": "string",
+            "description": "备注，可为 null"
           }
-        }
+        },
+        "description": "本页数据；无数据时为空数组，不会是 null"
       },
       "ApiResultRoleDetailResponse": {
         "type": "object",
         "properties": {
           "code": {
             "type": "integer",
-            "format": "int32"
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
           },
           "message": {
-            "type": "string"
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
           },
           "data": {
             "$ref": "#/components/schemas/RoleDetailResponse"
@@ -1158,35 +1488,97 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "角色标识，字符串形式的十进制整数；与列表行同名字段含义一致"
           },
           "code": {
-            "type": "string"
+            "type": "string",
+            "description": "角色编码，程序按它引用角色，不可修改"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "角色名称，可编辑"
           },
           "builtin": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "是否内置角色：true 表示系统自带角色，不可编辑、不可停用、不可删除"
           },
           "status": {
-            "type": "string"
+            "type": "string",
+            "description": "角色状态编码：ACTIVE 启用，DISABLED 停用"
           },
           "userCount": {
             "type": "integer",
+            "description": "已分配该角色的用户数，取值为整数；大于 0 时该角色不可删除",
             "format": "int64"
           },
           "permissionCount": {
             "type": "integer",
+            "description": "该角色已勾选的菜单与权限点数量，取值为整数",
             "format": "int64"
           },
           "remark": {
-            "type": "string"
+            "type": "string",
+            "description": "备注，可为 null"
           },
           "menuIds": {
             "type": "array",
+            "description": "已勾选的菜单与权限点标识（字符串形式的十进制整数），含菜单与操作两级；未勾选时为空数组。用于回填授权配置页的勾选状态",
             "items": {
-              "type": "string"
+              "type": "string",
+              "description": "已勾选的菜单与权限点标识（字符串形式的十进制整数），含菜单与操作两级；未勾选时为空数组。用于回填授权配置页的勾选状态"
+            }
+          }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
+      },
+      "ApiErrorBody": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "业务错误码，五位整数，前三位对齐 HTTP 语义（401xx 未认证、403xx 无权限、500xx 内部错误）",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string",
+            "description": "面向调用方的中文提示文本，可直接展示"
+          },
+          "data": {
+            "type": "object",
+            "description": "错误响应中恒为 null，调用方不应读取"
+          }
+        },
+        "description": "业务错误响应体，与成功响应同一外壳 ApiResult"
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "401：未登录或登录已失效，前端据此跳转登录页",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorBody"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "403：已登录但没有该接口要求的权限点，前端据此提示无权访问",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorBody"
+            }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "500：服务内部错误，已由全局异常处理记录日志并转换为统一响应体",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorBody"
             }
           }
         }
