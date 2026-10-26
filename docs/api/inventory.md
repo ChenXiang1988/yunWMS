@@ -1,8 +1,8 @@
 # 接口台账
 
 > **生成物，禁止手改。** 由 `code/tools/api-inventory/gen_api_inventory.py` 生成。
-> 来源：实时拉取 `http://localhost:18087/v3/api-docs`
-> 源 commit：`4b961d2`
+> 来源：实时拉取 `http://localhost:18088/v3/api-docs`
+> 源 commit：`0d8e164`
 > 计数口径：OpenAPI operation（path × method），不是 Java 方法数
 > 字段记号：`a.b` 嵌套，`a[]` 数组元素，`↻` 自引用已截断，`…` 嵌套过深已截断
 
@@ -10,15 +10,15 @@
 
 | 项 | 值 |
 | --- | --- |
-| 接口总数 | 15 |
-| GET | 4 |
-| POST | 3 |
-| PUT | 7 |
+| 接口总数 | 22 |
+| GET | 9 |
+| POST | 4 |
+| PUT | 8 |
 | DELETE | 1 |
 
 | 主体 | 数量 |
 | --- | --- |
-| console（仓网端） | 13 |
+| console（仓网端） | 20 |
 | 共用 | 2 |
 
 ## 统一响应外壳
@@ -35,7 +35,7 @@
 
 ## 接口清单
 
-共 15 个接口。
+共 22 个接口。
 
 ### 1. `POST /api/auth/login`
 
@@ -89,7 +89,218 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 3. `GET /api/console/roles`
+### 3. `GET /api/console/dicts`
+
+查询字典类型清单
+
+返回全部字典类型及各自的项数，供字典管理页与「有哪些字典可用」的调试场景使用。itemCount 计的是该类下未删除的项数，含已停用的项——它回答「这一类有多少条」，不是「有多少条可选」；下拉要的是启用项，由字典项接口的 enabledOnly 决定。停用的类型也会出现在清单里，否则停用之后再也找不到它、无法重新启用。不存在的路径与参数错误分别返回 404 段与 400 段错误码。
+
+- 主体：console（仓网端）
+- 分页：否
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+无请求体。
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `[]` | DictTypeListItemResponse[] | 业务数据；失败时为 null，分页接口为 PageResult 结构 |
+| `[][].dictType` | string | 字典类型编码，如 OWNER_TYPE；取某类字典项时作为路径参数 |
+| `[][].name` | string | 字典类型中文名，如「客户类型」 |
+| `[][].nameEn` | string | 字典类型英文名，可为 null |
+| `[][].itemCount` | integer(int64) | 该类型下未删除的字典项数量，含已停用的项；取值为整数 |
+| `[][].status` | string | 类型状态编码：ACTIVE 启用，DISABLED 停用。停用的类型不应再被新的引用处使用 |
+
+### 4. `GET /api/console/dicts/batch`
+
+批量查询多类字典项
+
+一个表单常要同时取客户类型、温区、合规属性，按类型逐个请求会让页面变慢，因此提供按多类型一次取回的接口：types 逗号分隔，返回 { 类型编码: 字典项列表 }。不存在的类型静默跳过——入参可能来自管理员刚删掉的配置，为此报错会让整页挂掉；由此「类型不存在」「类型下没有任何项」「项全部被筛选掉」三种情况都表现为结果里不出现该键，前端按 data[类型] ?? [] 取值即可。多类型的读取由一条 SQL 完成，SQL 条数与类型数量无关。enabledOnly 与单类型接口同义：true（默认）只返回启用项，false 含停用项。
+
+- 主体：console（仓网端）
+- 分页：否
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+无请求体。
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `—` | object | 无字段声明 |
+
+### 5. `GET /api/console/dicts/{dictType}/items`
+
+查询某类字典项
+
+取一个字典类型下的项，按排序号升序返回，同时带出中英双语名称、取值、状态与扩展属性。enabledOnly 承载两种消费语义：true（默认）只返回启用项，对应「停用后不可选」；false 连停用项一起返回，对应「历史数据仍正常展示」——编辑页要同时显示下拉与历史值，拆成两个端点会逼它调两次。parentValue 按扩展属性里的 parent 过滤层级（如 PROVINCE 下取国家 US 的州/省），不靠给字典项加 parent_id 列。label 与 labelEn 原样返回、后端不做语言回退：接口不知道界面语言，回退会让「英文界面看到中文」无法排查。字典类型不存在返回 404 段错误码。
+
+- 主体：console（仓网端）
+- 分页：否
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+无请求体。
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `[]` | DictItemResponse[] | 业务数据；失败时为 null，分页接口为 PageResult 结构 |
+| `[][].id` | string | 字典项标识，字符串形式的十进制整数 |
+| `[][].label` | string | 中文名，如「冷藏」 |
+| `[][].labelEn` | string | 英文名，可为 null；前端按当前界面语言取值，为空时回退到 label |
+| `[][].value` | string | 取值，如 CHILLED；业务数据存的就是这个值 |
+| `[][].sortNo` | integer(int32) | 排序号，越小越靠前；同排序号时按标识升序 |
+| `[][].status` | string | 项状态编码：ACTIVE 启用，DISABLED 停用。停用项不出现在下拉里，历史数据仍按它展示 |
+| `[][].ext` | object | 扩展属性，原样透传；没有扩展属性时为 {}；行政区划等层级字典用 parent 指向父项的 value |
+| `[][].ext` | object | 无字段声明 |
+
+### 6. `GET /api/console/owners`
+
+分页查询货主
+
+供管理端货主列表页使用：按名称或编码模糊匹配、按客户类型与状态筛选，返回每行的标识、编码、名称、客户类型、状态与更新时间。keyword 同时匹配系统编码与客户名称（仓储侧还匹配外部码），全空白按不筛选处理。ownerType 按字典 value 精确匹配，但不校验该值是否仍在字典中——存量货主可能引用已停用的字典项，按它筛选不该因此报错。status 取状态枚举名，未知值返回 40000。页码从 1 开始，每页条数上限 200，越界返回 40000（拒绝而不是静默截断）。本批不返回主负责人与 SKU 数：两个字段分别依赖联系人（3.5）与商品模块，尚无数据来源，字段因此不出现，而不是返回 null 或 0 冒充已有能力。列表当前返回全部货主，数据范围过滤属后续任务。
+
+- 主体：console（仓网端）
+- 分页：是
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+无请求体。
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `pageNo` | integer(int32) | 页码，从 1 开始 |
+| `pageSize` | integer(int32) | 每页条数，取值 1 至 200，超出范围时接口返回 40000 |
+| `total` | integer(int64) | 满足筛选条件的总条数，不是本页条数 |
+| `records` | OwnerListItemResponse[] | 本页数据；无数据时为空数组，不会是 null |
+| `records[].id` | string | 货主标识，字符串形式的十进制整数；详情、编辑都用它定位 |
+| `records[].code` | string | 系统编码，形如 OWNER0001，由编码规则生成且不可修改；列表中按等宽字体展示 |
+| `records[].name` | string | 客户名称，可与其他货主重名；点击进入详情 |
+| `records[].ownerType` | string | 客户类型，取自 OWNER_TYPE 字典的 value：BRAND 品牌方，FORWARDER 货代同行；按标签样式展示 |
+| `records[].status` | string | 货主状态编码：DRAFT 草稿，POTENTIAL 潜在，ACTIVE 合作中，SUSPENDED 暂停，TERMINATED 终止。终止态的货主仍出现在列表里，写操作按钮应置灰 |
+| `records[].updatedAt` | string(date-time) | 最后修改时刻，ISO 8601 带时区（UTC） |
+
+### 7. `POST /api/console/owners`
+
+新建货主
+
+由仓网端操作人建立一个货主档案。系统生成客户编码并占用 SKU 前缀——编码不回填到请求里，它由取号引擎产生，只有响应体里才有。initialStatus 决定这次是「保存草稿」（DRAFT）还是「直接提交」（ACTIVE），其余三个状态只能由状态流转产生，传入返回 40000。SKU 前缀必须是 4 位大写字母或数字且不含 0、O、1、I，系统拒绝这类输入而不做替换；它全局唯一（草稿也算占用）且建档后锁定，因此重复返回 40905，提示里带被占用的前缀原文与占用方的系统编码。外部码可选，在未删除的货主之间唯一，重复返回 40906。客户名称可以重复——名称不是标识。注册地址按字典校验：国家与州省必须取自已启用的字典项，州省必须属于所选国家，美国必须填州省，无邮编的地区（港澳台）可以留空邮编。编码撞号返回 40904，重新提交即可。
+
+- 主体：console（仓网端）
+- 分页：否
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `name` | string | 是 | 客户名称，必填，最长 100 个字符；可与其他货主重名——名称不是标识，系统编码才是 |
+| `nameEn` | string | 否 | 英文名称，最长 100 个字符，可为空 |
+| `shortName` | string | 否 | 货主简称，最长 20 个字符，可为空；用于 SKUID 标签，为空时展示层取名称前 8 字 |
+| `externalCode` | string | 否 | 外部系统编码，最长 64 个字符，可为空；在未删除的货主之间唯一，被占用返回 40906 |
+| `skuPrefix` | string | 是 | SKU 前缀，必填：4 位大写字母或数字，且不能包含 0、O、1、I（这四个字符在标签上易与其他字符认混）。系统拒绝含这些字符的输入，不做自动替换。全局唯一（含草稿），已被占用返回 40905；创建后不可修改，也不会出现在编辑接口里 |
+| `ownerType` | string | 是 | 客户类型，必填，取自 OWNER_TYPE 字典的启用项：BRAND 品牌方，FORWARDER 货代同行；不在字典里返回 40000。仅用于筛选与统计，不改变数据模型 |
+| `settlementEntity` | string | 是 | 结算主体，必填，最长 100 个字符；开票与对账的抬头 |
+| `country` | string | 是 | 注册国家，必填，2 位大写字母的 ISO 3166-1 alpha-2 代码，取自 COUNTRY 字典的启用项；不在字典里返回 40000 |
+| `province` | string | 否 | 州省，取 PROVINCE 字典中属于所选国家的启用项，不为空时必须属于该国（否则 40000）；国家为 US 时必填 |
+| `city` | string | 是 | 注册城市，必填，最长 64 个字符 |
+| `district` | string | 否 | 区县，最长 64 个字符，可为空 |
+| `postalCode` | string | 否 | 邮政编码，最长 20 个字符；港澳台等无邮编地区可为空，其余地区必填，缺失返回 40000 |
+| `addressLine` | string | 是 | 详细地址，必填，最长 255 个字符 |
+| `remark` | string | 否 | 备注，最长 500 个字符，可为空 |
+| `initialStatus` | string enum(DRAFT, POTENTIAL, ACTIVE, SUSPENDED, TERMINATED) | 是 | 初始状态，必填，只接受 DRAFT（保存草稿，不生成主账号、不出现在其他模块的货主下拉中）与 ACTIVE（直接提交，合作中）；POTENTIAL / SUSPENDED / TERMINATED 只能由状态流转产生，此处传入返回 40000 |
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | string | 新货主的标识，字符串形式的十进制整数；后续详情、编辑都用它定位 |
+| `code` | string | 系统编码，形如 OWNER0001，由编码规则生成且不可修改；被占用时接口返回 40904，此时重新提交即可 |
+
+### 8. `GET /api/console/owners/{id}`
+
+查询货主详情
+
+取单个货主的完整档案：列表行已有的标识、编码、名称、客户类型、状态与更新时间之外，再带出英文名称、简称、外部码、SKU 前缀、结算主体、注册地址六字段、备注与创建时间，供详情页「基本信息」页签回填。SKU 前缀只读——它是已生成 SKUID 的前四位，创建后不可修改。本批只做基本信息页签：联系人（3.5）、税号（3.6）与主账号（3.3）不在响应里，也不返回占位字段。货主不存在或已被逻辑删除返回 40400。
+
+- 主体：console（仓网端）
+- 分页：否
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+无请求体。
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | string | 货主标识，字符串形式的十进制整数 |
+| `code` | string | 系统编码，形如 OWNER0001；只读，创建后不可修改 |
+| `name` | string | 客户名称，可与其他货主重名 |
+| `ownerType` | string | 客户类型，取自 OWNER_TYPE 字典的 value：BRAND 品牌方，FORWARDER 货代同行 |
+| `status` | string | 货主状态编码：DRAFT 草稿，POTENTIAL 潜在，ACTIVE 合作中，SUSPENDED 暂停，TERMINATED 终止。只读——流转入口属状态流转任务 |
+| `updatedAt` | string(date-time) | 最后修改时刻，ISO 8601 带时区（UTC） |
+| `nameEn` | string | 英文名称，可为 null |
+| `shortName` | string | 货主简称，可为 null；用于 SKUID 标签，为空时展示层取名称前 8 字 |
+| `externalCode` | string | 外部系统编码，可为 null；在未删除的货主之间唯一，被他人占用时编辑返回 40906 |
+| `skuPrefix` | string | SKU 前缀原文（4 位大写字母或数字，不含 0、O、1、I）；只读，创建后不可修改 |
+| `settlementEntity` | string | 结算主体，开票与对账的抬头 |
+| `country` | string | 注册国家，2 位大写字母的 ISO 3166-1 alpha-2 代码，取自 COUNTRY 字典 |
+| `province` | string | 州省，取 PROVINCE 字典中属于所选国家的值；国家为 US 时必有值，其余国家可为 null |
+| `city` | string | 注册城市 |
+| `district` | string | 区县，可为 null |
+| `postalCode` | string | 邮政编码；无邮编的地区（港澳台）为 null |
+| `addressLine` | string | 详细地址 |
+| `remark` | string | 备注，可为 null |
+| `createdAt` | string(date-time) | 创建时刻，ISO 8601 带时区（UTC） |
+
+### 9. `PUT /api/console/owners/{id}`
+
+编辑货主档案
+
+全量替换可编辑字段：字段传 null 表示清空，不传按 null 处理，即调用方必须提交自己希望保留的全部值。编码、SKU 前缀与状态不在可编辑范围内——编码是标识，SKU 前缀是已生成 SKUID 的前四位（改了会让已打印的标签指向另一个货主的货，草稿期同样不允许），状态属状态流转。这三个字段不出现在请求体里，多传会被拒绝而不是静默忽略。字典校验与建档同一套：客户类型、国家要启用，州省要属于所选国家，美国必须填州省，无邮编地区（港澳台）可留空邮编。外部码在未删除的货主之间唯一，被他人占用返回 40906；传 null 可清空，清空后该编码可被其他货主使用。客户名称可以重复。货主不存在返回 40400。成功后不回带详情，需要最新值时重新取。
+
+- 主体：console（仓网端）
+- 分页：否
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `name` | string | 是 | 客户名称，必填，最长 100 个字符；可与其他货主重名 |
+| `nameEn` | string | 否 | 英文名称，最长 100 个字符，可为空（传 null 表示清空） |
+| `shortName` | string | 否 | 货主简称，最长 20 个字符，可为空（传 null 表示清空） |
+| `externalCode` | string | 否 | 外部系统编码，最长 64 个字符，可为空；在未删除的货主之间唯一，被占用返回 40906。传 null 表示清空，清空后该编码可被其他货主使用 |
+| `ownerType` | string | 是 | 客户类型，必填，取自 OWNER_TYPE 字典的启用项：BRAND 品牌方，FORWARDER 货代同行；不在字典里返回 40000 |
+| `settlementEntity` | string | 是 | 结算主体，必填，最长 100 个字符；开票与对账的抬头 |
+| `country` | string | 是 | 注册国家，必填，2 位大写字母的 ISO 3166-1 alpha-2 代码，取自 COUNTRY 字典的启用项；不在字典里返回 40000 |
+| `province` | string | 否 | 州省，取 PROVINCE 字典中属于所选国家的启用项，不为空时必须属于该国（否则 40000）；国家为 US 时必填 |
+| `city` | string | 是 | 注册城市，必填，最长 64 个字符 |
+| `district` | string | 否 | 区县，最长 64 个字符，可为空（传 null 表示清空） |
+| `postalCode` | string | 否 | 邮政编码，最长 20 个字符；港澳台等无邮编地区可为空，其余地区必填，缺失返回 40000 |
+| `addressLine` | string | 是 | 详细地址，必填，最长 255 个字符 |
+| `remark` | string | 否 | 备注，最长 500 个字符，可为空（传 null 表示清空） |
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `—` | object | 无字段声明 |
+
+### 10. `GET /api/console/roles`
 
 分页查询角色
 
@@ -120,7 +331,7 @@
 | `records[].permissionCount` | integer(int64) | 该角色已勾选的菜单与权限点数量，取值为整数（菜单与操作两级都计入） |
 | `records[].remark` | string | 备注，可为 null |
 
-### 4. `POST /api/console/roles`
+### 11. `POST /api/console/roles`
 
 创建角色
 
@@ -146,7 +357,7 @@
 | `id` | string | 新角色的标识，字符串形式的十进制整数；后续详情、编辑、启停、删除都用它定位 |
 | `code` | string | 新角色编码，按落库值返回；程序按编码引用角色，创建后不可修改 |
 
-### 5. `GET /api/console/roles/{id}`
+### 12. `GET /api/console/roles/{id}`
 
 查询角色详情
 
@@ -174,7 +385,7 @@
 | `remark` | string | 备注，可为 null |
 | `menuIds` | string[] | 已勾选的菜单与权限点标识（字符串形式的十进制整数），含菜单与操作两级；未勾选时为空数组。用于回填授权配置页的勾选状态 |
 
-### 6. `PUT /api/console/roles/{id}`
+### 13. `PUT /api/console/roles/{id}`
 
 编辑角色
 
@@ -198,7 +409,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 7. `DELETE /api/console/roles/{id}`
+### 14. `DELETE /api/console/roles/{id}`
 
 删除角色
 
@@ -218,7 +429,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 8. `PUT /api/console/roles/{id}/status`
+### 15. `PUT /api/console/roles/{id}/status`
 
 启用或停用角色
 
@@ -240,7 +451,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 9. `GET /api/console/users`
+### 16. `GET /api/console/users`
 
 分页查询用户账号
 
@@ -272,7 +483,7 @@
 | `records[].roles` | string[] | 已分配的角色编码列表（含停用中的角色）；没有角色时为空数组。列表要显示人能读的编码，编辑表单回填用的角色标识在详情接口的 roleIds 里给 |
 | `records[].lastLoginAt` | string(date-time) | 最后登录时刻，ISO 8601 带时区（UTC），如 2026-10-24T08:30:00Z；从未登录过为 null |
 
-### 10. `POST /api/console/users`
+### 17. `POST /api/console/users`
 
 创建用户账号
 
@@ -302,7 +513,7 @@
 | `id` | string | 新账号的用户标识，字符串形式的十进制整数；后续详情、编辑、启停、分配角色都用它定位，同时用于跳转到详情页 |
 | `loginName` | string | 新账号的登录名，按落库值返回（未做大小写改写）；与请求里的登录名一致，便于前端核对 |
 
-### 11. `GET /api/console/users/{id}`
+### 18. `GET /api/console/users/{id}`
 
 查询用户详情
 
@@ -335,7 +546,7 @@
 | `createdAt` | string(date-time) | 账号创建时刻，ISO 8601 带时区（UTC） |
 | `roleIds` | string[] | 已分配的角色标识列表（字符串形式的十进制整数），用于回填编辑表单的勾选状态；没有角色时为空数组。与 roles 是同一批角色的两种表示 |
 
-### 12. `PUT /api/console/users/{id}`
+### 19. `PUT /api/console/users/{id}`
 
 编辑用户基本信息
 
@@ -359,7 +570,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 13. `PUT /api/console/users/{id}/password`
+### 20. `PUT /api/console/users/{id}/password`
 
 重置他人密码
 
@@ -381,7 +592,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 14. `PUT /api/console/users/{id}/roles`
+### 21. `PUT /api/console/users/{id}/roles`
 
 分配用户角色（整批替换）
 
@@ -403,7 +614,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 15. `PUT /api/console/users/{id}/status`
+### 22. `PUT /api/console/users/{id}/status`
 
 启用或停用用户账号
 

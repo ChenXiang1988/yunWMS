@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:18087",
+      "url": "http://localhost:18088",
       "description": "Generated server url"
     }
   ],
@@ -17,12 +17,20 @@
       "description": "仓网端的角色管理：建、读、改、启停、删在这里闭环。角色是授权数据的来源，能改角色就等于能给自己加权限，因此全部接口都要求权限点而不是只要求登录。货主端没有角色管理能力，权限由管理员在这里配置。"
     },
     {
+      "name": "货主档案",
+      "description": "仓网端的货主（客户）建档、列表、详情与编辑。建档由系统生成客户编码并占用 SKU 前缀；编辑不能改编码、SKU 前缀与状态。全部接口都要求对应权限点，只登录但没有权限点的账号会拿到 403。"
+    },
+    {
       "name": "认证",
       "description": "两端共用的登录与本人改密入口。登录时的主体类型（内部员工或货主账号）由后端按账号判定，调用方不传也不允许传。"
     },
     {
       "name": "用户管理",
       "description": "仓网端的账号管理：建号、查询、编辑基本信息、启停、重置密码与分配角色。货主端没有建号能力，货主账号由管理员在这里开通。全部接口都要求对应权限点，只登录但没有权限点的账号会拿到 403。"
+    },
+    {
+      "name": "数据字典",
+      "description": "字典的读取入口：类型清单、某类字典项、多类型批量读取。同一个接口用 enabledOnly 承载两种消费语义——下拉只要启用项，历史数据回显要连停用项一起取，因此不拆成两个端点；双语名称同时返回，由前端按当前界面语言取值，后端不做回退。"
     }
   ],
   "paths": {
@@ -467,6 +475,100 @@
         }
       }
     },
+    "/api/console/owners/{id}": {
+      "get": {
+        "tags": [
+          "货主档案"
+        ],
+        "summary": "查询货主详情",
+        "description": "取单个货主的完整档案：列表行已有的标识、编码、名称、客户类型、状态与更新时间之外，再带出英文名称、简称、外部码、SKU 前缀、结算主体、注册地址六字段、备注与创建时间，供详情页「基本信息」页签回填。SKU 前缀只读——它是已生成 SKUID 的前四位，创建后不可修改。本批只做基本信息页签：联系人（3.5）、税号（3.6）与主账号（3.3）不在响应里，也不返回占位字段。货主不存在或已被逻辑删除返回 40400。",
+        "operationId": "detail_2",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "货主标识，取自列表响应里的 id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOwnerDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "货主档案"
+        ],
+        "summary": "编辑货主档案",
+        "description": "全量替换可编辑字段：字段传 null 表示清空，不传按 null 处理，即调用方必须提交自己希望保留的全部值。编码、SKU 前缀与状态不在可编辑范围内——编码是标识，SKU 前缀是已生成 SKUID 的前四位（改了会让已打印的标签指向另一个货主的货，草稿期同样不允许），状态属状态流转。这三个字段不出现在请求体里，多传会被拒绝而不是静默忽略。字典校验与建档同一套：客户类型、国家要启用，州省要属于所选国家，美国必须填州省，无邮编地区（港澳台）可留空邮编。外部码在未删除的货主之间唯一，被他人占用返回 40906；传 null 可清空，清空后该编码可被其他货主使用。客户名称可以重复。货主不存在返回 40400。成功后不回带详情，需要最新值时重新取。",
+        "operationId": "update_2",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "货主标识，字符串形式的十进制整数",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultVoid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
     "/api/auth/password": {
       "put": {
         "tags": [
@@ -749,6 +851,125 @@
         }
       }
     },
+    "/api/console/owners": {
+      "get": {
+        "tags": [
+          "货主档案"
+        ],
+        "summary": "分页查询货主",
+        "description": "供管理端货主列表页使用：按名称或编码模糊匹配、按客户类型与状态筛选，返回每行的标识、编码、名称、客户类型、状态与更新时间。keyword 同时匹配系统编码与客户名称（仓储侧还匹配外部码），全空白按不筛选处理。ownerType 按字典 value 精确匹配，但不校验该值是否仍在字典中——存量货主可能引用已停用的字典项，按它筛选不该因此报错。status 取状态枚举名，未知值返回 40000。页码从 1 开始，每页条数上限 200，越界返回 40000（拒绝而不是静默截断）。本批不返回主负责人与 SKU 数：两个字段分别依赖联系人（3.5）与商品模块，尚无数据来源，字段因此不出现，而不是返回 null 或 0 冒充已有能力。列表当前返回全部货主，数据范围过滤属后续任务。",
+        "operationId": "page_2",
+        "parameters": [
+          {
+            "name": "pageNo",
+            "in": "query",
+            "description": "页码，从 1 开始；省略时取 1",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "每页条数，上限 200；省略时取 20，超出上限返回 40000",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "description": "按系统编码或客户名称模糊匹配的关键词；省略或全空白表示不筛选",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ownerType",
+            "in": "query",
+            "description": "客户类型，取 OWNER_TYPE 字典的 value（BRAND / FORWARDER）；省略表示不筛选。不校验该值是否仍在字典中",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "货主状态编码：DRAFT / POTENTIAL / ACTIVE / SUSPENDED / TERMINATED；省略表示全部状态，其它值返回 40000",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultPageResultOwnerListItemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "货主档案"
+        ],
+        "summary": "新建货主",
+        "description": "由仓网端操作人建立一个货主档案。系统生成客户编码并占用 SKU 前缀——编码不回填到请求里，它由取号引擎产生，只有响应体里才有。initialStatus 决定这次是「保存草稿」（DRAFT）还是「直接提交」（ACTIVE），其余三个状态只能由状态流转产生，传入返回 40000。SKU 前缀必须是 4 位大写字母或数字且不含 0、O、1、I，系统拒绝这类输入而不做替换；它全局唯一（草稿也算占用）且建档后锁定，因此重复返回 40905，提示里带被占用的前缀原文与占用方的系统编码。外部码可选，在未删除的货主之间唯一，重复返回 40906。客户名称可以重复——名称不是标识。注册地址按字典校验：国家与州省必须取自已启用的字典项，州省必须属于所选国家，美国必须填州省，无邮编的地区（港澳台）可以留空邮编。编码撞号返回 40904，重新提交即可。",
+        "operationId": "create_2",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultCreatedOwnerResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
     "/api/auth/login": {
       "post": {
         "tags": [
@@ -774,6 +995,153 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResultLoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/console/dicts": {
+      "get": {
+        "tags": [
+          "数据字典"
+        ],
+        "summary": "查询字典类型清单",
+        "description": "返回全部字典类型及各自的项数，供字典管理页与「有哪些字典可用」的调试场景使用。itemCount 计的是该类下未删除的项数，含已停用的项——它回答「这一类有多少条」，不是「有多少条可选」；下拉要的是启用项，由字典项接口的 enabledOnly 决定。停用的类型也会出现在清单里，否则停用之后再也找不到它、无法重新启用。不存在的路径与参数错误分别返回 404 段与 400 段错误码。",
+        "operationId": "listTypes",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultListDictTypeListItemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/console/dicts/{dictType}/items": {
+      "get": {
+        "tags": [
+          "数据字典"
+        ],
+        "summary": "查询某类字典项",
+        "description": "取一个字典类型下的项，按排序号升序返回，同时带出中英双语名称、取值、状态与扩展属性。enabledOnly 承载两种消费语义：true（默认）只返回启用项，对应「停用后不可选」；false 连停用项一起返回，对应「历史数据仍正常展示」——编辑页要同时显示下拉与历史值，拆成两个端点会逼它调两次。parentValue 按扩展属性里的 parent 过滤层级（如 PROVINCE 下取国家 US 的州/省），不靠给字典项加 parent_id 列。label 与 labelEn 原样返回、后端不做语言回退：接口不知道界面语言，回退会让「英文界面看到中文」无法排查。字典类型不存在返回 404 段错误码。",
+        "operationId": "items",
+        "parameters": [
+          {
+            "name": "dictType",
+            "in": "path",
+            "description": "字典类型编码，取自类型清单响应里的 dictType，如 OWNER_TYPE",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "enabledOnly",
+            "in": "query",
+            "description": "true（默认）只返回启用项，供下拉使用；false 连停用项一起返回，供历史数据回显",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "parentValue",
+            "in": "query",
+            "description": "只返回扩展属性 parent 等于该值的项，用于按国家取省/州；省略表示不按层级筛选",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultListDictItemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/console/dicts/batch": {
+      "get": {
+        "tags": [
+          "数据字典"
+        ],
+        "summary": "批量查询多类字典项",
+        "description": "一个表单常要同时取客户类型、温区、合规属性，按类型逐个请求会让页面变慢，因此提供按多类型一次取回的接口：types 逗号分隔，返回 { 类型编码: 字典项列表 }。不存在的类型静默跳过——入参可能来自管理员刚删掉的配置，为此报错会让整页挂掉；由此「类型不存在」「类型下没有任何项」「项全部被筛选掉」三种情况都表现为结果里不出现该键，前端按 data[类型] ?? [] 取值即可。多类型的读取由一条 SQL 完成，SQL 条数与类型数量无关。enabledOnly 与单类型接口同义：true（默认）只返回启用项，false 含停用项。",
+        "operationId": "batch",
+        "parameters": [
+          {
+            "name": "types",
+            "in": "query",
+            "description": "字典类型编码，逗号分隔，如 OWNER_TYPE,TEMP_ZONE；重复与空白会被忽略",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "enabledOnly",
+            "in": "query",
+            "description": "true（默认）只返回启用项，供下拉使用；false 连停用项一起返回",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultMapStringListDictItemResponse"
                 }
               }
             }
@@ -927,6 +1295,98 @@
               "ACTIVE",
               "DISABLED"
             ]
+          }
+        }
+      },
+      "OwnerUpdateRequest": {
+        "required": [
+          "addressLine",
+          "city",
+          "country",
+          "name",
+          "ownerType",
+          "settlementEntity"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string",
+            "description": "客户名称，必填，最长 100 个字符；可与其他货主重名",
+            "example": "深圳某某贸易"
+          },
+          "nameEn": {
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string",
+            "description": "英文名称，最长 100 个字符，可为空（传 null 表示清空）"
+          },
+          "shortName": {
+            "maxLength": 20,
+            "minLength": 0,
+            "type": "string",
+            "description": "货主简称，最长 20 个字符，可为空（传 null 表示清空）"
+          },
+          "externalCode": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string",
+            "description": "外部系统编码，最长 64 个字符，可为空；在未删除的货主之间唯一，被占用返回 40906。传 null 表示清空，清空后该编码可被其他货主使用"
+          },
+          "ownerType": {
+            "maxLength": 20,
+            "minLength": 0,
+            "type": "string",
+            "description": "客户类型，必填，取自 OWNER_TYPE 字典的启用项：BRAND 品牌方，FORWARDER 货代同行；不在字典里返回 40000"
+          },
+          "settlementEntity": {
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string",
+            "description": "结算主体，必填，最长 100 个字符；开票与对账的抬头"
+          },
+          "country": {
+            "maxLength": 2,
+            "minLength": 0,
+            "type": "string",
+            "description": "注册国家，必填，2 位大写字母的 ISO 3166-1 alpha-2 代码，取自 COUNTRY 字典的启用项；不在字典里返回 40000"
+          },
+          "province": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string",
+            "description": "州省，取 PROVINCE 字典中属于所选国家的启用项，不为空时必须属于该国（否则 40000）；国家为 US 时必填"
+          },
+          "city": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string",
+            "description": "注册城市，必填，最长 64 个字符"
+          },
+          "district": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string",
+            "description": "区县，最长 64 个字符，可为空（传 null 表示清空）"
+          },
+          "postalCode": {
+            "maxLength": 20,
+            "minLength": 0,
+            "type": "string",
+            "description": "邮政编码，最长 20 个字符；港澳台等无邮编地区可为空，其余地区必填，缺失返回 40000"
+          },
+          "addressLine": {
+            "maxLength": 255,
+            "minLength": 0,
+            "type": "string",
+            "description": "详细地址，必填，最长 255 个字符"
+          },
+          "remark": {
+            "maxLength": 500,
+            "minLength": 0,
+            "type": "string",
+            "description": "备注，最长 500 个字符，可为空（传 null 表示清空）"
           }
         }
       },
@@ -1105,6 +1565,165 @@
           "code": {
             "type": "string",
             "description": "新角色编码，按落库值返回；程序按编码引用角色，创建后不可修改"
+          }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
+      },
+      "OwnerCreateRequest": {
+        "required": [
+          "addressLine",
+          "city",
+          "country",
+          "initialStatus",
+          "name",
+          "ownerType",
+          "settlementEntity",
+          "skuPrefix"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string",
+            "description": "客户名称，必填，最长 100 个字符；可与其他货主重名——名称不是标识，系统编码才是",
+            "example": "深圳某某贸易"
+          },
+          "nameEn": {
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string",
+            "description": "英文名称，最长 100 个字符，可为空",
+            "example": "Shenzhen ABC Trading"
+          },
+          "shortName": {
+            "maxLength": 20,
+            "minLength": 0,
+            "type": "string",
+            "description": "货主简称，最长 20 个字符，可为空；用于 SKUID 标签，为空时展示层取名称前 8 字",
+            "example": "某某贸易"
+          },
+          "externalCode": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string",
+            "description": "外部系统编码，最长 64 个字符，可为空；在未删除的货主之间唯一，被占用返回 40906",
+            "example": "EXT-001"
+          },
+          "skuPrefix": {
+            "maxLength": 4,
+            "minLength": 0,
+            "type": "string",
+            "description": "SKU 前缀，必填：4 位大写字母或数字，且不能包含 0、O、1、I（这四个字符在标签上易与其他字符认混）。系统拒绝含这些字符的输入，不做自动替换。全局唯一（含草稿），已被占用返回 40905；创建后不可修改，也不会出现在编辑接口里",
+            "example": "AMZ1"
+          },
+          "ownerType": {
+            "maxLength": 20,
+            "minLength": 0,
+            "type": "string",
+            "description": "客户类型，必填，取自 OWNER_TYPE 字典的启用项：BRAND 品牌方，FORWARDER 货代同行；不在字典里返回 40000。仅用于筛选与统计，不改变数据模型",
+            "example": "BRAND"
+          },
+          "settlementEntity": {
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string",
+            "description": "结算主体，必填，最长 100 个字符；开票与对账的抬头",
+            "example": "深圳某某贸易有限公司"
+          },
+          "country": {
+            "maxLength": 2,
+            "minLength": 0,
+            "type": "string",
+            "description": "注册国家，必填，2 位大写字母的 ISO 3166-1 alpha-2 代码，取自 COUNTRY 字典的启用项；不在字典里返回 40000",
+            "example": "CN"
+          },
+          "province": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string",
+            "description": "州省，取 PROVINCE 字典中属于所选国家的启用项，不为空时必须属于该国（否则 40000）；国家为 US 时必填",
+            "example": "CN-GD"
+          },
+          "city": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string",
+            "description": "注册城市，必填，最长 64 个字符",
+            "example": "深圳"
+          },
+          "district": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string",
+            "description": "区县，最长 64 个字符，可为空",
+            "example": "南山区"
+          },
+          "postalCode": {
+            "maxLength": 20,
+            "minLength": 0,
+            "type": "string",
+            "description": "邮政编码，最长 20 个字符；港澳台等无邮编地区可为空，其余地区必填，缺失返回 40000",
+            "example": "518000"
+          },
+          "addressLine": {
+            "maxLength": 255,
+            "minLength": 0,
+            "type": "string",
+            "description": "详细地址，必填，最长 255 个字符",
+            "example": "科技园路 1 号"
+          },
+          "remark": {
+            "maxLength": 500,
+            "minLength": 0,
+            "type": "string",
+            "description": "备注，最长 500 个字符，可为空"
+          },
+          "initialStatus": {
+            "type": "string",
+            "description": "初始状态，必填，只接受 DRAFT（保存草稿，不生成主账号、不出现在其他模块的货主下拉中）与 ACTIVE（直接提交，合作中）；POTENTIAL / SUSPENDED / TERMINATED 只能由状态流转产生，此处传入返回 40000",
+            "example": "ACTIVE",
+            "enum": [
+              "DRAFT",
+              "POTENTIAL",
+              "ACTIVE",
+              "SUSPENDED",
+              "TERMINATED"
+            ]
+          }
+        }
+      },
+      "ApiResultCreatedOwnerResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CreatedOwnerResponse"
+          }
+        }
+      },
+      "CreatedOwnerResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "新货主的标识，字符串形式的十进制整数；后续详情、编辑都用它定位",
+            "example": "5"
+          },
+          "code": {
+            "type": "string",
+            "description": "系统编码，形如 OWNER0001，由编码规则生成且不可修改；被占用时接口返回 40904，此时重新提交即可",
+            "example": "OWNER0001"
           }
         },
         "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
@@ -1531,6 +2150,353 @@
           }
         },
         "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
+      },
+      "ApiResultPageResultOwnerListItemResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PageResultOwnerListItemResponse"
+          }
+        }
+      },
+      "OwnerListItemResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "货主标识，字符串形式的十进制整数；详情、编辑都用它定位",
+            "example": "5"
+          },
+          "code": {
+            "type": "string",
+            "description": "系统编码，形如 OWNER0001，由编码规则生成且不可修改；列表中按等宽字体展示",
+            "example": "OWNER0001"
+          },
+          "name": {
+            "type": "string",
+            "description": "客户名称，可与其他货主重名；点击进入详情",
+            "example": "深圳某某贸易"
+          },
+          "ownerType": {
+            "type": "string",
+            "description": "客户类型，取自 OWNER_TYPE 字典的 value：BRAND 品牌方，FORWARDER 货代同行；按标签样式展示",
+            "example": "BRAND"
+          },
+          "status": {
+            "type": "string",
+            "description": "货主状态编码：DRAFT 草稿，POTENTIAL 潜在，ACTIVE 合作中，SUSPENDED 暂停，TERMINATED 终止。终止态的货主仍出现在列表里，写操作按钮应置灰",
+            "example": "ACTIVE"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "最后修改时刻，ISO 8601 带时区（UTC）",
+            "format": "date-time",
+            "example": "2026-10-24T08:30:00Z"
+          }
+        },
+        "description": "本页数据；无数据时为空数组，不会是 null"
+      },
+      "PageResultOwnerListItemResponse": {
+        "type": "object",
+        "properties": {
+          "pageNo": {
+            "type": "integer",
+            "description": "页码，从 1 开始",
+            "format": "int32",
+            "example": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "description": "每页条数，取值 1 至 200，超出范围时接口返回 40000",
+            "format": "int32",
+            "example": 20
+          },
+          "total": {
+            "type": "integer",
+            "description": "满足筛选条件的总条数，不是本页条数",
+            "format": "int64",
+            "example": 137
+          },
+          "records": {
+            "type": "array",
+            "description": "本页数据；无数据时为空数组，不会是 null",
+            "items": {
+              "$ref": "#/components/schemas/OwnerListItemResponse"
+            }
+          }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
+      },
+      "ApiResultOwnerDetailResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
+          },
+          "data": {
+            "$ref": "#/components/schemas/OwnerDetailResponse"
+          }
+        }
+      },
+      "OwnerDetailResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "货主标识，字符串形式的十进制整数",
+            "example": "5"
+          },
+          "code": {
+            "type": "string",
+            "description": "系统编码，形如 OWNER0001；只读，创建后不可修改",
+            "example": "OWNER0001"
+          },
+          "name": {
+            "type": "string",
+            "description": "客户名称，可与其他货主重名",
+            "example": "深圳某某贸易"
+          },
+          "ownerType": {
+            "type": "string",
+            "description": "客户类型，取自 OWNER_TYPE 字典的 value：BRAND 品牌方，FORWARDER 货代同行",
+            "example": "BRAND"
+          },
+          "status": {
+            "type": "string",
+            "description": "货主状态编码：DRAFT 草稿，POTENTIAL 潜在，ACTIVE 合作中，SUSPENDED 暂停，TERMINATED 终止。只读——流转入口属状态流转任务",
+            "example": "ACTIVE"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "最后修改时刻，ISO 8601 带时区（UTC）",
+            "format": "date-time",
+            "example": "2026-10-24T08:30:00Z"
+          },
+          "nameEn": {
+            "type": "string",
+            "description": "英文名称，可为 null",
+            "example": "Shenzhen ABC Trading"
+          },
+          "shortName": {
+            "type": "string",
+            "description": "货主简称，可为 null；用于 SKUID 标签，为空时展示层取名称前 8 字",
+            "example": "某某贸易"
+          },
+          "externalCode": {
+            "type": "string",
+            "description": "外部系统编码，可为 null；在未删除的货主之间唯一，被他人占用时编辑返回 40906",
+            "example": "EXT-001"
+          },
+          "skuPrefix": {
+            "type": "string",
+            "description": "SKU 前缀原文（4 位大写字母或数字，不含 0、O、1、I）；只读，创建后不可修改",
+            "example": "AMZ1"
+          },
+          "settlementEntity": {
+            "type": "string",
+            "description": "结算主体，开票与对账的抬头",
+            "example": "深圳某某贸易有限公司"
+          },
+          "country": {
+            "type": "string",
+            "description": "注册国家，2 位大写字母的 ISO 3166-1 alpha-2 代码，取自 COUNTRY 字典",
+            "example": "CN"
+          },
+          "province": {
+            "type": "string",
+            "description": "州省，取 PROVINCE 字典中属于所选国家的值；国家为 US 时必有值，其余国家可为 null",
+            "example": "CN-GD"
+          },
+          "city": {
+            "type": "string",
+            "description": "注册城市",
+            "example": "深圳"
+          },
+          "district": {
+            "type": "string",
+            "description": "区县，可为 null",
+            "example": "南山区"
+          },
+          "postalCode": {
+            "type": "string",
+            "description": "邮政编码；无邮编的地区（港澳台）为 null",
+            "example": "518000"
+          },
+          "addressLine": {
+            "type": "string",
+            "description": "详细地址",
+            "example": "科技园路 1 号"
+          },
+          "remark": {
+            "type": "string",
+            "description": "备注，可为 null"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "创建时刻，ISO 8601 带时区（UTC）",
+            "format": "date-time",
+            "example": "2026-10-23T10:00:00Z"
+          }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
+      },
+      "ApiResultListDictTypeListItemResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
+          },
+          "data": {
+            "type": "array",
+            "description": "业务数据；失败时为 null，分页接口为 PageResult 结构",
+            "items": {
+              "$ref": "#/components/schemas/DictTypeListItemResponse"
+            }
+          }
+        }
+      },
+      "DictTypeListItemResponse": {
+        "type": "object",
+        "properties": {
+          "dictType": {
+            "type": "string",
+            "description": "字典类型编码，如 OWNER_TYPE；取某类字典项时作为路径参数"
+          },
+          "name": {
+            "type": "string",
+            "description": "字典类型中文名，如「客户类型」"
+          },
+          "nameEn": {
+            "type": "string",
+            "description": "字典类型英文名，可为 null"
+          },
+          "itemCount": {
+            "type": "integer",
+            "description": "该类型下未删除的字典项数量，含已停用的项；取值为整数",
+            "format": "int64"
+          },
+          "status": {
+            "type": "string",
+            "description": "类型状态编码：ACTIVE 启用，DISABLED 停用。停用的类型不应再被新的引用处使用"
+          }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
+      },
+      "ApiResultListDictItemResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
+          },
+          "data": {
+            "type": "array",
+            "description": "业务数据；失败时为 null，分页接口为 PageResult 结构",
+            "items": {
+              "$ref": "#/components/schemas/DictItemResponse"
+            }
+          }
+        }
+      },
+      "DictItemResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "字典项标识，字符串形式的十进制整数"
+          },
+          "label": {
+            "type": "string",
+            "description": "中文名，如「冷藏」"
+          },
+          "labelEn": {
+            "type": "string",
+            "description": "英文名，可为 null；前端按当前界面语言取值，为空时回退到 label"
+          },
+          "value": {
+            "type": "string",
+            "description": "取值，如 CHILLED；业务数据存的就是这个值"
+          },
+          "sortNo": {
+            "type": "integer",
+            "description": "排序号，越小越靠前；同排序号时按标识升序",
+            "format": "int32"
+          },
+          "status": {
+            "type": "string",
+            "description": "项状态编码：ACTIVE 启用，DISABLED 停用。停用项不出现在下拉里，历史数据仍按它展示"
+          },
+          "ext": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "description": "扩展属性，原样透传；没有扩展属性时为 {}；行政区划等层级字典用 parent 指向父项的 value"
+            },
+            "description": "扩展属性，原样透传；没有扩展属性时为 {}；行政区划等层级字典用 parent 指向父项的 value"
+          }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
+      },
+      "ApiResultMapStringListDictItemResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "description": "业务数据；失败时为 null，分页接口为 PageResult 结构",
+              "items": {
+                "$ref": "#/components/schemas/DictItemResponse"
+              }
+            },
+            "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
+          }
+        }
       },
       "ApiErrorBody": {
         "type": "object",
