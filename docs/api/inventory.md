@@ -1,8 +1,8 @@
 # 接口台账
 
 > **生成物，禁止手改。** 由 `code/tools/api-inventory/gen_api_inventory.py` 生成。
-> 来源：实时拉取 `http://localhost:18088/v3/api-docs`
-> 源 commit：`0d8e164`
+> 来源：实时拉取 `http://localhost:18089/v3/api-docs`
+> 源 commit：`2d7ccc9`
 > 计数口径：OpenAPI operation（path × method），不是 Java 方法数
 > 字段记号：`a.b` 嵌套，`a[]` 数组元素，`↻` 自引用已截断，`…` 嵌套过深已截断
 
@@ -10,15 +10,15 @@
 
 | 项 | 值 |
 | --- | --- |
-| 接口总数 | 22 |
-| GET | 9 |
+| 接口总数 | 25 |
+| GET | 10 |
 | POST | 4 |
-| PUT | 8 |
-| DELETE | 1 |
+| PUT | 9 |
+| DELETE | 2 |
 
 | 主体 | 数量 |
 | --- | --- |
-| console（仓网端） | 20 |
+| console（仓网端） | 23 |
 | 共用 | 2 |
 
 ## 统一响应外壳
@@ -35,7 +35,7 @@
 
 ## 接口清单
 
-共 22 个接口。
+共 25 个接口。
 
 ### 1. `POST /api/auth/login`
 
@@ -300,7 +300,71 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 10. `GET /api/console/roles`
+### 10. `DELETE /api/console/owners/{id}`
+
+删除草稿货主
+
+删除一条草稿状态的货主，执行软删除（置 deleted_at），该记录不再出现在列表与详情里。只有草稿（DRAFT）可以删除：其他状态返回 40900，提示里带当前状态；已提交的货主应先走状态流转（终止），删除不是「停止合作」的替代品。删除不释放系统编码与 SKU 前缀——两个唯一索引都是全表口径，已删除的货主仍占着它们，新建档时用同一个前缀仍会得到 40905。删除也不会级联删除该货主下的商品与账号（软删除本就不触发外键级联），按规格草稿下本就不该有这两样。幂等：重复删除返回 40400（与查详情同一口径），不会二次写入，也不会把记录写活。
+
+- 主体：console（仓网端）
+- 分页：否
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+无请求体。
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `—` | object | 无字段声明 |
+
+### 11. `PUT /api/console/owners/{id}/status`
+
+流转货主状态
+
+把货主从当前状态流转到 targetStatus。允许的流向：DRAFT→POTENTIAL/ACTIVE，POTENTIAL→ACTIVE/TERMINATED，ACTIVE→SUSPENDED/TERMINATED，SUSPENDED→ACTIVE/TERMINATED，TERMINATED 为终态。提交与当前相同的状态按成功处理（幂等，含重复提交终止）——幂等不改变「终止不能回退到其他状态」。当前状态由服务端读库决定，请求体不带它：让调用方声明「它以为的当前状态」会在并发改动后引入两种真相。目标状态编码未知返回 40000；不允许的流向返回 40900，提示里同时给出当前状态与允许的目标状态。目标为 TERMINATED 时必须带 acknowledgedImpact=true：未确认时返回 40900，提示里带该货主下仍存在的商品数与账号数，调用方据此展示影响清单并要求二次确认。终止只变更货主状态，不修改商品档案状态、也不停用账号——影响清单是提示，不是级联动作。成功后不回带详情，需要最新状态时重新取详情。
+
+- 主体：console（仓网端）
+- 分页：否
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `targetStatus` | string | 是 | 目标状态，必填，取状态枚举名：POTENTIAL（潜在）、ACTIVE（合作中）、SUSPENDED（暂停）、TERMINATED（终止）。允许的流向：草稿→潜在/合作中，潜在→合作中/终止，合作中→暂停/终止，暂停→合作中/终止，终止为终态。提交与当前相同的状态按成功处理（幂等），未知取值返回 40000，不允许的流向返回 40900 且提示里带当前状态与允许的目标状态 |
+| `acknowledgedImpact` | boolean | 否 | 是否已看过终止影响清单并确认。只在目标状态为 TERMINATED 时生效：未传或 false 时接口返回 40900，提示里带该货主下的商品数与账号数；其余目标状态忽略本字段。重复提交终止（当前已是终止）不要求确认，按幂等成功处理 |
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `—` | object | 无字段声明 |
+
+### 12. `GET /api/console/owners/{id}/termination-impact`
+
+查询终止影响清单
+
+取该货主下仍存在的商品数与账号数，供终止前的确认弹窗使用。商品数排除已删除的商品；账号数含已停用的账号（停用不等于不存在），只排除已删除的账号。两个数字都不会因终止而改变——终止只改货主状态，不改商品档案状态、也不停用账号。没有商品或没有账号时对应字段为 0，不返回 null。货主不存在或已被逻辑删除返回 40400。
+
+- 主体：console（仓网端）
+- 分页：否
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+无请求体。
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `skuCount` | integer(int64) | 该货主下仍存在的商品数，排除已删除的商品。终止不会修改这些商品的状态，它们保留但不可用于新的业务单据 |
+| `accountCount` | integer(int64) | 该货主下仍存在的账号数，停用的账号也计入，排除已删除的账号。终止不会停用这些账号 |
+
+### 13. `GET /api/console/roles`
 
 分页查询角色
 
@@ -331,7 +395,7 @@
 | `records[].permissionCount` | integer(int64) | 该角色已勾选的菜单与权限点数量，取值为整数（菜单与操作两级都计入） |
 | `records[].remark` | string | 备注，可为 null |
 
-### 11. `POST /api/console/roles`
+### 14. `POST /api/console/roles`
 
 创建角色
 
@@ -357,7 +421,7 @@
 | `id` | string | 新角色的标识，字符串形式的十进制整数；后续详情、编辑、启停、删除都用它定位 |
 | `code` | string | 新角色编码，按落库值返回；程序按编码引用角色，创建后不可修改 |
 
-### 12. `GET /api/console/roles/{id}`
+### 15. `GET /api/console/roles/{id}`
 
 查询角色详情
 
@@ -385,7 +449,7 @@
 | `remark` | string | 备注，可为 null |
 | `menuIds` | string[] | 已勾选的菜单与权限点标识（字符串形式的十进制整数），含菜单与操作两级；未勾选时为空数组。用于回填授权配置页的勾选状态 |
 
-### 13. `PUT /api/console/roles/{id}`
+### 16. `PUT /api/console/roles/{id}`
 
 编辑角色
 
@@ -409,7 +473,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 14. `DELETE /api/console/roles/{id}`
+### 17. `DELETE /api/console/roles/{id}`
 
 删除角色
 
@@ -429,7 +493,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 15. `PUT /api/console/roles/{id}/status`
+### 18. `PUT /api/console/roles/{id}/status`
 
 启用或停用角色
 
@@ -451,7 +515,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 16. `GET /api/console/users`
+### 19. `GET /api/console/users`
 
 分页查询用户账号
 
@@ -483,7 +547,7 @@
 | `records[].roles` | string[] | 已分配的角色编码列表（含停用中的角色）；没有角色时为空数组。列表要显示人能读的编码，编辑表单回填用的角色标识在详情接口的 roleIds 里给 |
 | `records[].lastLoginAt` | string(date-time) | 最后登录时刻，ISO 8601 带时区（UTC），如 2026-10-24T08:30:00Z；从未登录过为 null |
 
-### 17. `POST /api/console/users`
+### 20. `POST /api/console/users`
 
 创建用户账号
 
@@ -513,7 +577,7 @@
 | `id` | string | 新账号的用户标识，字符串形式的十进制整数；后续详情、编辑、启停、分配角色都用它定位，同时用于跳转到详情页 |
 | `loginName` | string | 新账号的登录名，按落库值返回（未做大小写改写）；与请求里的登录名一致，便于前端核对 |
 
-### 18. `GET /api/console/users/{id}`
+### 21. `GET /api/console/users/{id}`
 
 查询用户详情
 
@@ -546,7 +610,7 @@
 | `createdAt` | string(date-time) | 账号创建时刻，ISO 8601 带时区（UTC） |
 | `roleIds` | string[] | 已分配的角色标识列表（字符串形式的十进制整数），用于回填编辑表单的勾选状态；没有角色时为空数组。与 roles 是同一批角色的两种表示 |
 
-### 19. `PUT /api/console/users/{id}`
+### 22. `PUT /api/console/users/{id}`
 
 编辑用户基本信息
 
@@ -570,7 +634,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 20. `PUT /api/console/users/{id}/password`
+### 23. `PUT /api/console/users/{id}/password`
 
 重置他人密码
 
@@ -592,7 +656,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 21. `PUT /api/console/users/{id}/roles`
+### 24. `PUT /api/console/users/{id}/roles`
 
 分配用户角色（整批替换）
 
@@ -614,7 +678,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 22. `PUT /api/console/users/{id}/status`
+### 25. `PUT /api/console/users/{id}/status`
 
 启用或停用用户账号
 

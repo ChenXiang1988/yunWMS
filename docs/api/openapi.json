@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:18088",
+      "url": "http://localhost:18089",
       "description": "Generated server url"
     }
   ],
@@ -18,7 +18,7 @@
     },
     {
       "name": "货主档案",
-      "description": "仓网端的货主（客户）建档、列表、详情与编辑。建档由系统生成客户编码并占用 SKU 前缀；编辑不能改编码、SKU 前缀与状态。全部接口都要求对应权限点，只登录但没有权限点的账号会拿到 403。"
+      "description": "仓网端的货主（客户）建档、列表、详情、编辑、状态流转与删除。建档由系统生成客户编码并占用 SKU 前缀；编辑不能改编码、SKU 前缀与状态；状态流转按五态流转表判定，终止前要求确认影响清单；只有草稿可以删除，删除为软删除。全部接口都要求对应权限点，只登录但没有权限点的账号会拿到 403。"
     },
     {
       "name": "认证",
@@ -567,6 +567,100 @@
             "$ref": "#/components/responses/InternalServerError"
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "货主档案"
+        ],
+        "summary": "删除草稿货主",
+        "description": "删除一条草稿状态的货主，执行软删除（置 deleted_at），该记录不再出现在列表与详情里。只有草稿（DRAFT）可以删除：其他状态返回 40900，提示里带当前状态；已提交的货主应先走状态流转（终止），删除不是「停止合作」的替代品。删除不释放系统编码与 SKU 前缀——两个唯一索引都是全表口径，已删除的货主仍占着它们，新建档时用同一个前缀仍会得到 40905。删除也不会级联删除该货主下的商品与账号（软删除本就不触发外键级联），按规格草稿下本就不该有这两样。幂等：重复删除返回 40400（与查详情同一口径），不会二次写入，也不会把记录写活。",
+        "operationId": "delete_1",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "货主标识，取自列表响应里的 id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultVoid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/console/owners/{id}/status": {
+      "put": {
+        "tags": [
+          "货主档案"
+        ],
+        "summary": "流转货主状态",
+        "description": "把货主从当前状态流转到 targetStatus。允许的流向：DRAFT→POTENTIAL/ACTIVE，POTENTIAL→ACTIVE/TERMINATED，ACTIVE→SUSPENDED/TERMINATED，SUSPENDED→ACTIVE/TERMINATED，TERMINATED 为终态。提交与当前相同的状态按成功处理（幂等，含重复提交终止）——幂等不改变「终止不能回退到其他状态」。当前状态由服务端读库决定，请求体不带它：让调用方声明「它以为的当前状态」会在并发改动后引入两种真相。目标状态编码未知返回 40000；不允许的流向返回 40900，提示里同时给出当前状态与允许的目标状态。目标为 TERMINATED 时必须带 acknowledgedImpact=true：未确认时返回 40900，提示里带该货主下仍存在的商品数与账号数，调用方据此展示影响清单并要求二次确认。终止只变更货主状态，不修改商品档案状态、也不停用账号——影响清单是提示，不是级联动作。成功后不回带详情，需要最新状态时重新取详情。",
+        "operationId": "changeStatus_2",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "货主标识，取自列表响应里的 id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerStatusChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultVoid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
       }
     },
     "/api/auth/password": {
@@ -1011,6 +1105,49 @@
         }
       }
     },
+    "/api/console/owners/{id}/termination-impact": {
+      "get": {
+        "tags": [
+          "货主档案"
+        ],
+        "summary": "查询终止影响清单",
+        "description": "取该货主下仍存在的商品数与账号数，供终止前的确认弹窗使用。商品数排除已删除的商品；账号数含已停用的账号（停用不等于不存在），只排除已删除的账号。两个数字都不会因终止而改变——终止只改货主状态，不改商品档案状态、也不停用账号。没有商品或没有账号时对应字段为 0，不返回 null。货主不存在或已被逻辑删除返回 40400。",
+        "operationId": "terminationImpact",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "货主标识，取自列表响应里的 id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOwnerTerminationImpactResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
     "/api/console/dicts": {
       "get": {
         "tags": [
@@ -1387,6 +1524,24 @@
             "minLength": 0,
             "type": "string",
             "description": "备注，最长 500 个字符，可为空（传 null 表示清空）"
+          }
+        }
+      },
+      "OwnerStatusChangeRequest": {
+        "required": [
+          "targetStatus"
+        ],
+        "type": "object",
+        "properties": {
+          "targetStatus": {
+            "type": "string",
+            "description": "目标状态，必填，取状态枚举名：POTENTIAL（潜在）、ACTIVE（合作中）、SUSPENDED（暂停）、TERMINATED（终止）。允许的流向：草稿→潜在/合作中，潜在→合作中/终止，合作中→暂停/终止，暂停→合作中/终止，终止为终态。提交与当前相同的状态按成功处理（幂等），未知取值返回 40000，不允许的流向返回 40900 且提示里带当前状态与允许的目标状态",
+            "example": "SUSPENDED"
+          },
+          "acknowledgedImpact": {
+            "type": "boolean",
+            "description": "是否已看过终止影响清单并确认。只在目标状态为 TERMINATED 时生效：未传或 false 时接口返回 40900，提示里带该货主下的商品数与账号数；其余目标状态忽略本字段。重复提交终止（当前已是终止）不要求确认，按幂等成功处理",
+            "example": false
           }
         }
       },
@@ -2355,6 +2510,43 @@
             "description": "创建时刻，ISO 8601 带时区（UTC）",
             "format": "date-time",
             "example": "2026-10-23T10:00:00Z"
+          }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
+      },
+      "ApiResultOwnerTerminationImpactResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
+          },
+          "data": {
+            "$ref": "#/components/schemas/OwnerTerminationImpactResponse"
+          }
+        }
+      },
+      "OwnerTerminationImpactResponse": {
+        "type": "object",
+        "properties": {
+          "skuCount": {
+            "type": "integer",
+            "description": "该货主下仍存在的商品数，排除已删除的商品。终止不会修改这些商品的状态，它们保留但不可用于新的业务单据",
+            "format": "int64",
+            "example": 3
+          },
+          "accountCount": {
+            "type": "integer",
+            "description": "该货主下仍存在的账号数，停用的账号也计入，排除已删除的账号。终止不会停用这些账号",
+            "format": "int64",
+            "example": 2
           }
         },
         "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
