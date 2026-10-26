@@ -19,6 +19,36 @@
             <groupId>com.yunwms</groupId>
             <artifactId>wms-web</artifactId>
         </dependency>
+        <!--
+            接口层（Controller / Request / Response）要用的 Web 与校验能力。
+            本模块自己声明而不是依赖 wms-web 的传递依赖：wms-web 是入站协议类型的白名单模块，
+            它包含哪些 Web 包是它的实现细节，随时可能收窄（docs/coding-project.md 第二节）。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <!--
+            @SaCheckPermission（接口方法级鉴权）与 StpUtil.getLoginIdAsLong()（当前操作人）。
+            与 wms-auth 用的是同一个 starter：注解拦截器由 SaTokenAnnotationConfig 注册在 /** 上，
+            对本模块的 Controller 同样生效，不需要在这里再注册一次——注册第二份会让同一个权限点被检查两遍。
+        -->
+        <dependency>
+            <groupId>cn.dev33</groupId>
+            <artifactId>sa-token-spring-boot3-starter</artifactId>
+        </dependency>
+        <!--
+            OpenAPI 注解（@Tag / @Operation / @Parameter / @Schema），接口与 DTO 的中文说明靠它进 /v3/api-docs。
+            版本由父 pom 的 dependencyManagement 管理，与 wms-auth 同一套。
+        -->
+        <dependency>
+            <groupId>io.swagger.core.v3</groupId>
+            <artifactId>swagger-annotations-jakarta</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
