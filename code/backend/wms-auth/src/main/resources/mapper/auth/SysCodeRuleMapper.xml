@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.yunwms.auth.infrastructure.persistence.mapper.SysCodeRuleMapper">
+
+    <!--
+        取号必须是「一条语句内读完再写」，不能写成「SELECT 当前值 → 应用里加 step → UPDATE」。
+
+        拆开的版本在并发下必然重号：两个请求在同一时刻读到 current_value = 5，各自算出 6，
+        两次 UPDATE 都把它写成 6，于是两个对象拿到 OWNER0006。更糟的是它不报错——
+        编码列上的唯一索引要到第二个对象落库时才响，那时第一个对象可能已经贴了标签。
+        UPDATE ... RETURNING 让递增与取值在数据库里原子完成，行锁由 PG 自己保证：
+        后到的语句会阻塞到前一个事务提交，拿到的是递增之后的值。
+
+        也不能写成 UPDATE 之后再 SELECT 一次：两次往返之间会被其它事务插入，
+        读回来的可能是别人的号。
+
+        用 <select> 而不是 <update> 执行：MyBatis 的 <update> 走 executeUpdate，
+        JDBC 对带 RETURNING 的语句不会把结果集交出来；<select> 走 executeQuery，
+        PostgreSQL 驱动会把 RETURNING 的行作为 ResultSet 返回。本语句只写一行、只返回一行。
+
+        目标行的定位不能带逻辑删除条件：sys_code_rule 没有 deleted_at 列（规则不存在「删除」，
+        只有「停用」概念，而本批还没有停用）。顺手照抄 deleted_at IS NULL 会在执行时报列不存在。
+
+        updated_at 用库内 now() 而不是应用侧时钟：这里只记录「什么时候取的号」，
+        与任何跨行的窗口比较无关，不需要与应用侧同一时钟源。
+
+        命中零行不抛异常，返回空由调用方判定为「规则未配置」：
+        影响行数为 0 在 PG 里是正常结果，不是并发失败。
+    -->
+    <select id="advance"
+            resultType="com.yunwms.auth.infrastructure.persistence.entity.CodeRuleSequenceRow">
+        UPDATE sys_code_rule
+        SET current_value = current_value + step,
+            updated_at    = now()
+        WHERE rule_code = #{ruleCode}
+        RETURNING prefix, seq_length, current_value
+    </select>
+
+</mapper>
