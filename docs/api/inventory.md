@@ -1,8 +1,8 @@
 # 接口台账
 
 > **生成物，禁止手改。** 由 `code/tools/api-inventory/gen_api_inventory.py` 生成。
-> 来源：实时拉取 `http://localhost:18083/v3/api-docs`
-> 源 commit：`af24cfd`
+> 来源：实时拉取 `http://localhost:18084/v3/api-docs`
+> 源 commit：`8391cf5`
 > 计数口径：OpenAPI operation（path × method），不是 Java 方法数
 > 字段记号：`a.b` 嵌套，`a[]` 数组元素，`↻` 自引用已截断，`…` 嵌套过深已截断
 
@@ -10,14 +10,15 @@
 
 | 项 | 值 |
 | --- | --- |
-| 接口总数 | 12 |
+| 接口总数 | 15 |
 | GET | 4 |
 | POST | 3 |
-| PUT | 5 |
+| PUT | 7 |
+| DELETE | 1 |
 
 | 主体 | 数量 |
 | --- | --- |
-| console（仓网端） | 10 |
+| console（仓网端） | 13 |
 | 共用 | 2 |
 
 ## 统一响应外壳
@@ -34,7 +35,7 @@
 
 ## 接口清单
 
-共 12 个接口。
+共 15 个接口。
 
 ### 1. `POST /api/auth/login`
 
@@ -153,7 +154,61 @@
 | `remark` | string | — |
 | `menuIds` | string[] | — |
 
-### 6. `GET /api/console/users`
+### 6. `PUT /api/console/roles/{id}`
+
+- 主体：console（仓网端）
+- 分页：否
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `name` | string | 是 | — |
+| `remark` | string | 否 | — |
+| `menuIds` | integer(int64)[] | 是 | — |
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `—` | object | 无字段声明 |
+
+### 7. `DELETE /api/console/roles/{id}`
+
+- 主体：console（仓网端）
+- 分页：否
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+无请求体。
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `—` | object | 无字段声明 |
+
+### 8. `PUT /api/console/roles/{id}/status`
+
+- 主体：console（仓网端）
+- 分页：否
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `status` | string enum(ACTIVE, DISABLED) | 是 | — |
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `—` | object | 无字段声明 |
+
+### 9. `GET /api/console/users`
 
 - 主体：console（仓网端）
 - 分页：是
@@ -181,7 +236,7 @@
 | `records[].roles` | string[] | — |
 | `records[].lastLoginAt` | string(date-time) | — |
 
-### 7. `POST /api/console/users`
+### 10. `POST /api/console/users`
 
 - 主体：console（仓网端）
 - 分页：否
@@ -207,7 +262,7 @@
 | `id` | string | — |
 | `loginName` | string | — |
 
-### 8. `GET /api/console/users/{id}`
+### 11. `GET /api/console/users/{id}`
 
 - 主体：console（仓网端）
 - 分页：否
@@ -236,7 +291,7 @@
 | `createdAt` | string(date-time) | — |
 | `roleIds` | string[] | — |
 
-### 9. `PUT /api/console/users/{id}`
+### 12. `PUT /api/console/users/{id}`
 
 - 主体：console（仓网端）
 - 分页：否
@@ -256,7 +311,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 10. `PUT /api/console/users/{id}/password`
+### 13. `PUT /api/console/users/{id}/password`
 
 - 主体：console（仓网端）
 - 分页：否
@@ -274,7 +329,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 11. `PUT /api/console/users/{id}/roles`
+### 14. `PUT /api/console/users/{id}/roles`
 
 - 主体：console（仓网端）
 - 分页：否
@@ -292,7 +347,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 12. `PUT /api/console/users/{id}/status`
+### 15. `PUT /api/console/users/{id}/status`
 
 - 主体：console（仓网端）
 - 分页：否
