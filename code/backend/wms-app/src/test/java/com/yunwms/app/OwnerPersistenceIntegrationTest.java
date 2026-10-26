@@ -168,6 +168,54 @@ class OwnerPersistenceIntegrationTest extends AbstractIntegrationTest {
                 .isEmpty();
     }
 
+    @Test
+    @DisplayName("V036：删除货主的权限点就位，且挂在货主档案下")
+    void shouldSeedOwnerDeletePermission() {
+        // 删除单独成点（不复用 system:owner:update）：两项的失效后果不同，合并会让「能改电话」
+        // 等于「能删客户」。这条断言钉住 V036 的落点与父节点，路径拼错时这里会立刻红
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM sys_menu WHERE perms = 'system:owner:delete' AND menu_type = 'F'",
+                Integer.class);
+        assertThat(count).as("system:owner:delete 应存在且唯一").isEqualTo(1);
+
+        Long parentId = jdbcTemplate.queryForObject(
+                "SELECT parent_id FROM sys_menu WHERE perms = 'system:owner:delete'", Long.class);
+        assertThat(parentId)
+                .as("删除货主应挂在货主档案（/master/owners）下")
+                .isEqualTo(menuId("C", "/master/owners"));
+    }
+
+    @Test
+    @DisplayName("状态写入与软删除：只改状态 / 置 deleted_at，且已删除的行不会被改活")
+    void shouldUpdateStatusAndSoftDelete() {
+        long id = ownerRepository.insert(
+                newOwner("集成测试货主-流转写入", "TGH2", "EXT-TGH-0001"),
+                ownerCodeGenerator.next(), OwnerStatus.DRAFT, OPERATOR_ID);
+
+        ownerRepository.updateStatus(id, OwnerStatus.ACTIVE, 42L);
+
+        Owner afterUpdate = ownerRepository.findById(id).orElseThrow();
+        assertThat(afterUpdate.status()).isEqualTo(OwnerStatus.ACTIVE);
+        // updated_by 必须跟着改：状态是谁改的只能从这里看出来（审计日志属 2.8）
+        assertThat(afterUpdate.updatedBy()).isEqualTo(42L);
+
+        assertThat(ownerRepository.softDelete(id, 42L)).as("第一行写入成功").isTrue();
+        assertThat(ownerRepository.findById(id))
+                .as("软删除之后按标识读不到，与「不存在」同口径")
+                .isEmpty();
+        assertThat(ownerRepository.softDelete(id, 42L))
+                .as("重复删除命中零行：调用方据此回 404，而不是回一个看不出来发生过的成功")
+                .isFalse();
+
+        // 已软删除的行不能被改活：updateStatus 的 WHERE 里带 deleted_at IS NULL，这两条语句
+        // 是手写 SQL，MyBatis-Plus 的逻辑删除不会替它们补条件
+        ownerRepository.updateStatus(id, OwnerStatus.SUSPENDED, 42L);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM owner WHERE id = ?", String.class, id))
+                .as("已删除的货主不得被状态流转改活")
+                .isEqualTo("ACTIVE");
+    }
+
     /**
      * 构造一条待写入的货主。
      *
