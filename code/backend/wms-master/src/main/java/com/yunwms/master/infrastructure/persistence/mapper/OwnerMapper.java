@@ -69,6 +69,34 @@ public interface OwnerMapper extends BaseMapper<OwnerEntity> {
     int updateProfile(OwnerEntity entity);
 
     /**
+     * 只写状态列与审计列，供状态流转使用。
+     *
+     * <p>与 {@link #updateProfile} 分成两条语句而不是复用一条带可空参数的：编辑永远不该改状态，
+     * 流转也永远不该改档案。合成一条后，两个用例都拿到了改对方字段的能力，靠「这次不传」来约束，
+     * 而「不传」的代价是 {@code updateById} 式的空字段略过——那正是 {@link #updateProfile} 存在的理由。
+     *
+     * <p>手写 SQL 必须自己带 {@code deleted_at IS NULL}：MyBatis-Plus 的逻辑删除只作用于它生成的语句。
+     *
+     * @param id        货主标识
+     * @param status    目标状态编码，取 {@code OwnerStatus} 的枚举名
+     * @param updatedBy 操作人标识
+     * @return 影响行数；本语句的调用方不据此判定成功，理由见 {@code OwnerRepository#updateStatus}
+     */
+    int updateStatus(@Param("id") long id, @Param("status") String status, @Param("updatedBy") long updatedBy);
+
+    /**
+     * 软删除：只置 {@code deleted_at} 与审计列。
+     *
+     * <p>不写 {@code status}：删除一个草稿之后它仍是草稿（只是看不见了）。把它改成别的状态会让
+     * 「这个货主终止过吗」这个问题在数据层面出现第三种答案。
+     *
+     * @param id        货主标识
+     * @param updatedBy 操作人标识
+     * @return 影响行数；0 表示这一行已被删除或不存在，调用方据此回 404
+     */
+    int softDelete(@Param("id") long id, @Param("updatedBy") long updatedBy);
+
+    /**
      * 判断 SKU 前缀是否已被占用，口径为全表（含已逻辑删除的货主），与全表唯一索引一致。
      *
      * @param skuPrefix SKU 前缀

@@ -15,7 +15,13 @@ import java.util.Optional;
  * 是因为那两条链路的权限要求、失败语义与调用方都不同，合并会让任何拿到仓储的代码都能绕过用例建号。
  * 货主这边不满足这个前提：建档、列表、详情都由同一个管理端用例族消费，权限点分别是
  * {@code system:owner:create} 与 {@code system:owner:list}，读侧与写侧没有需要靠类型隔开的分歧。
- * 等状态流转（3.2）带来「只有特定流转能写」的约束时，再按那时的实际分歧拆。
+ *
+ * <p><b>状态流转（3.2）带来的分歧由方法签名承担，不靠拆端口：</b>{@link #updateStatus} 只接收状态，
+ * {@link #update} 只接收 {@link OwnerProfile}，两条写路径的交集为空——想借编辑改状态，或借流转
+ * 改名称，都要先改接口。拆分端口挡不住同一件事（同一个类里两个方法照样能互相看到），只会多一层跳转。
+ *
+ * <p><b>「不允许的流转」不在这里判：</b>流转表在 {@code OwnerStatus} 上，仓储只负责把给定的状态写进去。
+ * 若在这里再判一次，规则就有了两个落点。
  *
  * <p><b>唯一性判定只是提前提示，不是判重依据：</b>{@link #existsBySkuPrefix} 与
  * {@link #existsByExternalCode} 在同一瞬间的两次调用之间可能失效——先查再插在并发下拦不住重复。
@@ -70,6 +76,41 @@ public interface OwnerRepository {
      *                          由调用方翻译成业务错误码
      */
     void update(long id, OwnerProfile profile, long operatorId);
+
+    /**
+     * 写入货主状态，同时更新 {@code updated_by} 与 {@code updated_at}。
+     *
+     * <p>只接收状态：调用方已经用 {@link OwnerStatus#requireTransitionTo} 判过流转是否允许，
+     * 本方法不再判一次——规则一旦有第二个落点，两处迟早对某个组合判得不一样。
+     *
+     * <p>同状态照常写（幂等重放）：命中零行只可能是这一行在两次调用之间被软删除，
+     * 与 {@link #update} 同一处理，不按失败处理（见 {@code docs/coding.md}「持久化与副作用」）。
+     *
+     * @param id         货主标识，调用方保证该货主存在且未被删除
+     * @param status     目标状态
+     * @param operatorId 操作人标识，写入 {@code updated_by}
+     * @throws IllegalArgumentException 目标状态为 {@code null}
+     * @throws RuntimeException         违反库约束（{@code ck_owner_status}）时由实现原样上抛
+     */
+    void updateStatus(long id, OwnerStatus status, long operatorId);
+
+    /**
+     * 软删除货主：置 {@code deleted_at}，同时更新 {@code updated_by} 与 {@code updated_at}。
+     *
+     * <p><b>为什么返回布尔值，而 {@link #update} / {@link #updateStatus} 不返回：</b>
+     * 删除是「这条记录从此不该再存在」的断言，而调用方刚刚读到过它——命中零行说明它在读到之后
+     * 被另一个请求删掉了。那正是删除语义下唯一需要向调用方如实交代的情况，也是
+     * {@code docs/coding.md} 要求非插入写入校验实际结果的落点。另外两个方法是「改成一堆新值」，
+     * 命中零行不代表用户可见的差异（内容一样），而删除的「零行」代表记录已不在。
+     *
+     * <p>软删除不释放 {@code code} 与 {@code sku_prefix}：两个唯一索引都是全表口径，
+     * 已删除的货主仍占着它们，这是建表时就定下的规则。
+     *
+     * @param id         货主标识
+     * @param operatorId 操作人标识，写入 {@code updated_by}
+     * @return 实际写入了一行返回 {@code true}；该货主已被删除（或本就不存在）返回 {@code false}
+     */
+    boolean softDelete(long id, long operatorId);
 
     /**
      * 按标识读取货主。

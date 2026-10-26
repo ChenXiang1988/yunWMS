@@ -84,6 +84,33 @@ public class OwnerRepositoryImpl implements OwnerRepository {
     /**
      * {@inheritDoc}
      *
+     * <p>目标状态为 {@code null} 时先失败：MyBatis-Plus 只管语句拼装，空值传下去会让
+     * {@code SET status = NULL} 撞上 {@code NOT NULL}，报出来的是一句看不出业务含义的数据库错误。
+     *
+     * <p>影响行数不参与判定，理由与 {@link #update} 相同。
+     */
+    @Override
+    public void updateStatus(long id, OwnerStatus status, long operatorId) {
+        if (status == null) {
+            throw new IllegalArgumentException("货主目标状态不能为空，货主 id=" + id);
+        }
+        ownerMapper.updateStatus(id, status.name(), operatorId);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>这里必须看影响行数：删除是「这条记录从此不该再存在」，而调用方刚读过它。
+     * 命中零行只剩一种解释——它在两次调用之间被另一个请求删掉了，调用方要据此回 404。
+     */
+    @Override
+    public boolean softDelete(long id, long operatorId) {
+        return ownerMapper.softDelete(id, operatorId) > 0;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
      * <p>{@code selectById} 自带逻辑删除条件：被软删除的货主必须和「不存在」同口径。
      */
     @Override

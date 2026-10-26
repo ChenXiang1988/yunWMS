@@ -123,6 +123,44 @@
     </update>
 
     <!--
+        状态流转：只写 status 与审计列。
+
+        为什么与 updateProfile 分成两条：编辑不该改状态，流转不该改档案。合成一条之后，
+        两个用例都拿到了改对方字段的能力，只能靠「这次不要传」约束，而那条约束在
+        updateById 式的空字段略过面前根本立不住——这正是 updateProfile 手写全部列的原因。
+
+        status 由调用方按枚举 name() 给出；流转是否允许由 OwnerStatus 判定，SQL 不再判一次。
+        已软删除的货主不能被改活：deleted_at IS NULL 写在 WHERE 里，而 MyBatis-Plus 的逻辑删除
+        只作用于它自己生成的语句。
+    -->
+    <update id="updateStatus">
+        UPDATE owner
+        SET status = #{status},
+            updated_at = now(),
+            updated_by = #{updatedBy}
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+    </update>
+
+    <!--
+        软删除：置 deleted_at，并留下「谁删的」。
+
+        不写 status：删除一个草稿之后它仍是草稿（只是看不见了）。顺带改状态会让
+        「这个货主终止过吗」在数据层面多出第三种答案。
+
+        deleted_at IS NULL 同时是「不重复删除」的判据：第二次删除命中零行，调用方据此回 404，
+        而不是回一个看不出来发生过的成功。这正是 docs/coding.md 要求非插入写入校验实际结果的落点。
+    -->
+    <update id="softDelete">
+        UPDATE owner
+        SET deleted_at = now(),
+            updated_at = now(),
+            updated_by = #{updatedBy}
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+    </update>
+
+    <!--
         SKU 前缀判重：口径是全表，**刻意不带 deleted_at 条件**。
 
         这不是漏写：ux_owner_sku_prefix 是全表唯一索引（V001 里不带 WHERE 子句），
