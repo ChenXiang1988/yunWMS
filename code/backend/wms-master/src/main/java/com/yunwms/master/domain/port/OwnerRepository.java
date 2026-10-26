@@ -1,0 +1,108 @@
+package com.yunwms.master.domain.port;
+
+import com.yunwms.master.domain.model.NewOwner;
+import com.yunwms.master.domain.model.Owner;
+import com.yunwms.master.domain.model.OwnerStatus;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * 货主的读写入口。
+ *
+ * <p><b>为什么读与写放在同一个端口：</b>{@code wms-auth} 把「管理员建号」与「登录链路读取」拆成两个端口，
+ * 是因为那两条链路的权限要求、失败语义与调用方都不同，合并会让任何拿到仓储的代码都能绕过用例建号。
+ * 货主这边不满足这个前提：建档、列表、详情都由同一个管理端用例族消费，权限点分别是
+ * {@code system:owner:create} 与 {@code system:owner:list}，读侧与写侧没有需要靠类型隔开的分歧。
+ * 等状态流转（3.2）带来「只有特定流转能写」的约束时，再按那时的实际分歧拆。
+ *
+ * <p><b>唯一性判定只是提前提示，不是判重依据：</b>{@link #existsBySkuPrefix} 与
+ * {@link #existsByExternalCode} 在同一瞬间的两次调用之间可能失效——先查再插在并发下拦不住重复。
+ * 真正的判重由 {@code ux_owner_sku_prefix} 与 {@code ux_owner_external_code} 给出，
+ * 这两个方法只用来在提交前给出「指出占用方编码」这类友好提示。
+ *
+ * <p>本端口不翻译数据库约束违反：哪条约束被违反只有数据库知道，而错误码属于协议层。
+ */
+public interface OwnerRepository {
+
+    /**
+     * 写入新货主。
+     *
+     * <p>编码由调用方先经 {@link OwnerCodeGenerator} 取得后传入，而不是在本方法内部取号：
+     * 取号是一次独立提交的副作用（{@link OwnerCodeGenerator} 的契约），把两件事写在一行调用里，
+     * 「号已经用掉了但货主没建成」这件事在代码里就看不见了。
+     *
+     * <p>状态不写入：{@code owner.status} 有列默认值 {@code 'DRAFT'}，草稿与「提交即合作中」
+     * 两种建档流程的区别属 3.1b/3.2。在这里写死一个状态，会让 Java 里的值成为真正的默认值，
+     * 而列默认值变成永远不会生效的第二处定义。
+     *
+     * @param owner      待落库的货主，属性已由 {@link NewOwner} 校验
+     * @param code       系统编码，由 {@link OwnerCodeGenerator} 取得
+     * @param operatorId 操作人标识，写入 {@code created_by} 与 {@code updated_by}
+     * @return 数据库生成的货主标识
+     * @throws IllegalStateException 插入未返回主键，说明写入与主键回填不一致
+     * @throws RuntimeException      违反库约束（编码或前缀唯一、外键、CHECK）时由实现原样上抛，
+     *                               由调用方翻译成业务错误码
+     */
+    long insert(NewOwner owner, String code, long operatorId);
+
+    /**
+     * 按标识读取货主。
+     *
+     * <p>已逻辑删除的货主与「不存在」同口径：管理端看不到它，接口因此必须返回同一个结果。
+     *
+     * @param id 货主标识
+     * @return 货主；不存在或已删除时为空
+     * @throws IllegalArgumentException 库里的状态编码未知，说明数据已损坏
+     */
+    Optional<Owner> findById(long id);
+
+    /**
+     * 按筛选条件取一页货主，按标识升序。
+     *
+     * <p>排序只用标识：它是唯一的，翻页不会漏行或重复行；按创建时间排需要再补一个唯一列兜底，
+     * 而同一毫秒建的两个货主谁先谁后对使用者没有意义。
+     *
+     * @param status    状态筛选；{@code null} 表示不限
+     * @param ownerType 客户类型筛选，取 {@code OWNER_TYPE} 字典的 value；{@code null} 表示不限
+     * @param keyword   按编码、名称或外部码模糊匹配的关键字；{@code null} 表示不筛（空串须由调用方归一为 {@code null}）
+     * @param limit     本页最多返回多少行
+     * @param offset    跳过多少行
+     * @return 本页货主；没有数据时为空列表
+     */
+    List<Owner> findPage(OwnerStatus status, String ownerType, String keyword, int limit, long offset);
+
+    /**
+     * 统计满足筛选条件的货主数，筛选口径与 {@link #findPage} 完全一致。
+     *
+     * @param status    状态筛选；{@code null} 表示不限
+     * @param ownerType 客户类型筛选；{@code null} 表示不限
+     * @param keyword   按编码、名称或外部码模糊匹配的关键字；{@code null} 表示不筛
+     * @return 货主总数
+     */
+    long count(OwnerStatus status, String ownerType, String keyword);
+
+    /**
+     * 判断 SKU 前缀是否已被占用。
+     *
+     * <p>口径是<b>全表</b>，含已逻辑删除的货主：{@code ux_owner_sku_prefix} 是全表唯一索引
+     * （不像外部码那样带 {@code deleted_at} 条件）。把已删除的排除在外会让界面说「这个前缀可以用」，
+     * 而保存时撞上唯一索引——用户看到的是一句无法自查的数据库错误。
+     *
+     * @param skuPrefix SKU 前缀，调用方保证已通过 {@code SkuPrefix} 校验
+     * @return 已被占用返回 {@code true}
+     */
+    boolean existsBySkuPrefix(String skuPrefix);
+
+    /**
+     * 判断外部码是否已被占用。
+     *
+     * <p>口径与 {@code ux_owner_external_code} 一致：只数未删除的货主。软删除之后外部码可以被
+     * 新货主使用，这是建表时就定下的规则。
+     *
+     * @param externalCode 外部系统编码，可为 {@code null}；为 {@code null} 时本方法返回 {@code false}
+     *                     （外部码本就允许为空，空与空不算冲突）
+     * @return 已被占用返回 {@code true}
+     */
+    boolean existsByExternalCode(String externalCode);
+}
