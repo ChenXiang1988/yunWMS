@@ -1,5 +1,7 @@
 package com.yunwms.auth.interfaces.controller.response;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.time.Instant;
 import java.util.List;
 
@@ -24,13 +26,32 @@ import java.util.List;
  * @param roles       已分配的角色编码，含停用中的角色；没有角色时为空数组
  * @param lastLoginAt 最后登录时刻；从未登录过为 {@code null}
  */
-public record UserListItemResponse(String id,
-                                   String loginName,
-                                   String displayName,
-                                   String subjectType,
-                                   String ownerId,
-                                   String ownerName,
-                                   String status,
-                                   List<String> roles,
-                                   Instant lastLoginAt) {
+public record UserListItemResponse(
+        @Schema(description = "用户标识，字符串形式的十进制整数；详情、编辑、启停、分配角色都用它定位")
+        String id,
+
+        @Schema(description = "登录名，全局唯一且不区分大小写")
+        String loginName,
+
+        @Schema(description = "展示名，列表上显示给人看的名字")
+        String displayName,
+
+        @Schema(description = "主体类型编码：STAFF 内部员工，OWNER 货主用户")
+        String subjectType,
+
+        @Schema(description = "所属货主标识，字符串形式的十进制整数；内部员工为 null，前端据此显示「—」而不是空白")
+        String ownerId,
+
+        @Schema(description = "所属货主名称；内部员工，或货主已被逻辑删除时为 null")
+        String ownerName,
+
+        @Schema(description = "账号状态编码：ACTIVE 启用，DISABLED 停用")
+        String status,
+
+        @Schema(description = "已分配的角色编码列表（含停用中的角色）；没有角色时为空数组。"
+                + "列表要显示人能读的编码，编辑表单回填用的角色标识在详情接口的 roleIds 里给")
+        List<String> roles,
+
+        @Schema(description = "最后登录时刻，ISO 8601 带时区（UTC），如 2026-10-24T08:30:00Z；从未登录过为 null")
+        Instant lastLoginAt) {
 }

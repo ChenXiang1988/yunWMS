@@ -1,5 +1,7 @@
 package com.yunwms.auth.interfaces.controller.response;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * 角色列表的一行。
  *
@@ -15,12 +17,29 @@ package com.yunwms.auth.interfaces.controller.response;
  * @param permissionCount 已勾选的菜单与权限点数量
  * @param remark          备注，可为 {@code null}
  */
-public record RoleListItemResponse(String id,
-                                   String code,
-                                   String name,
-                                   boolean builtin,
-                                   String status,
-                                   long userCount,
-                                   long permissionCount,
-                                   String remark) {
+public record RoleListItemResponse(
+        @Schema(description = "角色标识，字符串形式的十进制整数；详情、编辑、启停、删除都用它定位")
+        String id,
+
+        @Schema(description = "角色编码，程序按它引用角色，创建后不可修改")
+        String code,
+
+        @Schema(description = "角色名称，界面展示用，可重名")
+        String name,
+
+        @Schema(description = "是否内置角色：true 表示超级管理员一类的系统自带角色，不可编辑、不可停用、不可删除")
+        boolean builtin,
+
+        @Schema(description = "角色状态编码：ACTIVE 启用，DISABLED 停用。停用的角色仍会出现在列表里，"
+                + "但其权限点在下一次请求起不再生效")
+        String status,
+
+        @Schema(description = "已分配该角色的用户数，取值为整数；大于 0 时该角色不可删除")
+        long userCount,
+
+        @Schema(description = "该角色已勾选的菜单与权限点数量，取值为整数（菜单与操作两级都计入）")
+        long permissionCount,
+
+        @Schema(description = "备注，可为 null")
+        String remark) {
 }

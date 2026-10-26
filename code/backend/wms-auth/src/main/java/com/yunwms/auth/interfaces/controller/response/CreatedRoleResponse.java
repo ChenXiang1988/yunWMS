@@ -1,5 +1,7 @@
 package com.yunwms.auth.interfaces.controller.response;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * 建角色成功的响应体。
  *
@@ -9,5 +11,10 @@ package com.yunwms.auth.interfaces.controller.response;
  * @param id   新角色的标识
  * @param code 角色编码，按落库值返回
  */
-public record CreatedRoleResponse(String id, String code) {
+public record CreatedRoleResponse(
+        @Schema(description = "新角色的标识，字符串形式的十进制整数；后续详情、编辑、启停、删除都用它定位")
+        String id,
+
+        @Schema(description = "新角色编码，按落库值返回；程序按编码引用角色，创建后不可修改")
+        String code) {
 }

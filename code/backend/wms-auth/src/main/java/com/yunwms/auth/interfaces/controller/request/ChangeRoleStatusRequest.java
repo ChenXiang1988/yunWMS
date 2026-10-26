@@ -1,6 +1,7 @@
 package com.yunwms.auth.interfaces.controller.request;
 
 import com.yunwms.auth.domain.model.RoleStatus;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 
 /**
@@ -15,5 +16,7 @@ import jakarta.validation.constraints.NotNull;
  */
 public record ChangeRoleStatusRequest(
         @NotNull(message = "目标状态不能为空")
+        @Schema(description = "目标状态，必传：ACTIVE 启用，DISABLED 停用。传 null 与传未知编码都会被拒绝，"
+                + "不按「不传就不改」处理；与当前状态相同时返回成功")
         RoleStatus status) {
 }

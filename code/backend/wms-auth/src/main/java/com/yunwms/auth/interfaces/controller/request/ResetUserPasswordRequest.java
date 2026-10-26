@@ -1,5 +1,6 @@
 package com.yunwms.auth.interfaces.controller.request;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 /**
@@ -15,5 +16,7 @@ import jakarta.validation.constraints.NotBlank;
  */
 public record ResetUserPasswordRequest(
         @NotBlank(message = "新密码不能为空")
+        @Schema(description = "为对方设置的新密码明文，不能为空，需满足密码策略：8–20 位且同时包含大写字母、"
+                + "小写字母与数字；不合规时一次返回全部违规项。服务端只存哈希，响应体不回显该密码")
         String newPassword) {
 }

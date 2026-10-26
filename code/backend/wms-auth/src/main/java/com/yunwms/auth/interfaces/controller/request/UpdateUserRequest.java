@@ -1,5 +1,6 @@
 package com.yunwms.auth.interfaces.controller.request;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -24,12 +25,16 @@ import jakarta.validation.constraints.Size;
 public record UpdateUserRequest(
         @NotBlank(message = "展示名不能为空")
         @Size(max = 64, message = "展示名不能超过 64 个字符")
+        @Schema(description = "展示名，必填，最长 64 个字符。全量替换语义：提交什么就是改后的值")
         String displayName,
 
         @Email(message = "邮箱格式不正确")
         @Size(max = 128, message = "邮箱不能超过 128 个字符")
+        @Schema(description = "邮箱，最长 128 个字符，格式需合法。全量替换语义：传 null 表示清空；"
+                + "内部员工必须保留非空邮箱，清空返回 40000；被其他账号占用返回 40903")
         String email,
 
         @Size(max = 64, message = "企业微信 userid 不能超过 64 个字符")
+        @Schema(description = "企业微信 userid，最长 64 个字符。全量替换语义：传 null 表示清空，不传同样按 null 处理")
         String wecomUserId) {
 }

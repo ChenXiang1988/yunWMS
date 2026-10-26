@@ -1,5 +1,6 @@
 package com.yunwms.auth.interfaces.controller.request;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -29,11 +30,15 @@ import java.util.List;
 public record UpdateRoleRequest(
         @NotBlank(message = "角色名称不能为空")
         @Size(max = 64, message = "角色名称不能超过 64 个字符")
+        @Schema(description = "角色名称，必填，最长 64 个字符。全量替换语义：提交什么就是改后的值")
         String name,
 
         @Size(max = 255, message = "备注不能超过 255 个字符")
+        @Schema(description = "备注，最长 255 个字符。全量替换语义：传 null 表示清空，不传同样按 null 处理")
         String remark,
 
         @NotNull(message = "菜单标识集合不能省略，清空授权请传空数组")
+        @Schema(description = "替换后的菜单与权限点标识集合，必传，元素为字符串形式的十进制整数；"
+                + "语义是整批替换而非增量，空数组合法且表示清空该角色的全部授权，省略字段则被拒绝")
         List<@NotNull(message = "菜单标识不能为空") Long> menuIds) {
 }
