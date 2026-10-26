@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+    数据字典的读取语句。四条：类型清单、类型是否存在、某类字典项、多类型字典项。
+
+    为什么项数必须聚合进类型清单这一条：在应用层对每一类再查一次，字典类型有几个就几条 SQL，
+    而这张表是全模块共用的，类型只会越来越多。
+
+    为什么按 ext.parent 过滤而不用 parent_id 列：层级写在 ext 里，任何字典都能带层级，
+    也不需要把字典绑死成树（见 V032 与 DictQuery 的说明）。表达式过滤用不到索引，
+    但行政区划这一类只有百余行，全表扫描的代价远小于为此加一个 GIN 索引。
+-->
+<mapper namespace="com.yunwms.auth.infrastructure.persistence.mapper.SysDictMapper">
+
+    <!--
+        类型清单。LEFT JOIN 派生表而不是「先查类型再逐类数项」：派生表只扫一遍字典项并按类型聚合，
+        行数始终等于类型数。
+
+        item_count 用 coalesce 兜 0：没有任何项的类型在管理页上要显示 0，而不是空白。
+        计数含已停用的项——它回答的是「这一类有多少条」，不是「有多少条可选」。
+    -->
+    <select id="selectTypeSummaries"
+            resultType="com.yunwms.auth.infrastructure.persistence.entity.DictTypeRow">
+        SELECT d.dict_type,
+               d.name,
+               d.name_en,
+               d.status,
+               coalesce(i.item_count, 0) AS item_count
+        FROM sys_dict d
+                 LEFT JOIN (SELECT dict_type, count(*) AS item_count
+                            FROM sys_dict_item
+                            WHERE deleted_at IS NULL
+                            GROUP BY dict_type) i ON i.dict_type = d.dict_type
+        WHERE d.deleted_at IS NULL
+        ORDER BY d.dict_type
+    </select>
+
+    <!--
+        类型是否存在。用 EXISTS 而不是 count(*) > 0：只需要「有没有」，
+        count 会把该类型的行全部数一遍，而这张表的类型名是唯一的，最多命中一行。
+    -->
+    <select id="existsType" resultType="java.lang.Boolean">
+        SELECT EXISTS(
+            SELECT 1
+            FROM sys_dict d
+            WHERE d.dict_type = #{dictType}
+              AND d.deleted_at IS NULL
+        )
+    </select>
+
+    <!--
+        字典项的列。ext 以文本形态交给仓储层解析（见 DictItemRow 的说明）。
+
+        三处 order by 都补 id：sort_no 允许重复，只按它排序时数据库不保证同一 sort_no 内的顺序稳定，
+        前端会看到顺序在两次刷新之间变化；id 是唯一值，兜住这个不确定性。
+    -->
+    <sql id="itemColumns">
+        i.id,
+        i.dict_type,
+        i.label,
+        i.label_en,
+        i.value,
+        i.sort_no,
+        i.status,
+        i.ext
+    </sql>
+
+    <!--
+        某类字典项。status 与 parentValue 都是可选条件：
+          status 为 null 表示不限状态（历史回显），为 ACTIVE 表示只取启用项（下拉）；
+          parentValue 非 null 时按 ext ->> 'parent' 过滤层级。
+
+        ext 为 NULL 时 ->> 返回 NULL，与任何 parentValue 都不相等，因此没有层级的项不会被
+        「parentValue=US」命中——这正是期望行为。
+    -->
+    <select id="selectItems"
+            resultType="com.yunwms.auth.infrastructure.persistence.entity.DictItemRow">
+        SELECT
+        <include refid="itemColumns"/>
+        FROM sys_dict_item i
+        WHERE i.dict_type = #{dictType}
+          AND i.deleted_at IS NULL
+        <if test="status != null">
+            AND i.status = #{status}
+        </if>
+        <if test="parentValue != null">
+            AND i.ext ->> 'parent' = #{parentValue}
+        </if>
+        ORDER BY i.sort_no, i.id
+    </select>
+
+    <!--
+        多类型字典项，一条语句取回。排序先按类型：仓储层顺序分组时，同一类型内的
+        (sort_no, id) 顺序因此自然保持，不必在内存里再排一次。
+    -->
+    <select id="selectItemsByTypes"
+            resultType="com.yunwms.auth.infrastructure.persistence.entity.DictItemRow">
+        SELECT
+        <include refid="itemColumns"/>
+        FROM sys_dict_item i
+        WHERE i.deleted_at IS NULL
+          AND i.dict_type IN
+        <foreach collection="dictTypes" item="dictType" open="(" separator="," close=")">
+            #{dictType}
+        </foreach>
+        <if test="status != null">
+            AND i.status = #{status}
+        </if>
+        ORDER BY i.dict_type, i.sort_no, i.id
+    </select>
+
+</mapper>
