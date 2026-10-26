@@ -18,6 +18,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -243,6 +244,58 @@ class OwnerCreationServiceTest {
                     // 不带值的话，用户只知道「这个前缀不行」，4 位的空间里无从判断该换什么
                     assertThat(e.getMessage()).contains("AMZ2");
                 });
+    }
+
+    @Test
+    @DisplayName("SKU 前缀撞唯一索引且能反查到占用方：提示里带占用方编码")
+    void shouldInscribeOccupierCodeIntoPrefixConflict() {
+        stubValidMainlandDictionary();
+        given(ownerCodeGenerator.next()).willReturn("OWNER0001");
+        given(ownerRepository.insert(any(NewOwner.class), anyString(), any(OwnerStatus.class), anyLong()))
+                .willThrow(constraintViolation("ux_owner_sku_prefix"));
+        given(ownerRepository.findCodeBySkuPrefix("AMZ2")).willReturn(Optional.of("OWNER0007"));
+
+        assertThatThrownBy(() -> service.create(command(OwnerStatus.ACTIVE)))
+                .isInstanceOfSatisfying(BizException.class, e -> {
+                    assertThat(e.errorCode()).isEqualTo(ErrorCode.OWNER_SKU_PREFIX_TAKEN);
+                    // 规格要求「拒绝保存并指出占用方编码」：没有编码，用户无法判断是自己抄错还是对方占着
+                    assertThat(e.getMessage()).isEqualTo("SKU 前缀已被占用：AMZ2（占用方 OWNER0007）");
+                });
+    }
+
+    @Test
+    @DisplayName("SKU 前缀撞唯一索引但反查不到占用方：退回只带前缀的原文案，不抛异常")
+    void shouldFallBackToPrefixOnlyWhenOccupierIsMissing() {
+        stubValidMainlandDictionary();
+        given(ownerCodeGenerator.next()).willReturn("OWNER0001");
+        given(ownerRepository.insert(any(NewOwner.class), anyString(), any(OwnerStatus.class), anyLong()))
+                .willThrow(constraintViolation("ux_owner_sku_prefix"));
+        // 理论上不该发生：前缀刚被数据库拒绝，反查却说没人占。为它抛空指针会把一次可解释的拒绝变成 50000
+        given(ownerRepository.findCodeBySkuPrefix("AMZ2")).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(command(OwnerStatus.ACTIVE)))
+                .isInstanceOfSatisfying(BizException.class, e -> {
+                    assertThat(e.errorCode()).isEqualTo(ErrorCode.OWNER_SKU_PREFIX_TAKEN);
+                    assertThat(e.getMessage()).isEqualTo("SKU 前缀已被占用：AMZ2");
+                });
+    }
+
+    @Test
+    @DisplayName("编码撞号与外部码重复：不触发占用方反查")
+    void shouldNotLookUpOccupierForOtherConflicts() {
+        stubValidMainlandDictionary();
+        given(ownerCodeGenerator.next()).willReturn("OWNER0001");
+
+        for (String constraint : List.of("ux_owner_code", "ux_owner_external_code")) {
+            given(ownerRepository.insert(any(NewOwner.class), anyString(), any(OwnerStatus.class), anyLong()))
+                    .willThrow(constraintViolation(constraint));
+
+            assertThatThrownBy(() -> service.create(command(OwnerStatus.ACTIVE)))
+                    .isInstanceOf(BizException.class);
+        }
+
+        // 反查是一次额外的库往返，只在前缀冲突时才值得跑
+        verify(ownerRepository, never()).findCodeBySkuPrefix(anyString());
     }
 
     @Test
