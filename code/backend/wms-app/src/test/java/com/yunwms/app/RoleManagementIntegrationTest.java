@@ -31,22 +31,25 @@ import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 角色管理接口（新建 / 列表 / 详情）的端到端验证。
+ * 角色管理接口（新建 / 列表 / 详情 / 编辑 / 启停 / 删除）的端到端验证。
  *
- * <p>要证的是单测证不了的四件事：{@code V026} 的两个权限点真的被接口消费、落库值真的是
- * 「非内置 + {@code CUSTOM} + 启用」、唯一索引与外键真的把冲突变成了可展示的错误码且整单回滚、
- * 以及列表的占用人数与授权数量真的来自同一条聚合 SQL 而不是逐行查询。
+ * <p>要证的是单测证不了的几件事：{@code V026}、{@code V029} 的四个权限点真的被接口消费、
+ * 落库值真的是「非内置 + {@code CUSTOM} + 启用」、唯一索引与外键真的把冲突变成了可展示的错误码
+ * 且整单回滚、列表的占用人数与授权数量真的来自同一条聚合 SQL 而不是逐行查询，
+ * 以及编辑的替换语义、停用后权限当次失效、删除的占用校验与软删除副作用。
  *
  * <p>操作人不复用种子账号 {@code superadmin}：它带着「需先改密」标记，拦截器在改密前只放行
  * 改密接口；替它改密又会污染 {@code BootstrapIntegrationTest} 依赖的初始状态（两个测试类
  * 共用一个库）。这里用 SQL 造一个挂着内置超管角色的已改密账号
- * （超管权限在鉴权时动态展开，因此它天然拥有 {@code V026} 新加的两个权限点）。
+ * （超管权限在鉴权时动态展开，因此它天然拥有 {@code V026}、{@code V029} 新加的权限点）。
  *
  * <p>用例之间不隔离数据，因此每个用例用自己的角色编码，且断言只针对自己那条编码。
  */
@@ -61,11 +64,15 @@ class RoleManagementIntegrationTest extends AbstractIntegrationTest {
     /** 无权限点角色编码，用例自造；迁移里除超管外不预置角色。 */
     private static final String NO_PERMISSION_ROLE = "TEST_ROLE_NO_PERMISSION";
 
-    /** 错误码来自 {@code ErrorCode}：40000 参数问题，40300 无权访问，40400 资源不存在，40900 数据冲突。 */
+    /**
+     * 错误码来自 {@code ErrorCode}：40000 参数问题，40300 无权访问，40400 资源不存在，
+     * 40900 状态不允许，40902 角色编码已被占用。
+     */
     private static final int BAD_REQUEST_CODE = 40000;
     private static final int FORBIDDEN_CODE = 40300;
     private static final int NOT_FOUND_CODE = 40400;
     private static final int CONFLICT_CODE = 40900;
+    private static final int ROLE_CODE_TAKEN_CODE = 40902;
 
     /** 语句计数器，全类共用一个实例：拦截器挂在一个共享的 SqlSessionFactory 上。 */
     private static final StatementCounter STATEMENT_COUNTER = new StatementCounter();
@@ -239,7 +246,7 @@ class RoleManagementIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("角色编码重复：返回 409 段错误码，只留一条角色")
+    @DisplayName("角色编码重复：返回 40902，只留一条角色")
     void shouldRejectDuplicateCode() throws Exception {
         String token = consoleToken();
         String code = "ROLE_DUP";
@@ -247,8 +254,9 @@ class RoleManagementIntegrationTest extends AbstractIntegrationTest {
 
         JsonNode duplicated = createRole(token, code, "重复用例角色", null, List.of());
 
-        assertThat(duplicated.path("code").asInt()).isEqualTo(CONFLICT_CODE);
-        assertThat(duplicated.path("message").asText()).isEqualTo("角色编码已被占用");
+        // 40902 而不是泛化的 40900：前端要能把这个提示挂在编码字段上
+        assertThat(duplicated.path("code").asInt()).isEqualTo(ROLE_CODE_TAKEN_CODE);
+        assertThat(duplicated.path("message").asText()).isEqualTo("角色编码已被占用（含已删除的角色）");
         assertThat(countRole(code)).isEqualTo(1);
     }
 
@@ -319,6 +327,219 @@ class RoleManagementIntegrationTest extends AbstractIntegrationTest {
         assertThat(response.path("message").asText()).isEqualTo("角色不存在");
     }
 
+    @Test
+    @DisplayName("编辑：名称、备注与授权全量替换，详情回读一致，编码不可改")
+    void shouldUpdateRoleAndReadBackDetail() throws Exception {
+        String token = consoleToken();
+        String code = "ROLE_EDIT";
+        String roleId = createdRoleId(createRole(token, code, "客服", "初始备注", List.of(listPermissionId())));
+
+        List<Long> submitted = List.of(roleMenuId(), listPermissionId(), createPermissionId());
+        JsonNode updated = updateRole(token, roleId, "客服二线", "改了备注", submitted);
+
+        assertThat(updated.path("code").asInt()).as("编辑失败：%s", updated).isZero();
+        JsonNode detail = getJson(token, "/api/console/roles/" + roleId).path("data");
+        // 编码不在请求体里，也不能被改：它是程序引用角色的标识
+        assertThat(detail.path("code").asText()).isEqualTo(code);
+        assertThat(detail.path("name").asText()).isEqualTo("客服二线");
+        assertThat(detail.path("remark").asText()).isEqualTo("改了备注");
+        assertThat(detail.path("permissionCount").asLong()).isEqualTo(submitted.size());
+        assertThat(textsOf(detail.path("menuIds"))).containsExactlyElementsOf(sortedTexts(submitted));
+        // 替换而不是追加：库里只剩这三条，建角色时勾的那一条必须已经消失
+        assertThat(permissionIdsOfRole(roleId)).containsExactlyInAnyOrderElementsOf(submitted);
+    }
+
+    @Test
+    @DisplayName("编辑：空数组清空全部授权")
+    void shouldClearAllMenusWithEmptyArray() throws Exception {
+        String token = consoleToken();
+        String roleId = createdRoleId(createRole(token, "ROLE_EDIT_CLEAR", "待清空角色", null,
+                List.of(listPermissionId(), createPermissionId())));
+
+        assertThat(updateRole(token, roleId, "待清空角色", null, List.of()).path("code").asInt()).isZero();
+
+        JsonNode detail = getJson(token, "/api/console/roles/" + roleId).path("data");
+        assertThat(detail.path("permissionCount").asLong()).isZero();
+        assertThat(textsOf(detail.path("menuIds"))).isEmpty();
+        assertThat(permissionIdsOfRole(roleId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("编辑：菜单不存在时整单拒绝，名称与授权都不变")
+    void shouldRejectUnknownMenuOnUpdate() throws Exception {
+        String token = consoleToken();
+        String roleId = createdRoleId(createRole(token, "ROLE_EDIT_BAD_MENU", "原名称", null,
+                List.of(listPermissionId())));
+
+        JsonNode response = updateRole(token, roleId, "改名尝试", "改了备注", List.of(999_999L));
+
+        assertThat(response.path("code").asInt()).isEqualTo(BAD_REQUEST_CODE);
+        assertThat(response.path("message").asText()).isEqualTo("指定的菜单或权限点不存在");
+        // 整单回滚：改名与「先删后插」的删都不能留在库里
+        JsonNode detail = getJson(token, "/api/console/roles/" + roleId).path("data");
+        assertThat(detail.path("name").asText()).isEqualTo("原名称");
+        assertThat(permissionIdsOfRole(roleId)).containsExactly(listPermissionId());
+    }
+
+    @Test
+    @DisplayName("编辑：请求体里带 code 按未知字段拒绝，编码不变")
+    void shouldRejectCodeInUpdatePayload() throws Exception {
+        String token = consoleToken();
+        String code = "ROLE_EDIT_CODE";
+        String roleId = createdRoleId(createRole(token, code, "编码不可改", null, List.of()));
+
+        JsonNode response = putJson(token, "/api/console/roles/" + roleId,
+                objectMapper.writeValueAsString(Map.of(
+                        "code", "ROLE_RENAMED",
+                        "name", "试图改编码",
+                        "menuIds", List.of())));
+
+        // FAIL_ON_UNKNOWN_PROPERTIES：多传的字段被拒绝，而不是「收下但忽略」
+        assertThat(response.path("code").asInt()).isEqualTo(BAD_REQUEST_CODE);
+        assertThat(getJson(token, "/api/console/roles/" + roleId).path("data").path("code").asText())
+                .as("编码是程序引用角色的标识，不能被改")
+                .isEqualTo(code);
+    }
+
+    @Test
+    @DisplayName("启停：停用后持有者下一次请求即 403，重复停用仍成功，再启用后恢复")
+    void shouldRevokePermissionImmediatelyAfterDisable() throws Exception {
+        String token = consoleToken();
+        String roleId = createdRoleId(createRole(token, "ROLE_TOGGLE", "待停用角色", null,
+                List.of(listPermissionId())));
+        String holderLoginName = "role-toggle-holder";
+        Long holderId = seedAccount(holderLoginName, "角色持有者", "role-toggle-holder@example.com");
+        link(holderId, Long.parseLong(roleId));
+        String holderToken = login(holderLoginName).path("data").path("token").asText();
+        // 停用前：角色带来的权限点让这个账号可以访问角色列表
+        assertThat(getJson(holderToken, "/api/console/roles?pageNo=1&pageSize=1").path("code").asInt())
+                .as("停用前的权限应当已生效")
+                .isZero();
+
+        assertThat(changeRoleStatus(token, roleId, "DISABLED").path("code").asInt()).isZero();
+
+        // 权限当次请求就失效：鉴权每次请求都按角色状态过滤，没有缓存要等过期，也不需要重新登录
+        mockMvc.perform(get("/api/console/roles?pageNo=1&pageSize=1")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + holderToken))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(FORBIDDEN_CODE));
+
+        // 幂等：同一目标状态重复提交按成功处理
+        assertThat(changeRoleStatus(token, roleId, "DISABLED").path("code").asInt()).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM sys_role WHERE id = ?",
+                String.class, Long.parseLong(roleId))).isEqualTo("DISABLED");
+
+        // 重新启用后同一个令牌恢复权限：停用改的是角色，不是会话
+        assertThat(changeRoleStatus(token, roleId, "ACTIVE").path("code").asInt()).isZero();
+        assertThat(getJson(holderToken, "/api/console/roles?pageNo=1&pageSize=1").path("code").asInt()).isZero();
+    }
+
+    @Test
+    @DisplayName("删除：仍被用户占用时拒绝并提示人数，角色保留")
+    void shouldRejectDeletingOccupiedRole() throws Exception {
+        String token = consoleToken();
+        String roleId = createdRoleId(createRole(token, "ROLE_OCCUPIED", "被占用角色", null, List.of()));
+        Long holderId = seedAccount("role-occupied-holder", "占用用户", "role-occupied-holder@example.com");
+        link(holderId, Long.parseLong(roleId));
+
+        JsonNode response = deleteRole(token, roleId);
+
+        // 409 段位而不是 40000：入参合法，被拒绝的是「这个角色还有人用」这个状态
+        assertThat(response.path("code").asInt()).isEqualTo(CONFLICT_CODE);
+        assertThat(response.path("message").asText()).isEqualTo("该角色仍被 1 个用户使用，请先解除分配");
+        // 必须证明库里的角色还在：CASCADE 会静默带走关联记录，这条断言防的正是「删了也不报错」
+        assertThat(countRole("ROLE_OCCUPIED")).isEqualTo(1);
+        assertThat(deletedAtOf(roleId)).isNull();
+    }
+
+    @Test
+    @DisplayName("删除：未占用角色软删除，列表与详情都查不到，编码仍被占用")
+    void shouldSoftDeleteUnoccupiedRole() throws Exception {
+        String token = consoleToken();
+        String code = "ROLE_DELETED";
+        String roleId = createdRoleId(createRole(token, code, "待删角色", null, List.of(listPermissionId())));
+
+        assertThat(deleteRole(token, roleId).path("code").asInt()).isZero();
+
+        // 列表与详情按 deleted_at 过滤：删完即查不到
+        JsonNode page = getJson(token, "/api/console/roles?keyword=" + code).path("data");
+        assertThat(page.path("total").asInt()).isZero();
+        assertThat(getJson(token, "/api/console/roles/" + roleId).path("code").asInt())
+                .isEqualTo(NOT_FOUND_CODE);
+
+        // 软删除：行还在、deleted_at 有值；授权关联保留，供将来审计回溯
+        assertThat(countRole(code)).isEqualTo(1);
+        assertThat(deletedAtOf(roleId)).isNotNull();
+        assertThat(permissionIdsOfRole(roleId)).as("软删除不动授权关联").containsExactly(listPermissionId());
+
+        // 副作用：ux_sys_role_code 是全表唯一索引、不带 deleted_at 条件，编码仍被占着，
+        // 重建必须给出能解释这一点的提示，否则管理员会陷入「明明没有这个角色，却说我重复」
+        JsonNode recreated = createRole(token, code, "重建同名角色", null, List.of());
+        assertThat(recreated.path("code").asInt()).isEqualTo(ROLE_CODE_TAKEN_CODE);
+        assertThat(recreated.path("message").asText()).isEqualTo("角色编码已被占用（含已删除的角色）");
+    }
+
+    @Test
+    @DisplayName("内置角色：编辑、停用、删除三者都被拒绝，库里状态不变")
+    void shouldRejectAllModificationsOnBuiltinRole() throws Exception {
+        String token = consoleToken();
+        String superAdminId = Long.toString(jdbcTemplate.queryForObject(
+                "SELECT id FROM sys_role WHERE code = 'SUPER_ADMIN'", Long.class));
+
+        JsonNode edited = updateRole(token, superAdminId, "改了超管名", null, List.of());
+        assertThat(edited.path("code").asInt()).isEqualTo(CONFLICT_CODE);
+        assertThat(edited.path("message").asText()).isEqualTo("内置角色不可编辑");
+
+        JsonNode disabled = changeRoleStatus(token, superAdminId, "DISABLED");
+        assertThat(disabled.path("code").asInt()).isEqualTo(CONFLICT_CODE);
+        assertThat(disabled.path("message").asText()).isEqualTo("内置角色不可启停");
+
+        JsonNode deleted = deleteRole(token, superAdminId);
+        assertThat(deleted.path("code").asInt()).isEqualTo(CONFLICT_CODE);
+        assertThat(deleted.path("message").asText()).isEqualTo("内置角色不可删除");
+
+        // 三件事必须都没发生：超管角色一旦被停用或删除，系统里再没有账号能配置权限
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT name, status, deleted_at FROM sys_role WHERE code = 'SUPER_ADMIN'");
+        assertThat(row.get("name")).isEqualTo("超级管理员");
+        assertThat(row.get("status")).isEqualTo("ACTIVE");
+        assertThat(row.get("deleted_at")).isNull();
+    }
+
+    @Test
+    @DisplayName("无写权限的用户：编辑、启停、删除都返回 HTTP 403，角色不变")
+    void shouldRejectModificationsWithoutPermission() throws Exception {
+        String operatorToken = consoleToken();
+        String roleId = createdRoleId(createRole(operatorToken, "ROLE_DENIED_WRITE", "无权限用例角色",
+                null, List.of(listPermissionId())));
+        String token = login(NO_PERMISSION_LOGIN_NAME).path("data").path("token").asText();
+
+        mockMvc.perform(put("/api/console/roles/" + roleId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new UpdateRolePayload("改名尝试", null, List.of()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(FORBIDDEN_CODE));
+        mockMvc.perform(put("/api/console/roles/" + roleId + "/status")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ChangeStatusPayload("DISABLED"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(FORBIDDEN_CODE));
+        mockMvc.perform(delete("/api/console/roles/" + roleId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(FORBIDDEN_CODE));
+
+        // 403 之外还要证明业务逻辑没有执行：只有「先拦后执行」才叫未授权接口不执行业务逻辑
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT name, status, deleted_at FROM sys_role WHERE id = ?", Long.parseLong(roleId));
+        assertThat(row.get("name")).isEqualTo("无权限用例角色");
+        assertThat(row.get("status")).isEqualTo("ACTIVE");
+        assertThat(row.get("deleted_at")).isNull();
+    }
+
     /** 用操作人账号登录取令牌；未改密时这里会拿不到可用令牌，属于测试自身的前提失败。 */
     private String consoleToken() throws Exception {
         JsonNode login = login(OPERATOR_LOGIN_NAME);
@@ -347,8 +568,39 @@ class RoleManagementIntegrationTest extends AbstractIntegrationTest {
         return postJson(token, "/api/console/roles", body);
     }
 
+    private JsonNode updateRole(String token, String roleId, String name, String remark, List<Long> menuIds)
+            throws Exception {
+        // 与建角色同一口径：标识按契约以字符串传
+        List<String> menuIdTexts = menuIds.stream().map(String::valueOf).toList();
+        return putJson(token, "/api/console/roles/" + roleId,
+                objectMapper.writeValueAsString(new UpdateRolePayload(name, remark, menuIdTexts)));
+    }
+
+    private JsonNode changeRoleStatus(String token, String roleId, String status) throws Exception {
+        return putJson(token, "/api/console/roles/" + roleId + "/status",
+                objectMapper.writeValueAsString(new ChangeStatusPayload(status)));
+    }
+
+    private JsonNode deleteRole(String token, String roleId) throws Exception {
+        MvcResult result = mockMvc.perform(delete("/api/console/roles/" + roleId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString());
+    }
+
     private JsonNode postJson(String token, String path, String body) throws Exception {
         MvcResult result = mockMvc.perform(post(path)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString());
+    }
+
+    private JsonNode putJson(String token, String path, String body) throws Exception {
+        MvcResult result = mockMvc.perform(put(path)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
@@ -388,6 +640,37 @@ class RoleManagementIntegrationTest extends AbstractIntegrationTest {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM sys_role WHERE code = ?", Integer.class, code);
         return count == null ? 0 : count;
+    }
+
+    /** 取建角色响应里的标识；失败时直接失败，避免后续断言被空值带偏。 */
+    private static String createdRoleId(JsonNode createdRole) {
+        assertThat(createdRole.path("code").asInt()).as("建角色失败：%s", createdRole).isZero();
+        return createdRole.path("data").path("id").asText();
+    }
+
+    /** 直接查库核对授权关系：接口层只能证明「改完之后详情回读一致」，证明不了库里真的换了那批。 */
+    private List<Long> permissionIdsOfRole(String roleId) {
+        return jdbcTemplate.queryForList(
+                "SELECT menu_id FROM sys_role_menu WHERE role_id = ? ORDER BY menu_id",
+                Long.class, Long.parseLong(roleId));
+    }
+
+    /** 取软删除标记：为 {@code null} 表示角色仍然有效。 */
+    private Object deletedAtOf(String roleId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT deleted_at FROM sys_role WHERE id = ?", Object.class, Long.parseLong(roleId));
+    }
+
+    /** 详情里的标识按契约以字符串返回，断言前统一成字符串列表。 */
+    private static List<String> textsOf(JsonNode array) {
+        List<String> values = new ArrayList<>();
+        array.forEach(node -> values.add(node.asText()));
+        return values;
+    }
+
+    /** 详情按标识升序返回，因此期望值也排一次序。 */
+    private static List<String> sortedTexts(List<Long> values) {
+        return values.stream().sorted().map(String::valueOf).toList();
     }
 
     /**
@@ -446,6 +729,26 @@ class RoleManagementIntegrationTest extends AbstractIntegrationTest {
      * @param menuIds 勾选的菜单与权限点标识，按契约以字符串传
      */
     private record CreateRolePayload(String code, String name, String remark, List<String> menuIds) {
+    }
+
+    /**
+     * 编辑角色请求体的最小映射，理由同上。
+     *
+     * <p>没有 {@code code} 字段：编码不可改，多传会被后端按未知字段拒绝。
+     *
+     * @param name    角色名称
+     * @param remark  备注，可为 {@code null}
+     * @param menuIds 替换后的菜单与权限点标识，按契约以字符串传
+     */
+    private record UpdateRolePayload(String name, String remark, List<String> menuIds) {
+    }
+
+    /**
+     * 启停请求体的最小映射，理由同上。
+     *
+     * @param status 目标状态编码
+     */
+    private record ChangeStatusPayload(String status) {
     }
 
     /**
