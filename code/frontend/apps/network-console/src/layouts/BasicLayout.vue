@@ -10,7 +10,7 @@ import {
   TeamOutlined
 } from '@ant-design/icons-vue'
 import { Button, Divider, Menu as AntMenu, MenuItem as AntMenuItem } from 'ant-design-vue'
-import { clearToken } from '@yunwms/request'
+import { session } from '@/stores/session'
 
 const route = useRoute()
 const router = useRouter()
@@ -45,7 +45,8 @@ function toggleLocale() {
 }
 
 function logout() {
-  clearToken()
+  // 令牌与本地会话一起清：只清令牌会让 displayName、待改密标记留在 sessionStorage 里
+  session.clear()
   router.replace({ name: 'login' })
 }
 </script>
