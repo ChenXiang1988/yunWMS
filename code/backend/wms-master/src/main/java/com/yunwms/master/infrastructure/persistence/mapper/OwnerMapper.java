@@ -83,4 +83,15 @@ public interface OwnerMapper extends BaseMapper<OwnerEntity> {
      * @return 已被占用返回 {@code true}
      */
     boolean existsByExternalCode(@Param("externalCode") String externalCode);
+
+    /**
+     * 按 SKU 前缀取占用方的系统编码，口径为全表（含已逻辑删除的货主），与全表唯一索引一致。
+     *
+     * <p>返回单列而不是整行：调用方只需要把编码拼进一句提示，多搬十几列会让「这里为什么要读一整行」
+     * 变成一个要翻调用方才能回答的问题。
+     *
+     * @param skuPrefix SKU 前缀
+     * @return 占用方编码；前缀未被占用时为 {@code null}
+     */
+    String selectCodeBySkuPrefix(@Param("skuPrefix") String skuPrefix);
 }

@@ -124,6 +124,17 @@ public class OwnerRepositoryImpl implements OwnerRepository {
     }
 
     /**
+     * {@inheritDoc}
+     *
+     * <p>{@code null} 结果转成空 {@link Optional}：本方法只在插入已经失败之后被调用，
+     * 返回 {@code null} 会让调用方在拼提示时踩空指针——而那时的空指针会盖掉真正要展示的冲突原因。
+     */
+    @Override
+    public Optional<String> findCodeBySkuPrefix(String skuPrefix) {
+        return Optional.ofNullable(ownerMapper.selectCodeBySkuPrefix(skuPrefix));
+    }
+
+    /**
      * 把创建入参搬成表映射对象。
      *
      * @param owner         待落库的货主

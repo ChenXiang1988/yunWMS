@@ -153,4 +153,23 @@
         )
     </select>
 
+    <!--
+        SKU 前缀的占用方反查，口径与 existsBySkuPrefix 相同：**刻意不带 deleted_at 条件**。
+
+        它与上面那条的差异是刻意的，不是遗漏：前缀是全表唯一索引，已软删除的货主仍占着前缀，
+        按未删除口径反查会得到「数据库说被占用、这里说没人占」，提示只能退回原文案。
+
+        只在 INSERT 撞上 ux_owner_sku_prefix 之后调用，用于把「被谁占着」写进提示。
+        取单列、不做 SELECT *：调用方只需要编码。
+
+        LIMIT 1 不是「随便挑一条」：唯一索引保证至多一行，写上是让「数据被绕过索引写坏」时
+        也只返回一行，而不是抛 TooManyResultsException 把一次本可以解释清楚的冲突变成 50000。
+    -->
+    <select id="selectCodeBySkuPrefix" resultType="java.lang.String">
+        SELECT o.code
+        FROM owner o
+        WHERE o.sku_prefix = #{skuPrefix}
+        LIMIT 1
+    </select>
+
 </mapper>

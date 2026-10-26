@@ -76,7 +76,8 @@ public class OwnerCreationService {
      * @return 新货主的标识与系统编码
      * @throws BizException 当前会话无效（40100）；初始状态缺失或不可用于建档、SKU 前缀格式不合规、
      *                      地址必填项缺失、客户类型/国家/州省/邮编不满足字典规则（40000）；
-     *                      编码被占用（40904）、SKU 前缀被占用（40905）、外部码被占用（40906）
+     *                      编码被占用（40904）、SKU 前缀被占用（40905，提示里带前缀原文与占用方编码）、
+     *                      外部码被占用（40906）
      */
     public CreatedOwner create(CreateOwnerCommand command) {
         long operatorId = currentOperator.currentUserId()
@@ -102,7 +103,10 @@ public class OwnerCreationService {
             long id = ownerRepository.insert(owner, code, initialStatus, operatorId);
             return new CreatedOwner(id, code);
         } catch (DataIntegrityViolationException e) {
-            throw OwnerConstraintTranslator.translateInsert(e, owner.skuPrefix().value());
+            // 占用方反查交给端口：只有前缀冲突时它才会被调用（见 OwnerConstraintTranslator），
+            // 编码撞号与外部码重复不会因此多跑一次库
+            throw OwnerConstraintTranslator.translateInsert(
+                    e, owner.skuPrefix().value(), ownerRepository::findCodeBySkuPrefix);
         }
     }
 

@@ -4,6 +4,9 @@ import com.yunwms.web.api.ErrorCode;
 import com.yunwms.web.exception.BizException;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import java.util.Optional;
+import java.util.function.Function;
+
 /**
  * 货主写入侧的库约束翻译：把数据库抛出的完整性约束冲突翻成可展示的业务错误。
  *
@@ -36,11 +39,23 @@ final class OwnerConstraintTranslator {
      *
      * <p>三个唯一索引都可能命中：编码由取号引擎给出（撞号说明取号有缺陷），SKU 前缀与外部码来自入参。
      *
-     * @param e         数据库抛出的完整性约束冲突
-     * @param skuPrefix 本次提交的 SKU 前缀原文，用于把值带进 40905 的提示；调用方保证非空
+     * <p><b>占用方反查只在前缀冲突时才调用：</b>它是「已经确定要报 40905」之后的一次补充查询，
+     * 不是判重的前置查询。写成入参是 {@link Function} 而不是直接传编码，就是为了让另外两种冲突
+     * 不会白白多跑一次库。
+     *
+     * <p><b>反查能执行，依赖建档链路不开事务：</b>PostgreSQL 在同一事务里撞死一条语句后会把整个事务
+     * 置为 aborted，后续查询一律失败。建档是单条 {@code INSERT}（自动提交），失败语句只回滚它自己，
+     * 因此这里补一次读取是安全的；若给 {@code OwnerCreationService#create} 加上 {@code @Transactional}，
+     * 这条反查会稳定报「current transaction is aborted」，那时必须改成在事务外补提示。
+     *
+     * @param e              数据库抛出的完整性约束冲突
+     * @param skuPrefix      本次提交的 SKU 前缀原文，用于把值带进 40905 的提示；调用方保证非空
+     * @param occupierLookup 按前缀反查占用方编码；只在命中前缀唯一索引时调用，允许返回空
      * @return 已翻译的业务异常；约束未知时为原始异常，由全局异常处理归到 50000
      */
-    static RuntimeException translateInsert(DataIntegrityViolationException e, String skuPrefix) {
+    static RuntimeException translateInsert(DataIntegrityViolationException e,
+                                            String skuPrefix,
+                                            Function<String, Optional<String>> occupierLookup) {
         String cause = causeOf(e);
         if (cause == null) {
             return e;
@@ -50,7 +65,7 @@ final class OwnerConstraintTranslator {
             return new BizException(ErrorCode.OWNER_CODE_TAKEN);
         }
         if (cause.contains(OWNER_SKU_PREFIX_UNIQUE_INDEX)) {
-            return skuPrefixTaken(skuPrefix);
+            return skuPrefixTaken(skuPrefix, occupierLookup);
         }
         return externalCodeTakenOrOriginal(e, cause);
     }
@@ -98,16 +113,31 @@ final class OwnerConstraintTranslator {
     }
 
     /**
-     * 构造前缀冲突的业务异常，提示里带上被占用的前缀原文。
+     * 构造前缀冲突的业务异常，提示里带上被占用的前缀原文与占用方编码。
      *
-     * <p>不带值的话，用户只知道「这个前缀不行」，而 4 位字符的空间里能换的组合他无从判断——
+     * <p>不带前缀原文的话，用户只知道「这个前缀不行」，而 4 位字符的空间里能换的组合他无从判断——
      * 尤其是当前缀是从外部系统抄过来、对方只给了一个编号的时候。
      *
-     * @param skuPrefix 被占用的前缀原文
-     * @return 带具体前缀的 40905
+     * <p><b>为什么还要带占用方编码：</b>规格要求「拒绝保存并指出占用方编码」。被占用的那个货主
+     * 往往属于别的业务线，操作人自己看不到它；给出编码，他才能去找对应的人核对是不是抄错了前缀，
+     * 而不是在一张自己无权查看的表上反复试探。
+     *
+     * <p><b>反查为空时退回只带前缀的原文案：</b>前缀在这一刻确实被占用（数据库刚拒绝过），
+     * 查不到只可能是那一行在两次调用之间被物理删除。为这种情形抛异常或硬编一个「未知占用方」，
+     * 会把一次本可解释的拒绝变成一次错误——文案少一个括号，代价远小于一个 50000。
+     *
+     * @param skuPrefix      被占用的前缀原文
+     * @param occupierLookup 按前缀反查占用方编码
+     * @return 带前缀原文（以及可查到时带占用方编码）的 40905
      */
-    private static BizException skuPrefixTaken(String skuPrefix) {
-        return new BizException(ErrorCode.OWNER_SKU_PREFIX_TAKEN,
-                ErrorCode.OWNER_SKU_PREFIX_TAKEN.defaultMessage() + "：" + skuPrefix);
+    private static BizException skuPrefixTaken(String skuPrefix,
+                                               Function<String, Optional<String>> occupierLookup) {
+        String message = ErrorCode.OWNER_SKU_PREFIX_TAKEN.defaultMessage() + "：" + skuPrefix;
+        return occupierLookup.apply(skuPrefix)
+                // 占用方是已软删除的货主时同样会被查出来：前缀是全表唯一，删除不释放占用。
+                // 提示里因此不加「（已删除）」这类限定——说清是谁占的就够了，用户不需要知道它的状态
+                .map(occupier -> new BizException(ErrorCode.OWNER_SKU_PREFIX_TAKEN,
+                        message + "（占用方 " + occupier + "）"))
+                .orElseGet(() -> new BizException(ErrorCode.OWNER_SKU_PREFIX_TAKEN, message));
     }
 }

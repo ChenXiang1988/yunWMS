@@ -130,4 +130,20 @@ public interface OwnerRepository {
      * @return 已被占用返回 {@code true}
      */
     boolean existsByExternalCode(String externalCode);
+
+    /**
+     * 按 SKU 前缀反查占用方的系统编码，用于在冲突提示里指出「被谁占着」。
+     *
+     * <p><b>口径与 {@link #existsBySkuPrefix} 完全一致，同样是全表、刻意不带 {@code deleted_at} 条件：</b>
+     * {@code ux_owner_sku_prefix} 是全表唯一索引，已软删除的货主仍占着前缀。若这里按「未删除」反查，
+     * 就会出现「数据库说前缀被占用，反查却说没人占」——那时提示只能退回原文案，
+     * 用户看到的是一句查不到占用方的拒绝，而那条已删除的货主在管理界面上根本不可见。
+     *
+     * <p><b>它不是判重手段：</b>调用时机是「插入已经撞上唯一索引之后」，只为把提示写清楚；
+     * 判重仍然只有数据库能做（见本接口的类注释）。
+     *
+     * @param skuPrefix SKU 前缀，调用方保证已通过 {@code SkuPrefix} 校验
+     * @return 占用方的系统编码；前缀未被占用时为空
+     */
+    Optional<String> findCodeBySkuPrefix(String skuPrefix);
 }
