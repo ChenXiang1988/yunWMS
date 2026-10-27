@@ -27,8 +27,8 @@
 
 | 检查 | 命令 | 实际 |
 | --- | --- | --- |
-| 单元测试 | `cd code/tools/audit-delivery && python3 -m unittest discover -s tests` | 10 tests，OK |
-| staged 审计 | `python3 code/tools/audit-delivery/audit_delivery.py --anchor main --staged ...` | 8 个文件在白名单内，blocking 空 |
+| 单元测试 | `cd code/tools/audit-delivery && python3 -m unittest discover -s tests` | 11 tests，OK |
+| staged 审计 | `python3 code/tools/audit-delivery/audit_delivery.py --anchor main --staged ...` | 9 个文件在白名单内，blocking 空 |
 | 计数 | 同上 | mapperXml 9、mapperStatements 25、migrations 36、tables 24、openapiOperations 25 |
 | OpenSpec | 同上 `--change audit-delivery-tooling` | validate 通过，unknown 空 |
 
