@@ -86,6 +86,54 @@
     </select>
 
     <!--
+        状态流转用的锁读：按标识取一行并加排他行锁。
+
+        为什么必须是「同一条语句里的 FOR UPDATE」：分两步（先 SELECT 再锁）会留下一个
+        「读到之后、锁上之前被别人改掉」的窗口，而状态流转的全部正确性都建立在
+        「判定所依据的状态与写回时所在的状态是同一份」之上。
+
+        锁在调用方的事务内一直持有到提交或回滚，因此本语句必须在事务里执行：
+        没有事务时 PostgreSQL 在自动提交的语句结束时即释放锁，读到的只是一个会立刻过期的快照，
+        随后的 UPDATE 仍然可以基于旧值把并发写入覆盖掉——那正是本变更要修的问题。
+
+        deleted_at IS NULL 必须手写：MyBatis-Plus 的逻辑删除只作用于它自己生成的语句。
+        没有这一条，针对已删除货主的流转会读到行、锁住行，而 UPDATE 命中零行，
+        调用方看到成功、库里什么都没变。
+
+        显式列出全部列（含 deleted_at），不用 SELECT *：新增列时这里不会悄悄多搬一列，
+        与 selectPageByFilter 保持同一份投影，映射对象不会出现「这列到底有没有读」的疑问。
+    -->
+    <select id="selectByIdForUpdate"
+            resultType="com.yunwms.master.infrastructure.persistence.entity.OwnerEntity">
+        SELECT o.id,
+               o.code,
+               o.name,
+               o.short_name,
+               o.name_en,
+               o.external_code,
+               o.sku_prefix,
+               o.owner_type,
+               o.settlement_entity,
+               o.status,
+               o.country,
+               o.province,
+               o.city,
+               o.district,
+               o.postal_code,
+               o.address_line,
+               o.remark,
+               o.created_at,
+               o.created_by,
+               o.updated_at,
+               o.updated_by,
+               o.deleted_at
+        FROM owner o
+        WHERE o.id = #{id}
+          AND o.deleted_at IS NULL
+        FOR UPDATE
+    </select>
+
+    <!--
         编辑货主的档案列。
 
         为什么不用 updateById：它按「非空字段才进 SET」的策略生成语句，于是「把外部码清空」

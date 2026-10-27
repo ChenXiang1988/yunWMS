@@ -10,6 +10,7 @@ import com.yunwms.master.domain.port.OwnerRepository;
 import com.yunwms.web.api.ErrorCode;
 import com.yunwms.web.exception.BizException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 货主状态流转的用例：五态之间的唯一写入口。
@@ -42,7 +43,15 @@ import org.springframework.stereotype.Service;
  * <p><b>本类不改商品与账号：</b>规格明令终止时 MUST NOT 自动修改商品档案状态。这里没有对应的端口，
  * 也没有「顺手停用账号」的分支——将来要加，也必须先改规格。
  *
- * <p>不开事务：只有一条 {@code UPDATE}，影响清单是读操作。
+ * <p><b>必须开事务并锁读当前行：</b>本用例是典型的「读当前值 → 判定 → 写回」，三段之间若没有行锁，
+ * 两个并发请求可以同时读到 {@code ACTIVE}：一个判定「终止允许」、一个判定「暂停允许」，
+ * 两条 UPDATE 依提交顺序覆盖，最后落库的可能是一次暂停——于是终止返回了成功，却不再是终态。
+ * {@link OwnerRepository#findByIdForUpdate} 拿到的锁一直持有到本事务提交，
+ * 后到的那次请求因此读到的是前一次提交后的状态，判定依据与写回依据才是同一份。
+ *
+ * <p><b>代价是有意接受的：</b>同一货主的状态流转由并发变为串行，锁内只有一次锁读、一次状态判定
+ * 与一条单行 UPDATE，未确认终止那次会再读一次只读的影响清单。管理端的状态流转是低频操作，
+ * 拿这点延迟换「终止是终态」在并发下也成立，值得。
  */
 @Service
 public class OwnerStatusChangeService {
@@ -67,18 +76,27 @@ public class OwnerStatusChangeService {
     /**
      * 把货主流转到目标状态。
      *
+     * <p>{@code @Transactional} 必须落在本方法上而不是某个私有方法里：Spring 的事务是基于代理的，
+     * 同类内部调用不经过代理，事务不会开启，其中那次锁读拿到的锁也就随之失去意义。
+     *
+     * <p>锁读放在最前面、与状态判定和写回同处一个事务，是为了让「判定依据的状态」与
+     * 「写回时所在的状态」是同一份：任何并发请求对同一货主的流转都在锁上排队，
+     * 后到者读到的是前者提交后的状态，因此不会再出现「两次判定都基于 ACTIVE」。
+     *
      * @param command 流转入参
      * @throws BizException 当前会话无效（40100）；货主不存在或已逻辑删除（40400）；
      *                      目标状态编码未知（40000）；当前状态不允许流转到目标状态（40900）；
      *                      终止未确认影响清单（40900，提示里带商品数与账号数）
      */
+    @Transactional
     public void change(ChangeOwnerStatusCommand command) {
         long operatorId = currentOperator.currentUserId()
                 // 与建档、编辑同一理由：取不到操作人就不能继续，updated_by 写成空值后无从追溯
                 .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED));
 
-        Owner existing = ownerRepository.findById(command.ownerId())
-                // 已逻辑删除的货主与「不存在」同口径：管理端看不到它，流转它也就无从谈起
+        Owner existing = ownerRepository.findByIdForUpdate(command.ownerId())
+                // 已逻辑删除的货主与「不存在」同口径：管理端看不到它，流转它也就无从谈起。
+                // 锁读同样带 deleted_at IS NULL，因此「锁不到」在这里与「不存在」是同一个分支
                 .orElseThrow(() -> BizException.notFound("货主不存在"));
 
         OwnerStatus targetStatus = resolveTargetStatus(command.targetStatus());
