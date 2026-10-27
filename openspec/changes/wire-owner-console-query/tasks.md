@@ -14,4 +14,4 @@
 
 - [x] 3.1 为纯模型函数增加 node:test，接入应用 `test` 脚本，验证：`pnpm --filter @yunwms/network-console test` 通过。
 - [x] 3.2 运行 `pnpm -r typecheck`、`pnpm -r test`、`pnpm -r build`、`pnpm check:ui`，验证：全部通过。
-- [ ] 3.3 运行只读审计并写 `completion.md`。
+- [x] 3.3 运行只读审计并写 `completion.md`。
