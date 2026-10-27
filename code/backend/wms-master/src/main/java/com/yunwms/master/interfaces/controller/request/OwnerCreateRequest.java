@@ -62,7 +62,7 @@ public record OwnerCreateRequest(
         @Size(max = 4, message = "SKU 前缀不能超过 4 个字符")
         @Schema(description = "SKU 前缀，必填：4 位大写字母或数字，且不能包含 0、O、1、I（这四个字符"
                 + "在标签上易与其他字符认混）。系统拒绝含这些字符的输入，不做自动替换。全局唯一（含草稿），"
-                + "已被占用返回 40905；创建后不可修改，也不会出现在编辑接口里", example = "AMZ1")
+                + "已被占用返回 40905；创建后不可修改，也不会出现在编辑接口里", example = "AMZ2")
         String skuPrefix,
 
         @NotBlank(message = "客户类型不能为空")

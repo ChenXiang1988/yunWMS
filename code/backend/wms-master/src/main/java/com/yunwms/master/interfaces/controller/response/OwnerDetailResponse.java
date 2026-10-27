@@ -69,7 +69,7 @@ public record OwnerDetailResponse(
         String externalCode,
 
         @Schema(description = "SKU 前缀原文（4 位大写字母或数字，不含 0、O、1、I）；只读，创建后不可修改",
-                example = "AMZ1")
+                example = "AMZ2")
         String skuPrefix,
 
         @Schema(description = "结算主体，开票与对账的抬头", example = "深圳某某贸易有限公司")

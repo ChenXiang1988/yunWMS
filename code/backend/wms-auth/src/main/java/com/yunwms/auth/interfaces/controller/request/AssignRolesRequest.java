@@ -13,16 +13,17 @@ import java.util.List;
  * 但省略更可能是前端没想清楚要提交什么，而它的后果是「悄悄清空了这个人的全部角色」。
  * 空数组是明确的意图表达，因此合法。
  *
- * <p>元素标识按契约以字符串传输、由 Jackson 反序列化为 {@code Long}：
- * {@code docs/api-convention.md} 第五节要求标识在 JSON 里是字符串，超过 2^53 的 Long
- * 在 JS 里会丢精度。
+ * <p>元素标识按契约以字符串传输：{@code docs/api-convention.md} 第五节要求标识在 JSON 里是字符串，
+ * 超过 2^53 的 Long 在 JS 里会丢精度。字符串是协议事实，因此请求体保持 {@code String}，
+ * 由 Controller 在构造 Command 前经 {@link RequestIds} 解析为 {@code Long}，用例层只见数值标识。
  *
- * @param roleIds 替换后的角色标识；空数组合法，表示移除该用户的全部角色
+ * @param roleIds 替换后的角色标识，字符串形式；空数组合法，表示移除该用户的全部角色
  */
 public record AssignRolesRequest(
         @NotNull(message = "角色标识集合不能省略，移除全部角色请传空数组")
-        @Schema(description = "替换后的角色标识集合，必传，元素为字符串形式的十进制整数；"
-                + "语义是整批替换而非增量，空数组合法且表示移除该用户的全部角色，"
-                + "省略字段则被拒绝——省略更可能是没想清楚要提交什么，后果却是悄悄清空了全部角色")
-        List<@NotNull(message = "角色标识不能为空") Long> roleIds) {
+        @Schema(description = "替换后的角色标识集合，必传，以字符串传输：元素是字符串形式的十进制整数，"
+                + "形如 [\"2\", \"3\"]；语义是整批替换而非增量，空数组合法且表示移除该用户的全部角色，"
+                + "省略字段则被拒绝——省略更可能是没想清楚要提交什么，后果却是悄悄清空了全部角色；"
+                + "元素不是十进制整数的字符串返回 40000")
+        List<@NotNull(message = "角色标识不能为空") String> roleIds) {
 }

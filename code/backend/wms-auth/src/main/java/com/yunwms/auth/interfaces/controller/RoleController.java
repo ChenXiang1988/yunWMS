@@ -11,6 +11,7 @@ import com.yunwms.auth.domain.model.RoleStatus;
 import com.yunwms.auth.interfaces.controller.assembler.RoleResponseAssembler;
 import com.yunwms.auth.interfaces.controller.request.ChangeRoleStatusRequest;
 import com.yunwms.auth.interfaces.controller.request.CreateRoleRequest;
+import com.yunwms.auth.interfaces.controller.request.RequestIds;
 import com.yunwms.auth.interfaces.controller.request.UpdateRoleRequest;
 import com.yunwms.auth.interfaces.controller.response.CreatedRoleResponse;
 import com.yunwms.auth.interfaces.controller.response.RoleDetailResponse;
@@ -76,8 +77,8 @@ public class RoleController {
      * 三者都不是请求参数，理由见 {@code NewRole}。
      *
      * @param request 建角色请求
-     * @return 新角色的标识与编码；编码格式不合规、编码已被占用、勾选的菜单或权限点不存在
-     *         通过业务错误码返回
+     * @return 新角色的标识与编码；编码格式不合规、编码已被占用、勾选的菜单或权限点不存在、
+     *         {@code menuIds} 含非十进制整数的字符串通过业务错误码返回
      */
     @Operation(summary = "创建角色",
             description = "新建一个自定义角色并同时写入它勾选的菜单与权限点。三个属性不在请求体里、也不能由调用方指定："
@@ -88,11 +89,13 @@ public class RoleController {
     @SaCheckPermission("system:role:create")
     @PostMapping
     public ApiResult<CreatedRoleResponse> create(@Valid @RequestBody CreateRoleRequest request) {
+        // 请求体里的标识按契约以字符串传输（见 docs/api-convention.md 第五节），
+        // 在这里解析成 Long：字符串是 HTTP 协议事实，不带进用例层
         CreateRoleCommand command = new CreateRoleCommand(
                 request.code(),
                 request.name(),
                 request.remark(),
-                request.menuIds());
+                RequestIds.optionalIds(request.menuIds(), "menuIds"));
         return ApiResult.ok(roleResponseAssembler.toCreatedResponse(roleCreationService.create(command)));
     }
 
@@ -158,7 +161,8 @@ public class RoleController {
      * @param id      角色标识
      * @param request 编辑请求体
      * @return 成功无数据；角色不存在（40400）、名称为空或菜单不存在（40000）、
-     *         内置角色（40900）通过业务错误码返回
+     *         内置角色（40900）、{@code menuIds} 含非十进制整数的字符串（40000）
+     *         通过业务错误码返回
      */
     @Operation(summary = "编辑角色",
             description = "全量替换角色名称、备注与授权：menuIds 提交的就是这个角色之后拥有的全部权限点，"
@@ -172,8 +176,10 @@ public class RoleController {
             @Parameter(description = "角色标识，取自列表响应里的 id")
             @PathVariable long id,
             @Valid @RequestBody UpdateRoleRequest request) {
+        // 与建角色同一口径：元素以字符串传输，解析成 Long 后再构造 Command
         roleModificationService.update(new UpdateRoleCommand(
-                id, request.name(), request.remark(), request.menuIds()));
+                id, request.name(), request.remark(),
+                RequestIds.optionalIds(request.menuIds(), "menuIds")));
         return ApiResult.ok();
     }
 

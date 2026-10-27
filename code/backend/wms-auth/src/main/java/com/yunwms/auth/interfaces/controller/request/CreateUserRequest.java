@@ -48,8 +48,9 @@ public record CreateUserRequest(
         SubjectType subjectType,
 
         @Schema(description = "所属货主标识，以字符串传输：货主用户必填，内部员工必须不传。"
-                + "取值来自货主列表，创建后不可修改")
-        Long ownerId,
+                + "取值来自货主列表，创建后不可修改；不是十进制整数的字符串返回 40000",
+                example = "5")
+        String ownerId,
 
         @Email(message = "邮箱格式不正确")
         @Size(max = 128, message = "邮箱不能超过 128 个字符")
@@ -66,7 +67,8 @@ public record CreateUserRequest(
                 + "账号落地时只存哈希，且被标记为首次登录必须修改")
         String initialPassword,
 
-        @Schema(description = "要分配的角色标识（数组元素为字符串形式的十进制整数）；为空或省略表示不分配角色。"
-                + "角色必须存在，否则返回 40000")
-        List<@NotNull(message = "角色标识不能为空") Long> roleIds) {
+        @Schema(description = "要分配的角色标识，以字符串传输：数组元素是字符串形式的十进制整数，"
+                + "形如 [\"2\", \"3\"]；为空或省略表示不分配角色。角色必须存在，"
+                + "元素不是十进制整数的字符串返回 40000")
+        List<@NotNull(message = "角色标识不能为空") String> roleIds) {
 }

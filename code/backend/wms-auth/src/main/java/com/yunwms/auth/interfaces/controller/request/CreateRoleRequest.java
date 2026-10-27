@@ -43,7 +43,8 @@ public record CreateRoleRequest(
         @Schema(description = "备注，最长 255 个字符，可为空")
         String remark,
 
-        @Schema(description = "勾选的菜单与权限点标识（数组元素为字符串形式的十进制整数）；为空或省略表示不授权任何权限。"
-                + "元素必须存在，否则返回 40000")
-        List<@NotNull(message = "菜单标识不能为空") Long> menuIds) {
+        @Schema(description = "勾选的菜单与权限点标识，以字符串传输：数组元素是字符串形式的十进制整数，"
+                + "形如 [\"4\", \"5\"]；为空或省略表示不授权任何权限。元素必须存在，"
+                + "元素不是十进制整数的字符串返回 40000")
+        List<@NotNull(message = "菜单标识不能为空") String> menuIds) {
 }
