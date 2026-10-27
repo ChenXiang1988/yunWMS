@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * </ol>
  *
  * <p>真实库上的行为（条件真的生效、列表与计数同范围、他方详情 404）由
- * {@code OwnerDataScopeIntegrationTest} 验证；本类只回答「片段长什么样」。
+ * {@code OwnerDataScopeStaffIntegrationTest} 验证；本类只回答「片段长什么样」。
  */
 @DisplayName("数据范围 SQL 片段")
 class DataScopePermissionHandlerTest {

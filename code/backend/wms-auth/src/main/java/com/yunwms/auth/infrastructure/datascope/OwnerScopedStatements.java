@@ -17,7 +17,7 @@ import java.util.Map;
  * 更不划算。字符串常量是唯一不新增任何编译依赖的表达方式。
  *
  * <p><b>代价与兜底：</b>被登记的 Mapper 方法改名时这里不会编译失败，语句会静默退回「不过滤」。
- * 因此 {@code OwnerDataScopeIntegrationTest} 用真实库与 MockMvc 验证列表、详情与终止影响清单
+ * 因此 {@code OwnerDataScopeStaffIntegrationTest} 用真实库与 MockMvc 验证列表、详情与终止影响清单
  * 的范围行为：改名之后那条用例会立刻红，而不是等某次越权被发现。
  *
  * <p><b>新增登记的前置条件：</b>目标表的 {@code owner} 列必须能被无条件追加
