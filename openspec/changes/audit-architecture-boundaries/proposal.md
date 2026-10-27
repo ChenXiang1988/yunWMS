@@ -29,7 +29,7 @@
 - 不迁移 `OwnerNameMapper`；另开 `refactor-owner-name-query`。
 - 不删除两个 `owner_id` 外键。
 - 不修改 `docs/api/openapi.json`、`docs/api/inventory.md` 或任何生成物。
-- 不运行 Maven、pnpm、Python 测试、数据库或应用。
+- 初始计划不运行 Maven、pnpm、Python 测试、数据库或应用；后续用户明确授权执行，结果见 `completion.md`。
 
 ## Capabilities
 

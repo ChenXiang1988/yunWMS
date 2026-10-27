@@ -189,18 +189,18 @@ DRAFT / POTENTIAL / ACTIVE / SUSPENDED / TERMINATED
 
 ## 逐项结论
 
-截至修正提交 `9051b15` 的交付审计：
+截至 `716b928` 的 10 笔提交：
 
 | 检查项 | 结论 | 证据 |
 | --- | --- | --- |
-| 路径白名单 | 通过 | `main...9051b15` 共 13 个文件，全部为审计文档、README、Python 校验工具与 OpenSpec 记录 |
-| 单次提交 ≤400 行 | 通过 | 7 笔提交增删合计分别为 128、202、283、60、29、57、7 行 |
+| 路径白名单 | 通过 | `main...716b928` 共 13 个文件，全部为审计文档、README、Python 校验工具与 OpenSpec 记录 |
+| 单次提交 ≤400 行 | 通过 | 10 笔提交增删合计为 128、202、283、60、29、57、7、36、15、37 行 |
 | 迁移与代码分离 | 通过 | 全分支无 `db/migration`、`.sql` 或数据库变更 |
 | 违规依赖 | 通过 | 无 `pom.xml`、`package.json`、lock 文件改动 |
-| 测试断言 | 通过 | 未改任何测试；`verify_constraints.py` 的 SETUP 5、CASES 63、True/False 期望序列均未变 |
+| 测试断言 | 通过 | 未改任何业务测试；`verify_constraints.py` 的 SETUP 5、CASES 63、True/False 期望序列均未变 |
 | 生成物 | 通过 | `openapi.json`、`inventory.md`、`primitive.css` 均未改 |
 | OpenSpec 工件 | 通过 | `openspec validate audit-architecture-boundaries` 通过；migrate-network-console 仍 complete 未归档 |
-| 运行时验证 | 无法判定 | 按要求未运行构建、测试、数据库、应用或并发请求 |
+| 运行时验证 | 已执行 | 后端 331 测试、前端、Python、DDL 63/63 均通过；并发缺陷已复现，详见 `completion.md` |
 
 ## 存量违约
 
@@ -211,4 +211,4 @@ DRAFT / POTENTIAL / ACTIVE / SUSPENDED / TERMINATED
 
 ## 结论
 
-**通过（仅限静态交付审计）。** 运行时与并发验证仍需调用方按 `completion.md` 执行并回填。
+**通过。** 交付范围、路径和提交纪律满足要求；运行时验证已在用户授权后执行，并发缺陷已复现，修复另开 change，详见 `completion.md`。

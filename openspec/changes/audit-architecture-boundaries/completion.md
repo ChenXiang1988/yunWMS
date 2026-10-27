@@ -48,11 +48,11 @@
 - `migrate-network-console` 仍为 complete、未归档，且已有 `completion.md`。
 - 改动路径仅限 README、Python 校验工具、审计文档与 OpenSpec 记录；未触碰 Java、SQL、Vue/TypeScript、测试断言或 API 生成物。
 
-## 调用方待执行验证
+## 验证结果（调用方授权执行）
 
 | 项 | 命令 | 预期 | 实际 |
 |---|---|---|---|
-| 后端 | `cd code/backend && JAVA_HOME=/opt/homebrew/opt/openjdk@21 ./mvnw -B verify` | 编译、单测、ArchUnit、Testcontainers 全部通过 | 通过；88 个测试，0 失败，0 错误 |
+| 后端 | `cd code/backend && JAVA_HOME=/opt/homebrew/opt/openjdk@21 ./mvnw -B verify` | 编译、单测、ArchUnit、Testcontainers 全部通过 | 通过；331 个测试（auth 160 / master 83 / app 88），0 失败，0 错误 |
 | 前端 | `cd code/frontend && pnpm -r typecheck && pnpm -r test && pnpm -r build` | 类型检查、现有测试、构建通过 | 通过；3 个令牌测试通过，两个应用构建成功 |
 | api-inventory | `cd code/tools/api-inventory && python3 -m unittest discover -s tests` | 全部通过 | 通过；45 个测试 |
 | cad-parser | `cd code/tools/cad-parser && python3 -m unittest discover -s tests` | 全部通过 | 通过；13 个测试 |
@@ -66,13 +66,13 @@ DDL 首次运行 60/63，暴露脚本原有的固定用户 ID 与 `OWNER` 种子
 
 在隔离 PostgreSQL 16 容器和临时后端实例上执行，每个场景 20 轮。
 
-| 场景 | 两个响应 | 最终状态 | 结论 |
-|---|---|---|---|
-| ACTIVE：终止 vs 暂停 | 终止成功 20/20，部分轮次两个请求均返回成功 | 6/20（首轮）与 12/20（重跑）最终为 SUSPENDED | **复现**：终止成功后可被暂停覆盖 |
-| SUSPENDED：终止 vs 恢复 | 终止成功 20/20，部分轮次两个请求均返回成功 | 9/20 最终为 ACTIVE | **复现**：终止成功后可被恢复覆盖 |
-| ACTIVE：重复终止 | 两个请求均成功 | 20/20 最终为 TERMINATED | 通过：重复终止保持幂等 |
+| 场景 | 两个响应 | 最终状态 | updated_at / updated_by | 结论 |
+|---|---|---|---|---|
+| ACTIVE：终止 vs 暂停 | 终止成功 20/20，部分轮次两个请求均返回成功 | 首轮 6/20、重跑 12/20 最终为 SUSPENDED | 未记录（接口不返回 updated_by，临时实例已清理） | **复现**：终止成功后可被暂停覆盖 |
+| SUSPENDED：终止 vs 恢复 | 终止成功 20/20，部分轮次两个请求均返回成功 | 9/20 最终为 ACTIVE | 未记录（同上） | **复现**：终止成功后可被恢复覆盖 |
+| ACTIVE：重复终止 | 两个请求均成功 | 20/20 最终为 TERMINATED | 未记录（同上） | 通过：重复终止保持幂等 |
 
-判定基线：终止返回成功后最终状态不得被暂停或恢复覆盖；重复终止应两次成功且最终为 TERMINATED。
+判定基线：终止返回成功后最终状态不得被暂停或恢复覆盖；重复终止应两次成功且最终为 TERMINATED。`updated_at` 已通过详情接口观察但未逐轮留档；`updated_by` 未查询数据库。
 
 ## 未验证项
 
@@ -87,8 +87,8 @@ DDL 首次运行 60/63，暴露脚本原有的固定用户 ID 与 `OWNER` 种子
 - 三个跨模块外键保证引用存在，但不保证货主未软删除，业务可用性仍需应用层判断。
 - 请求体 ID 类型仍与契约规范冲突，属于后续 `align-api-id-contract`。
 - 架构门禁只覆盖模块方向，其他 MUST 仍靠人工。
-- `verify_constraints.py` 仅做静态夹具修正，实际数据库执行结果尚未确认。
 - `AMZ1` 仍在接口示例和 `product-center` 规格中出现，已登记为后续文档/契约清扫项。
+- 并发验证记录了响应和最终状态，但没有逐轮保留 `updated_at`/`updated_by`；后续自动化回归测试应补。`
 
 ## 后续 change
 
