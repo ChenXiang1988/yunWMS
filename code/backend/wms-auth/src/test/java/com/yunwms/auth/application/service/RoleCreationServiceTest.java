@@ -2,6 +2,7 @@ package com.yunwms.auth.application.service;
 
 import com.yunwms.auth.application.command.CreateRoleCommand;
 import com.yunwms.auth.application.dto.CreatedRole;
+import com.yunwms.auth.domain.model.DataScopeType;
 import com.yunwms.auth.domain.model.NewRole;
 import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.RoleRegistrar;
@@ -49,13 +50,17 @@ class RoleCreationServiceTest {
 
     private RoleRegistrar roleRegistrar;
     private CurrentSession currentSession;
+    private DataScopeOwnerValidator dataScopeOwnerValidator;
     private RoleCreationService roleCreationService;
 
     @BeforeEach
     void setUp() {
         roleRegistrar = mock(RoleRegistrar.class);
         currentSession = mock(CurrentSession.class);
-        roleCreationService = new RoleCreationService(roleRegistrar, currentSession);
+        // 校验器本身要查「货主是否可用」，那是集成测试的事；这里只关心用例把什么交给它、
+        // 以及未指定范围时补的是哪个默认值
+        dataScopeOwnerValidator = mock(DataScopeOwnerValidator.class);
+        roleCreationService = new RoleCreationService(roleRegistrar, currentSession, dataScopeOwnerValidator);
         given(currentSession.currentUserId()).willReturn(OptionalLong.of(OPERATOR_ID));
     }
 
@@ -190,8 +195,40 @@ class RoleCreationServiceTest {
         verifyNoInteractions(roleRegistrar);
     }
 
+    @Test
+    @DisplayName("未指定数据范围：按最保守的 CUSTOM 空明细落库")
+    void shouldDefaultToEmptyCustomScope() {
+        given(roleRegistrar.register(any(NewRole.class), anyLong())).willReturn(NEW_ROLE_ID);
+
+        roleCreationService.create(command(CODE, NAME, null, List.of()));
+
+        ArgumentCaptor<NewRole> captor = ArgumentCaptor.forClass(NewRole.class);
+        verify(roleRegistrar).register(captor.capture(), anyLong());
+        // 选 CUSTOM 而不是 ALL：两者选错的代价不对称，空明细最多让人发现「怎么看不到」，
+        // 而 ALL 漏配可能几个月都没人注意到多看了别人的货主
+        assertThat(captor.getValue().dataScopeType()).isEqualTo(DataScopeType.CUSTOM);
+        assertThat(captor.getValue().ownerIds()).isEmpty();
+        // 校验器仍要收到这一组默认值：它是三条配置入口共用的唯一判定点
+        verify(dataScopeOwnerValidator).requireConfigurable(DataScopeType.CUSTOM, Set.of());
+    }
+
+    @Test
+    @DisplayName("指定 CUSTOM 与货主：原样落库，并把类型与明细交给校验器")
+    void shouldPassDataScopeToRegistrar() {
+        given(roleRegistrar.register(any(NewRole.class), anyLong())).willReturn(NEW_ROLE_ID);
+
+        roleCreationService.create(new CreateRoleCommand(CODE, NAME, null, List.of(),
+                DataScopeType.CUSTOM, List.of(7L, 8L)));
+
+        ArgumentCaptor<NewRole> captor = ArgumentCaptor.forClass(NewRole.class);
+        verify(roleRegistrar).register(captor.capture(), anyLong());
+        assertThat(captor.getValue().dataScopeType()).isEqualTo(DataScopeType.CUSTOM);
+        assertThat(captor.getValue().ownerIds()).containsExactlyInAnyOrder(7L, 8L);
+        verify(dataScopeOwnerValidator).requireConfigurable(DataScopeType.CUSTOM, Set.of(7L, 8L));
+    }
+
     private static CreateRoleCommand command(String code, String name, String remark, List<Long> menuIds) {
-        return new CreateRoleCommand(code, name, remark, menuIds);
+        return new CreateRoleCommand(code, name, remark, menuIds, null, null);
     }
 
     /**

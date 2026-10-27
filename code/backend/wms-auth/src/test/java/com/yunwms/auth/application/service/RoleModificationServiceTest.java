@@ -1,10 +1,13 @@
 package com.yunwms.auth.application.service;
 
 import com.yunwms.auth.application.command.ChangeRoleStatusCommand;
+import com.yunwms.auth.application.command.ConfigureRoleDataScopeCommand;
 import com.yunwms.auth.application.command.UpdateRoleCommand;
+import com.yunwms.auth.domain.model.DataScopeType;
 import com.yunwms.auth.domain.model.RoleStatus;
 import com.yunwms.auth.domain.model.RoleSummary;
 import com.yunwms.auth.domain.port.CurrentSession;
+import com.yunwms.auth.domain.port.DataScopeOwnerRegistrar;
 import com.yunwms.auth.domain.port.RoleQuery;
 import com.yunwms.auth.domain.port.RoleUpdater;
 import com.yunwms.web.api.ErrorCode;
@@ -48,6 +51,8 @@ class RoleModificationServiceTest {
 
     private RoleQuery roleQuery;
     private RoleUpdater roleUpdater;
+    private DataScopeOwnerRegistrar dataScopeOwnerRegistrar;
+    private DataScopeOwnerValidator dataScopeOwnerValidator;
     private CurrentSession currentSession;
     private RoleModificationService roleModificationService;
 
@@ -55,8 +60,12 @@ class RoleModificationServiceTest {
     void setUp() {
         roleQuery = mock(RoleQuery.class);
         roleUpdater = mock(RoleUpdater.class);
+        dataScopeOwnerRegistrar = mock(DataScopeOwnerRegistrar.class);
+        // 校验器要查「货主是否可用」；那是集成测试的职责，这里只关心它被调用与被拒绝之后的落库行为
+        dataScopeOwnerValidator = mock(DataScopeOwnerValidator.class);
         currentSession = mock(CurrentSession.class);
-        roleModificationService = new RoleModificationService(roleQuery, roleUpdater, currentSession);
+        roleModificationService = new RoleModificationService(roleQuery, roleUpdater,
+                dataScopeOwnerRegistrar, dataScopeOwnerValidator, currentSession);
         given(currentSession.currentUserId()).willReturn(OptionalLong.of(OPERATOR_ID));
     }
 
@@ -219,6 +228,44 @@ class RoleModificationServiceTest {
 
         assertThat(failure.errorCode()).isEqualTo(ErrorCode.UNAUTHORIZED);
         verifyNoInteractions(roleQuery, roleUpdater);
+    }
+
+    @Test
+    @DisplayName("配置数据范围：CUSTOM 写类型并整批替换明细")
+    void shouldConfigureCustomDataScope() {
+        givenRole(false, RoleStatus.ACTIVE, 0L);
+
+        roleModificationService.configureDataScope(new ConfigureRoleDataScopeCommand(
+                ROLE_ID, DataScopeType.CUSTOM, List.of(3L, 4L)));
+
+        verify(dataScopeOwnerValidator).requireConfigurable(DataScopeType.CUSTOM, Set.of(3L, 4L));
+        verify(roleUpdater).updateDataScopeType(eq(ROLE_ID), eq(DataScopeType.CUSTOM), eq(OPERATOR_ID), any());
+        verify(dataScopeOwnerRegistrar).replaceRoleOwners(ROLE_ID, Set.of(3L, 4L));
+    }
+
+    @Test
+    @DisplayName("配置数据范围：ALL 必须清空明细，避免留一份永不生效的名单")
+    void shouldClearDetailsWhenScopeIsAll() {
+        givenRole(false, RoleStatus.ACTIVE, 0L);
+
+        roleModificationService.configureDataScope(
+                new ConfigureRoleDataScopeCommand(ROLE_ID, DataScopeType.ALL, List.of()));
+
+        verify(roleUpdater).updateDataScopeType(eq(ROLE_ID), eq(DataScopeType.ALL), eq(OPERATOR_ID), any());
+        verify(dataScopeOwnerRegistrar).replaceRoleOwners(ROLE_ID, Set.of());
+    }
+
+    @Test
+    @DisplayName("配置数据范围：内置角色被拒绝，类型与明细都不写")
+    void shouldRejectConfiguringBuiltinRoleScope() {
+        givenRole(true, RoleStatus.ACTIVE, 1L);
+
+        BizException failure = failureOf(() -> roleModificationService.configureDataScope(
+                new ConfigureRoleDataScopeCommand(ROLE_ID, DataScopeType.ALL, List.of())));
+
+        assertThat(failure.errorCode()).isEqualTo(ErrorCode.CONFLICT);
+        assertThat(failure.getMessage()).isEqualTo("内置角色不可配置数据范围");
+        verifyNoInteractions(roleUpdater, dataScopeOwnerRegistrar);
     }
 
     private void givenRole(boolean builtin, RoleStatus status, long userCount) {
