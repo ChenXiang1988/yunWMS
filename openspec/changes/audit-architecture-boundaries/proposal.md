@@ -47,5 +47,5 @@
 
 - **新增**：`openspec/changes/audit-architecture-boundaries/`、`docs/research/architecture-boundary-snapshot-2026-10-27.md`
 - **修改**：`code/backend/tools/verify_constraints.py`、`README.md`、`code/backend/README.md`、`code/frontend/README.md`、`docs/api/README.md`
-- **OpenSpec 状态**：`openspec/changes/migrate-network-console/proposal.md`、新增 `completion.md`
+- **OpenSpec 状态**：新增 `openspec/changes/migrate-network-console/completion.md`；该 change 的历史 `proposal.md` 不改
 - **不变**：`code/backend/**/*.java`、`code/backend/**/src/main/resources/db/migration/**`、`code/frontend/**`、测试断言、API 生成物

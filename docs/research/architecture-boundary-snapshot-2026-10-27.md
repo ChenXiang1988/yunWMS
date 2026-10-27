@@ -20,7 +20,7 @@ wms-app → wms-master → wms-web
 
 ## 2. Mapper XML 全量清单
 
-共 9 个 XML、26 条语句、5 个 `<sql>` 片段、10 个 Mapper 接口；`SysRoleMenuMapper` 无 XML。
+共 9 个 XML、25 条语句、5 个 `<sql>` 片段、10 个 Mapper 接口；`SysRoleMenuMapper` 无 XML。
 
 | # | 模块 | XML / namespace | 语句与访问表 |
 |---|---|---|---|

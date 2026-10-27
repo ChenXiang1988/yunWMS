@@ -89,6 +89,7 @@
 - 请求体 ID 类型仍与契约规范冲突，属于后续 `align-api-id-contract`。
 - 架构门禁只覆盖模块方向，其他 MUST 仍靠人工。
 - `verify_constraints.py` 仅做静态夹具修正，实际数据库执行结果尚未确认。
+- `AMZ1` 仍在接口示例和 `product-center` 规格中出现，已登记为后续文档/契约清扫项。
 
 ## 后续 change
 

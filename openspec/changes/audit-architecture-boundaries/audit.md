@@ -175,6 +175,8 @@ DRAFT / POTENTIAL / ACTIVE / SUSPENDED / TERMINATED
 - `code/frontend/README.md`：删除“登录为本地模拟”“尚未接后端”等过期描述。
 - `migrate-network-console`：补 `completion.md`，记录 16/16 任务完成、迁移已实现、运行验证待调用方执行；不归档。
 
+另记一处本轮范围外漂移：`OwnerCreateRequest.java:65`、`OwnerDetailResponse.java:72`、由其生成的 OpenAPI 示例以及 `openspec/specs/product-center/spec.md` 中仍有 `AMZ1` 示例。它不影响运行，但与 V035 的排除字符规则不一致，后续并入契约/文档清扫。
+
 ## 7. 后续 change
 
 - `refactor-owner-name-query`：master 提供批量含软删的名称查询，经 app bridge 替换。
