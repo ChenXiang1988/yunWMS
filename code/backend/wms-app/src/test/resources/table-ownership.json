@@ -9,7 +9,7 @@
   "tables": {
     "owner": {
       "owner": "wms-master",
-      "note": "货主主表（V001），wms-master 的聚合根表；wms-auth 的越界只读见 exceptions"
+      "note": "货主主表（V001），wms-master 的聚合根表；其他模块需要货主名称时经 wms-app 装配的 Application 能力读取，不得直读"
     },
     "owner_contact": {
       "owner": "wms-master",
@@ -104,13 +104,5 @@
       "note": "审计日志（V021）：横跨 auth 与 master 两个域，审计能力尚未落地，不归任何单个模块"
     }
   },
-  "exceptions": [
-    {
-      "module": "wms-auth",
-      "table": "owner",
-      "mapper": "src/main/resources/mapper/auth/OwnerNameMapper.xml",
-      "operations": ["SELECT"],
-      "reason": "OwnerNameMapper 临时债务：wms-auth 展示账号列表需要货主名称，而 wms-master 尚无对外查询能力，故越界只读 owner 的 id/name 两列。wms-master 具备查询能力后必须删除该 Mapper 与本例外（见 com.yunwms.auth.domain.port.OwnerNameQuery 与 OwnerNameMapper 的 Javadoc）。允许的操作限定为 SELECT：写入 owner 会直接绕开 wms-master 的货主规则（前缀判重、状态流转），不属于本债务范围。"
-    }
-  ]
+  "exceptions": []
 }

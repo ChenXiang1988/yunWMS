@@ -20,8 +20,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>为什么需要这条测试：{@link com.yunwms.app.ModuleBoundaryTest} 只分析 Java 字节码，而跨模块访问数据库
  * 根本不经过 Java 引用——{@code wms-auth} 在 XML 里写一句 {@code FROM owner} 就能读到 {@code wms-master} 的表，
  * 编译、单测、模块边界规则全都不响。审计结论（{@code openspec/changes/archive/2026-10-27-audit-architecture-boundaries/audit.md}
- * 第 3.3 节）确认 {@code OwnerNameMapper.xml} 就是这样一个既成事实：它绕过了 wms-master 的货主规则，
- * 也因为没有任何门禁可以复制到第二处、第三处。
+ * 第 3.3 节）确认 {@code OwnerNameMapper.xml} 曾经就是这样一个既成事实：它绕过了 wms-master 的货主规则，
+ * 也因为没有任何门禁可以复制到第二处、第三处。该 Mapper 与它的例外已删除，本门禁因此成为
+ * 「auth 再出现 owner 的 SQL 就当场失败」的唯一手段。
  *
  * <p>失效模式与 import 越界不同：读表越界不会在被读方留下任何痕迹，被读方的字段改名、加 {@code deleted_at}
  * 条件、拆表都不会通知到越界方——错误会以「另一个模块的页面数据不对」的形式在很久之后出现，

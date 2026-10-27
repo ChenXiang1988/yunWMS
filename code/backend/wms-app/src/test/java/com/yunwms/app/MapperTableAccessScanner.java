@@ -134,7 +134,7 @@ final class MapperTableAccessScanner {
      * 从一个 Mapper XML 的文本中抽出全部表访问。
      *
      * @param module  模块名，例如 {@code wms-auth}
-     * @param mapper  Mapper 文件相对模块根的路径，例如 {@code src/main/resources/mapper/auth/OwnerNameMapper.xml}
+     * @param mapper  Mapper 文件相对模块根的路径，例如 {@code src/main/resources/mapper/auth/SysUserMapper.xml}
      * @param content XML 原文
      * @return 表访问列表，按出现顺序
      */
