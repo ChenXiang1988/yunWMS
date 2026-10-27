@@ -1,131 +1,147 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { Button, Form, FormItem, Input, Select, SelectOption, Table } from 'ant-design-vue'
-import { PageHeader, StatusTag } from '@yunwms/ui-web'
-
-type Status = 'draft' | 'pending' | 'active' | 'disabled'
-
-interface CustomerRow {
-  code: string
-  name: string
-  type: string
-  status: Status
-  contact: string
-  mobile: string
-  updatedAt: string
-}
-
-const STATUS_TEXT: Record<Status, string> = {
-  draft: '潜在',
-  pending: '暂停',
-  active: '合作中',
-  disabled: '终止'
-}
-
-const keyword = ref('')
-const customerType = ref<string | undefined>(undefined)
-
-const rows = ref<CustomerRow[]>([
-  {
-    code: 'OWNER0001',
-    name: '深圳西之月网络科技',
-    type: '品牌方',
-    status: 'active',
-    contact: '林飞宇',
-    mobile: '138****6621',
-    updatedAt: '2026-10-21 15:02'
-  },
-  {
-    code: 'OWNER0002',
-    name: '广州南风贸易',
-    type: '货代同行',
-    status: 'active',
-    contact: '陈曦',
-    mobile: '139****3088',
-    updatedAt: '2026-10-20 09:41'
-  },
-  {
-    code: 'OWNER0003',
-    name: '东莞优选供应链',
-    type: '品牌方',
-    status: 'pending',
-    contact: '黄敏',
-    mobile: '137****9915',
-    updatedAt: '2026-10-18 17:20'
-  }
-])
+import { computed, onMounted, ref } from 'vue'
+import { Table } from 'ant-design-vue'
+import { EmptyState, PageHeader, StatusTag } from '@yunwms/ui-web'
+import { listOwnerTypes } from '@/api/dict'
+import { listOwners, type OwnerListItem } from '@/api/owner'
+import OwnerFilters from './components/OwnerFilters.vue'
+import {
+  DEFAULT_PAGE_SIZE,
+  formatIsoDateTime,
+  normalizeOwnerQuery,
+  ownerStatusText,
+  ownerTypeLabel,
+  type OwnerFilterValues
+} from './owner-model'
 
 const columns = [
-  { title: '客户编码', dataIndex: 'code', key: 'code', width: 130 },
-  { title: '客户名称', dataIndex: 'name', key: 'name', width: 220 },
-  { title: '类型', dataIndex: 'type', key: 'type', width: 110 },
-  { title: '状态', key: 'status', width: 100 },
-  { title: '联系人', dataIndex: 'contact', key: 'contact', width: 110 },
-  { title: '手机号', dataIndex: 'mobile', key: 'mobile', width: 140 },
-  { title: '更新时间', dataIndex: 'updatedAt', key: 'updatedAt', width: 150 },
-  { title: '操作', key: 'actions', width: 130 }
+  { title: '系统编码', key: 'code', width: 140 },
+  { title: '客户名称', dataIndex: 'name', key: 'name' },
+  { title: '客户类型', key: 'ownerType', width: 120 },
+  { title: '状态', key: 'status', width: 110 },
+  { title: '更新时间', key: 'updatedAt', width: 170 }
 ]
 
-function statusText(record: CustomerRow): string {
-  return STATUS_TEXT[record.status]
+const loading = ref(false)
+const rows = ref<OwnerListItem[]>([])
+const total = ref(0)
+const pageNo = ref(1)
+const pageSize = ref(DEFAULT_PAGE_SIZE)
+/** 已生效的筛选条件：输入框改动不算数，点查询才生效 */
+const filters = ref<OwnerFilterValues>({})
+const ownerTypeOptions = ref<{ value: string; label: string }[]>([])
+const ownerTypeLabels = ref<ReadonlyMap<string, string>>(new Map())
+
+/** 分页受控：页码、每页条数与总数都以后端响应为准，不拉全量 */
+const pagination = computed(() => ({
+  current: pageNo.value,
+  pageSize: pageSize.value,
+  total: total.value,
+  showSizeChanger: true,
+  pageSizeOptions: ['10', '20', '50', '100'],
+  showTotal: (count: number) => `共 ${count} 条`
+}))
+
+interface TableChangePaging {
+  current?: number
+  pageSize?: number
 }
+
+function handleTableChange(next: TableChangePaging): void {
+  pageNo.value = next.current ?? 1
+  pageSize.value = next.pageSize ?? pageSize.value
+  void fetchOwners()
+}
+
+/** 查询条件变化时回到第 1 页，否则会落在新结果的空白页上 */
+function handleSearch(next: OwnerFilterValues): void {
+  filters.value = next
+  pageNo.value = 1
+  void fetchOwners()
+}
+
+function handleReset(): void {
+  filters.value = {}
+  pageNo.value = 1
+  void fetchOwners()
+}
+
+async function fetchOwners(): Promise<void> {
+  loading.value = true
+  try {
+    const result = await listOwners(
+      normalizeOwnerQuery({ ...filters.value, pageNo: pageNo.value, pageSize: pageSize.value })
+    )
+    rows.value = result.records
+    total.value = result.total
+  } catch (error) {
+    // 请求层已统一弹出错误提示。这里不动 rows：把失败清成空数组，用户会以为
+    // 「一条货主都没有」，那是在用空态掩盖故障。
+    console.error('[owner] 加载货主列表失败', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadOwnerTypes(): Promise<void> {
+  try {
+    const items = await listOwnerTypes()
+    ownerTypeOptions.value = items.map((item) => ({ value: item.value, label: item.label }))
+    ownerTypeLabels.value = new Map(items.map((item) => [item.value, item.label]))
+  } catch (error) {
+    // 字典失败只让下拉变空、类型列按原值回退，不阻断列表本身
+    console.error('[owner] 加载客户类型字典失败', error)
+  }
+}
+
+onMounted(() => {
+  void loadOwnerTypes()
+  void fetchOwners()
+})
 </script>
 
 <template>
   <div>
-    <PageHeader title="客户管理" description="货主档案、合同附件与账号开通">
-      <template #actions>
-        <Button type="primary">新建客户</Button>
-      </template>
-    </PageHeader>
+    <PageHeader title="客户管理" description="货主档案与状态流转" />
 
     <section class="panel">
-      <Form layout="inline" class="filters">
-        <FormItem label="关键词">
-          <Input
-            v-model:value="keyword"
-            placeholder="编码 / 名称 / 联系人"
-            allow-clear
-            style="width: 240px"
-          />
-        </FormItem>
-        <FormItem label="类型">
-          <Select
-            v-model:value="customerType"
-            placeholder="全部"
-            allow-clear
-            style="width: 130px"
-          >
-            <SelectOption value="brand">品牌方</SelectOption>
-            <SelectOption value="forwarder">货代同行</SelectOption>
-          </Select>
-        </FormItem>
-        <FormItem>
-          <Button type="primary">查询</Button>
-          <Button class="filters__reset">重置</Button>
-        </FormItem>
-      </Form>
+      <OwnerFilters
+        :owner-type-options="ownerTypeOptions"
+        @search="handleSearch"
+        @reset="handleReset"
+      />
 
       <Table
         :data-source="rows"
         :columns="columns"
-        :pagination="false"
-        :scroll="{ x: 1100 }"
-        row-key="code"
+        :loading="loading"
+        :pagination="pagination"
+        :scroll="{ x: 900 }"
+        row-key="id"
         bordered
         size="middle"
+        @change="handleTableChange"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'status'">
+          <template v-if="column.key === 'code'">
+            <span class="owner-code">{{ (record as OwnerListItem).code }}</span>
+          </template>
+          <template v-else-if="column.key === 'ownerType'">
+            {{ ownerTypeLabel((record as OwnerListItem).ownerType, ownerTypeLabels) }}
+          </template>
+          <template v-else-if="column.key === 'status'">
             <StatusTag
-              :status="(record as CustomerRow).status"
-              :text="statusText(record as CustomerRow)"
+              :status="(record as OwnerListItem).status"
+              :text="ownerStatusText((record as OwnerListItem).status)"
             />
           </template>
-          <template v-else-if="column.key === 'actions'">
-            <Button type="link" size="small">详情</Button>
-            <Button type="link" size="small">子账号</Button>
+          <template v-else-if="column.key === 'updatedAt'">
+            {{ formatIsoDateTime((record as OwnerListItem).updatedAt) }}
           </template>
+        </template>
+
+        <template #emptyText>
+          <EmptyState description="暂无货主档案" />
         </template>
       </Table>
     </section>
@@ -133,11 +149,7 @@ function statusText(record: CustomerRow): string {
 </template>
 
 <style scoped>
-.filters {
-  margin-bottom: var(--space-2);
-}
-
-.filters__reset {
-  margin-left: var(--space-2);
+.owner-code {
+  font-family: var(--font-mono);
 }
 </style>
