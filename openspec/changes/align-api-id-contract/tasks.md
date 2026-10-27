@@ -13,4 +13,4 @@
 ## 3. 生成与交付
 
 - [x] 3.1 启动隔离数据库与应用，重新生成 `openapi.json` 和 `inventory.md`，验证：请求体 ID 为 string、operation 数正确。
-- [ ] 3.2 运行只读审计并写 `completion.md`，验证：无迁移、无手改生成物、路径与行数合规。
+- [x] 3.2 运行只读审计并写 `completion.md`，验证：无迁移、无手改生成物、路径与行数合规。
