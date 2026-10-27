@@ -16,6 +16,23 @@ enabledAutoRun: true
 - 拿不准某个命令有没有副作用时，就当它有副作用，不执行，改为主 Agent 询问。
 - **为什么不用 frontmatter 的 `tools` 字段把上面几条变成机制约束**：官方文档只给了 `WebFetch, WebSearch` 两个示例，没有可用工具名清单。盲写可能让本 Agent 只剩这两个网络工具、连文件都读不了，比不收窄更糟。因此「只读」仍由本节约束与主 Agent 回收核对保证，工具名确认前不启用该字段，详见 `docs/agents.md` 第八节。
 
+## 先取机器证据
+
+开工后先运行只读证据脚本，不要手工数文件或提交行数：
+
+```bash
+python3 code/tools/audit-delivery/audit_delivery.py --anchor <anchor> \
+  --change <change-id> \
+  --allow '<allowed-path-glob>' \
+  --forbid-ext .java --forbid-ext .sql --forbid-ext .vue --forbid-ext .ts
+```
+
+- 脚本只输出 JSON，不写文件；禁止用 `tee`、重定向或自行创建临时文件。
+- `blocking` 是必须处理的阻塞项。
+- `unknowns` 必须原样带入“无法判定”部分。
+- 脚本数字是事实基线；仍需抽查源码确认脚本没有误判。
+- 主 Agent 会复核你的结论，你的建议不是最终裁决。
+
 ## 检查项
 
 按主 Agent 任务包指定的范围逐项核对，每项必须给出结论与证据（文件路径 + 行号或片段）：
