@@ -1,0 +1,116 @@
+{
+  "note": [
+    "表所有权清单：记录每张表唯一归属的后端模块，供 MapperTableAccessTest 校验 Mapper XML 不越界读表。",
+    "owner 取值只能是 wms-web / wms-auth / wms-master / wms-app 之一，或 unassigned（归属未确认）。",
+    "unassigned 不是豁免：任何模块访问它都会让测试失败，必须先确定归属模块再登记。",
+    "exceptions 记录已登记允许跨模块访问的表，逐条写明模块、表、Mapper 文件、允许的操作与原因；",
+    "例外只对登记的 Mapper 文件与操作生效，不能当作整个模块的通行证。债务消失后必须删除对应例外。"
+  ],
+  "tables": {
+    "owner": {
+      "owner": "wms-master",
+      "note": "货主主表（V001），wms-master 的聚合根表；wms-auth 的越界只读见 exceptions"
+    },
+    "owner_contact": {
+      "owner": "wms-master",
+      "note": "货主联系人（V007），属货主档案"
+    },
+    "owner_assignee": {
+      "owner": "wms-master",
+      "note": "货主与内部负责客服的关系（V008），是货主侧事实；wms-auth 的 ASSIGNED 数据范围按它推导"
+    },
+    "owner_tax_registration": {
+      "owner": "wms-master",
+      "note": "货主税号（V009），属货主档案"
+    },
+    "category": {
+      "owner": "wms-master",
+      "note": "品类（V010），主数据"
+    },
+    "brand": {
+      "owner": "wms-master",
+      "note": "品牌（V011），主数据"
+    },
+    "sku": {
+      "owner": "wms-master",
+      "note": "商品主档（V012），主数据"
+    },
+    "sku_pending": {
+      "owner": "wms-master",
+      "note": "商品待审版本（V013），与 sku 同域的审核暂存"
+    },
+    "sku_barcode": {
+      "owner": "wms-master",
+      "note": "商品条码（V014），主数据"
+    },
+    "sku_pack": {
+      "owner": "wms-master",
+      "note": "商品包装（V015），主数据"
+    },
+    "sku_import_task": {
+      "owner": "wms-master",
+      "note": "商品批量导入任务（V016），导入的是商品档案"
+    },
+    "label_print_record": {
+      "owner": "unassigned",
+      "note": "SKUID 标签打印记录（V017）：打印能力目前没有归属模块，登记归属前任何模块不得访问"
+    },
+    "sys_user": {
+      "owner": "wms-auth",
+      "note": "账号（V002），认证与用户管理"
+    },
+    "sys_user_role": {
+      "owner": "wms-auth",
+      "note": "账号角色关联（V005）"
+    },
+    "sys_role": {
+      "owner": "wms-auth",
+      "note": "角色（V005），权限模型"
+    },
+    "sys_role_menu": {
+      "owner": "wms-auth",
+      "note": "角色权限点关联（V005）"
+    },
+    "sys_menu": {
+      "owner": "wms-auth",
+      "note": "权限点与菜单（V004），鉴权依据"
+    },
+    "sys_dict": {
+      "owner": "wms-auth",
+      "note": "字典类型（V018）"
+    },
+    "sys_dict_item": {
+      "owner": "wms-auth",
+      "note": "字典项（V018）"
+    },
+    "sys_code_rule": {
+      "owner": "wms-auth",
+      "note": "统一编码规则（V019），取号在 wms-auth 的 CodeGeneratorImpl"
+    },
+    "sys_password_reset_token": {
+      "owner": "wms-auth",
+      "note": "密码重置令牌（V003），会话与凭据能力"
+    },
+    "sys_data_scope_owner": {
+      "owner": "wms-auth",
+      "note": "数据范围的指定货主明细（V006），权限模型的一部分"
+    },
+    "sys_config": {
+      "owner": "unassigned",
+      "note": "系统参数（V020）：当前无模块读写，归属未确认前不得访问"
+    },
+    "sys_audit_log": {
+      "owner": "unassigned",
+      "note": "审计日志（V021）：横跨 auth 与 master 两个域，审计能力尚未落地，不归任何单个模块"
+    }
+  },
+  "exceptions": [
+    {
+      "module": "wms-auth",
+      "table": "owner",
+      "mapper": "src/main/resources/mapper/auth/OwnerNameMapper.xml",
+      "operations": ["SELECT"],
+      "reason": "OwnerNameMapper 临时债务：wms-auth 展示账号列表需要货主名称，而 wms-master 尚无对外查询能力，故越界只读 owner 的 id/name 两列。wms-master 具备查询能力后必须删除该 Mapper 与本例外（见 com.yunwms.auth.domain.port.OwnerNameQuery 与 OwnerNameMapper 的 Javadoc）。允许的操作限定为 SELECT：写入 owner 会直接绕开 wms-master 的货主规则（前缀判重、状态流转），不属于本债务范围。"
+    }
+  ]
+}
