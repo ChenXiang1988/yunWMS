@@ -15,4 +15,4 @@
 
 - [x] 3.1 扩展纯模型 node:test，覆盖流转、可删除与 payload。
 - [x] 3.2 运行 `pnpm -r typecheck`、`pnpm -r test`、`pnpm -r build`、`pnpm check:ui`，验证：全部通过。
-- [ ] 3.3 运行只读审计并写 `completion.md`。
+- [x] 3.3 运行只读审计并写 `completion.md`。
