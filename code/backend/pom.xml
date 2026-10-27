@@ -66,6 +66,23 @@
                 <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
                 <version>${mybatis-plus.version}</version>
             </dependency>
+            <!--
+                数据权限插件（DataPermissionInterceptor / MultiDataPermissionHandler）所在的构件。
+                MyBatis-Plus 3.5.9 起，依赖 JSqlParser 的插件（数据权限、多租户、攻击 SQL 阻断等）
+                从 mybatis-plus-extension 拆到了这里，不引入它只在运行期报 ClassNotFound，编译期无声。
+
+                版本跟 ${mybatis-plus.version} 走，不单独钉：插件与核心按同一份拦截器契约发布，
+                两边错开版本不会编译失败，只会在运行期把 SQL 改错——那类错误只能靠集成测试发现。
+
+                许可证 Apache-2.0，与既有 MyBatis-Plus 同源；它自己传递引入 JSqlParser 5.0
+                （LGPL-2.1 / Apache-2.0 双许可，按 Apache-2.0 使用）。
+                不引入第二套 SQL 解析库：全仓的 SQL 改写只走这一个解析器。
+            -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-jsqlparser</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
             <dependency>
                 <groupId>cn.dev33</groupId>
                 <artifactId>sa-token-spring-boot3-starter</artifactId>

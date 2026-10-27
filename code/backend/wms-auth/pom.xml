@@ -35,6 +35,15 @@
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
         </dependency>
+        <!--
+            数据权限插件（DataPermissionInterceptor）与 JSqlParser。拦截器在本模块装配，
+            由它改写 wms-master 的 Mapper 语句，因此解析器必须在本模块的 classpath 上，
+            而不是靠启动模块偶然带上。版本由父 pom 统一管理。
+        -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-jsqlparser</artifactId>
+        </dependency>
         <dependency>
             <groupId>cn.dev33</groupId>
             <artifactId>sa-token-spring-boot3-starter</artifactId>
