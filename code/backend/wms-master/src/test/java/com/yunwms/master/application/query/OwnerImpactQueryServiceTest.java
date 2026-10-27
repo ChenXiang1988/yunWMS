@@ -51,9 +51,9 @@ class OwnerImpactQueryServiceTest {
     }
 
     @Test
-    @DisplayName("货主不存在或已删除：40400，且不去数商品与账号")
+    @DisplayName("货主不存在、已删除或不在数据范围内：40400，且不去数商品与账号")
     void shouldRejectUnknownOwner() {
-        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.empty());
+        given(ownerRepository.findVisibleById(OWNER_ID)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.terminationImpact(OWNER_ID))
                 .isInstanceOfSatisfying(BizException.class,
@@ -65,7 +65,7 @@ class OwnerImpactQueryServiceTest {
     @Test
     @DisplayName("两个计数分别来自商品端口与账号端口，不接反")
     void shouldReturnBothCountsFromTheirOwnPorts() {
-        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.of(owner()));
+        given(ownerRepository.findVisibleById(OWNER_ID)).willReturn(Optional.of(owner()));
         given(ownerSkuCounter.countByOwnerId(OWNER_ID)).willReturn(3L);
         given(ownerAccountCounter.countByOwnerId(OWNER_ID)).willReturn(2L);
 
@@ -79,7 +79,7 @@ class OwnerImpactQueryServiceTest {
     @Test
     @DisplayName("没有商品也没有账号：返回两个 0，而不是空对象或 null")
     void shouldReturnZerosWhenNothingLeft() {
-        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.of(owner()));
+        given(ownerRepository.findVisibleById(OWNER_ID)).willReturn(Optional.of(owner()));
 
         TerminationImpact impact = service.terminationImpact(OWNER_ID);
 
@@ -88,7 +88,7 @@ class OwnerImpactQueryServiceTest {
     }
 
     /**
-     * 库中已存在的那条货主记录，供 {@code findById} 返回。
+     * 库中已存在的那条货主记录，供 {@code findVisibleById} 返回。
      *
      * @return 已存在的货主
      */

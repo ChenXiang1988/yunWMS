@@ -166,9 +166,10 @@ class OwnerQueryServiceTest {
     }
 
     @Test
-    @DisplayName("详情不存在：40400，文案与编辑接口一致")
+    @DisplayName("详情不存在或不可见：40400，文案与编辑接口一致")
     void shouldRejectMissingDetail() {
-        given(ownerRepository.findById(anyLong())).willReturn(Optional.empty());
+        // 读的是 findVisibleById：范围外的货主与不存在同口径，都由这一条分支给出 404
+        given(ownerRepository.findVisibleById(anyLong())).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.detail(999_999L))
                 .isInstanceOfSatisfying(BizException.class, e -> {
@@ -180,7 +181,7 @@ class OwnerQueryServiceTest {
     @Test
     @DisplayName("详情：摘要字段与基本信息页签的字段全部带出，含前缀原文与地址六字段")
     void shouldMapDetail() {
-        given(ownerRepository.findById(7L)).willReturn(Optional.of(sampleOwner()));
+        given(ownerRepository.findVisibleById(7L)).willReturn(Optional.of(sampleOwner()));
 
         OwnerDetail detail = service.detail(7L);
 
