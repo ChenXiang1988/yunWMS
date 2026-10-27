@@ -65,6 +65,7 @@ public class UserResponseAssembler {
                 profile.email(),
                 profile.wecomUserId(),
                 profile.dataScopeType(),
+                profile.ownerIds().stream().map(String::valueOf).toList(),
                 profile.createdAt(),
                 profile.roleIds().stream().map(String::valueOf).toList());
     }

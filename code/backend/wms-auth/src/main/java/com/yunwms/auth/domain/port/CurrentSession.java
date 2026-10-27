@@ -1,5 +1,8 @@
 package com.yunwms.auth.domain.port;
 
+import com.yunwms.auth.domain.model.SubjectType;
+
+import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
@@ -21,6 +24,28 @@ public interface CurrentSession {
      * @return 用户标识；当前请求没有有效会话时为空
      */
     OptionalLong currentUserId();
+
+    /**
+     * 取当前会话的主体类型。
+     *
+     * <p>数据范围解析必须区分货主账号与内部员工：货主账号的范围由所属货主强制决定，
+     * 不经任何角色配置。主体类型在登录时写进会话（见 {@code SaTokenSessionTokenIssuer}），
+     * 这里只读会话，不回查数据库——解析在每次请求上都会跑一次。
+     *
+     * @return 主体类型；当前请求没有有效会话、或会话里没有该属性时为空
+     * @throws IllegalArgumentException 会话里的编码未知，说明会话被写坏
+     */
+    Optional<SubjectType> currentSubjectType();
+
+    /**
+     * 取当前会话所属的货主标识。
+     *
+     * <p>只有货主账号会有该属性。会话里的货主标识来自登录时读取的账号行，不从请求参数取：
+     * 前端传来的货主标识可以被改，而这条是强制隔离的唯一依据。
+     *
+     * @return 所属货主标识；内部员工或没有有效会话时为空
+     */
+    OptionalLong currentOwnerId();
 
     /**
      * 当前会话是否处于「需先改密」状态。

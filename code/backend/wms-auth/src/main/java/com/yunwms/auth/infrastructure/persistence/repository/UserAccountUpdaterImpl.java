@@ -1,6 +1,7 @@
 package com.yunwms.auth.infrastructure.persistence.repository;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.yunwms.auth.domain.model.DataScopeType;
 import com.yunwms.auth.domain.model.UserStatus;
 import com.yunwms.auth.domain.port.UserAccountUpdater;
 import com.yunwms.auth.infrastructure.persistence.entity.SysUserEntity;
@@ -45,6 +46,20 @@ public class UserAccountUpdaterImpl implements UserAccountUpdater {
                 .set(SysUserEntity::getUpdatedAt, updatedAt));
         if (updated == 0) {
             throw new IllegalStateException("基本信息写入失败，用户已不存在：" + userId);
+        }
+    }
+
+    @Override
+    public void updateDataScopeType(long userId, DataScopeType type, long operatorId, Instant updatedAt) {
+        int updated = sysUserMapper.update(null, Wrappers.<SysUserEntity>lambdaUpdate()
+                .eq(SysUserEntity::getId, userId)
+                // set 无条件拼进 SET 子句，因此 type 为 null 时写的是 NULL（清除覆盖）；
+                // 换成 updateById 会因「空字段跳过」而永远清不掉覆盖
+                .set(SysUserEntity::getDataScopeType, type == null ? null : type.name())
+                .set(SysUserEntity::getUpdatedBy, operatorId)
+                .set(SysUserEntity::getUpdatedAt, updatedAt));
+        if (updated == 0) {
+            throw new IllegalStateException("数据范围覆盖写入失败，用户已不存在：" + userId);
         }
     }
 

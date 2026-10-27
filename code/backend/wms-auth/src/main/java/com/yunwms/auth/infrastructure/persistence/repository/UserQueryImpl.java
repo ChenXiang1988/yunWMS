@@ -6,6 +6,7 @@ import com.yunwms.auth.domain.model.UserProfile;
 import com.yunwms.auth.domain.model.UserRoleGrant;
 import com.yunwms.auth.domain.model.UserStatus;
 import com.yunwms.auth.domain.model.UserSummary;
+import com.yunwms.auth.domain.port.DataScopeQuery;
 import com.yunwms.auth.domain.port.OwnerNameQuery;
 import com.yunwms.auth.domain.port.UserQuery;
 import com.yunwms.auth.infrastructure.persistence.entity.SysUserEntity;
@@ -30,7 +31,7 @@ import java.util.Optional;
  * （整页都是内部员工时这条省掉）。条数与页内行数无关——逐行补角色与货主名称会让它变成
  * {@code 2 + 2n}，这是本类唯一需要守住的性质，由集成测试的语句计数断言看着。
  *
- * <p>详情 2 到 3 条：账号行（{@code selectById}，自带逻辑删除条件）、角色授权、货主名称。
+ * <p>详情 3 到 4 条：账号行（{@code selectById}，自带逻辑删除条件）、角色授权、数据范围明细、货主名称。
  *
  * <p>{@link #isOnlyAvailableSuperAdmin} 固定 1 条：结论由数据库一次算出，
  * 应用层不做「先取回全部超管再逐个比对」。
@@ -45,13 +46,16 @@ public class UserQueryImpl implements UserQuery {
     private final SysUserMapper sysUserMapper;
     private final SysUserRoleMapper sysUserRoleMapper;
     private final OwnerNameQuery ownerNameQuery;
+    private final DataScopeQuery dataScopeQuery;
 
     public UserQueryImpl(SysUserMapper sysUserMapper,
                          SysUserRoleMapper sysUserRoleMapper,
-                         OwnerNameQuery ownerNameQuery) {
+                         OwnerNameQuery ownerNameQuery,
+                         DataScopeQuery dataScopeQuery) {
         this.sysUserMapper = sysUserMapper;
         this.sysUserRoleMapper = sysUserRoleMapper;
         this.ownerNameQuery = ownerNameQuery;
+        this.dataScopeQuery = dataScopeQuery;
     }
 
     @Override
@@ -110,9 +114,11 @@ public class UserQueryImpl implements UserQuery {
                 summary,
                 entity.getEmail(),
                 entity.getWecomUserId(),
-                // 用户级覆盖值原样返回（可为 null = 继承角色默认）：数据范围的枚举与校验属于 2.3/2.4，
-                // 本批如果在这里替它挑一个默认值，等于提前把「没配置」说成「配置成了某一个值」
+                // 用户级覆盖值原样返回（可为 null = 继承角色默认）：在这里替它挑一个默认值，
+                // 等于把「没配置」说成「配置成了某一个值」
                 entity.getDataScopeType(),
+                // 明细与类型分两张表：类型已随账号行读出，这里只补明细，不再读一次账号行
+                dataScopeQuery.findUserOwnerIds(userId),
                 entity.getCreatedAt(),
                 grants.stream().map(UserRoleGrant::roleId).toList()));
     }
