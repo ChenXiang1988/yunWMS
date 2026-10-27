@@ -9,10 +9,10 @@ import com.yunwms.auth.domain.model.NewRole;
  * 写入端口的失败语义是「违反库约束」，两者的错误处理路径完全不同，合成一个端口后
  * 任何能读角色的代码都能顺手写角色。
  *
- * <p>一次调用写两张表（{@code sys_role} 与 {@code sys_role_menu}），由用例包在同一个事务里。
- * 不拆成 {@code insertRole} 与 {@code insertMenus}：拆开之后「角色建了但一个权限点都没勾」
- * 会变成调用方可以制造的状态，而它与「管理员故意建一个无权限角色」在库里长得一模一样，
- * 事后无法区分。
+ * <p>一次调用写三张表（{@code sys_role}、{@code sys_role_menu} 与 {@code sys_data_scope_owner}），
+ * 由用例包在同一个事务里。不拆成 {@code insertRole} 与「再补授权/补范围」：拆开之后「角色建了
+ * 但一个权限点都没勾」「角色建了但没有范围」会变成调用方可以制造的状态，而它们与「管理员故意建一个
+ * 无权限角色」在库里长得一模一样，事后无法区分。
  *
  * <p><b>关于删除（供 2.2b2 参考）：</b>{@code sys_user_role.role_id} 与
  * {@code sys_role_menu.role_id} 都是 {@code ON DELETE CASCADE}。这意味着一旦物理删除角色，
@@ -29,12 +29,13 @@ import com.yunwms.auth.domain.model.NewRole;
 public interface RoleRegistrar {
 
     /**
-     * 写入新角色及其授权关联。
+     * 写入新角色、其授权关联与数据范围明细。
      *
-     * <p>落库值固定为 {@code builtin = false}、{@code data_scope_type = 'CUSTOM'}、
-     * {@code status = 'ACTIVE'}，见 {@link NewRole} 的说明：三者都不是创建入参。
+     * <p>落库值中 {@code builtin = false}、{@code status = 'ACTIVE'} 仍是固定值（见 {@link NewRole}）；
+     * {@code data_scope_type} 与 {@code sys_data_scope_owner} 的明细取自入参——数据范围已经是
+     * 管理员的可选项，写死在实现里会让「建角色时一次给全范围」变成做不到的事。
      *
-     * @param role       待落库的角色，编码与名称已通过创建期校验
+     * @param role       待落库的角色，编码、名称与数据范围搭配已通过创建期校验
      * @param operatorId 操作人标识，写入 {@code created_by} 与 {@code updated_by}
      * @return 数据库生成的角色标识
      * @throws IllegalStateException 插入未返回主键，说明写入与主键回填不一致

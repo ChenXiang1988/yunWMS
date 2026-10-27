@@ -6,28 +6,41 @@ import java.util.regex.Pattern;
 /**
  * 待创建的角色。
  *
- * <p>只承载「创建角色」这一动作的入参，不承载 {@code builtin}、{@code data_scope_type} 与
- * {@code status}：三者都不是管理员的可选项。
+ * <p>只承载「创建角色」这一动作的入参，不承载 {@code builtin} 与 {@code status}：两者都不是管理员
+ * 的可选项。
  * <ul>
  *   <li>{@code builtin} 恒为 {@code false}——接口不能创建内置角色，否则任何人都能造出一个
  *       「鉴权时动态展开为全部权限点」的超级管理员；</li>
- *   <li>{@code data_scope_type} 固定为 {@code 'CUSTOM'}——数据范围配置属于 2.4，在它落地前
- *       新建角色的数据范围是「空明细」，保守方向是空集（无权）而不是「全部货主」；</li>
  *   <li>{@code status} 固定为 {@code 'ACTIVE'}——停用是后续操作，不是创建时的选择。</li>
  * </ul>
- * 三个固定值由写入口 {@code RoleRegistrar} 显式落库，不依赖列默认值：默认值一旦被改动，
+ * 两个固定值由写入口 {@code RoleRegistrar} 显式落库，不依赖列默认值：默认值一旦被改动，
  * 建角色的语义不该跟着变。
+ *
+ * <p><b>数据范围是可选项，且默认值是保守的那一侧：</b>省略类型时为 {@link DataScopeType#CUSTOM}
+ * 加空明细。选 {@code CUSTOM} 而不是 {@code ALL} 是因为两者选错的代价不对称——{@code CUSTOM}
+ * 空明细的结果是「什么都看不见」，管理员会立刻发现并去配置；{@code ALL} 的结果是「全部可见」，
+ * 可能几个月都没人注意到少配了一步。
+ *
+ * <p>类型与明细的搭配在这里判一次（非 {@code CUSTOM} 不得带明细）：这条约束不需要查库，
+ * 属于聚合自身的不变量；「货主是否存在且启用」要跨模块查询，留在用例层。
  *
  * <p>编码格式规则定义在本类，是因为它属于角色这个聚合的不变量，而不是 HTTP 契约的一部分：
  * 将来的批量导入、初始化脚本同样要受它约束。正则与提示文案都以 {@code public static final}
  * 常量暴露，供接口层的 {@code @Pattern} 直接引用，保证规则只有一份定义。
  *
- * @param code    角色编码，需满足 {@link #CODE_PATTERN}；程序引用角色用，全局唯一
- * @param name    角色名称，给人看
- * @param remark  备注，可为 {@code null}
- * @param menuIds 勾选的菜单与权限点标识；空集合表示不授权任何权限，是合法状态
+ * @param code          角色编码，需满足 {@link #CODE_PATTERN}；程序引用角色用，全局唯一
+ * @param name          角色名称，给人看
+ * @param remark        备注，可为 {@code null}
+ * @param menuIds       勾选的菜单与权限点标识；空集合表示不授权任何权限，是合法状态
+ * @param dataScopeType 数据范围类型，不能为 {@code null}（省略时由用例层补 {@code CUSTOM}）
+ * @param ownerIds      {@code CUSTOM} 时的指定货主标识；其他类型必须为空集合
  */
-public record NewRole(String code, String name, String remark, Set<Long> menuIds) {
+public record NewRole(String code,
+                      String name,
+                      String remark,
+                      Set<Long> menuIds,
+                      DataScopeType dataScopeType,
+                      Set<Long> ownerIds) {
 
     /**
      * 角色编码格式：大写字母开头，只含大写字母、数字与下划线，全长 2 到 32 位。
@@ -50,8 +63,9 @@ public record NewRole(String code, String name, String remark, Set<Long> menuIds
      * <p>拒绝非法值是最后一道防线：用例层会先判一次并给出可展示的业务错误，
      * 这里是防止绕过用例直接构造（例如新的导入入口）时把脏数据写下去。
      *
-     * @throws IllegalArgumentException 编码不符合格式，或名称为空
-     * @throws NullPointerException     {@code menuIds} 中含有 {@code null} 元素，
+     * @throws IllegalArgumentException 编码不符合格式、名称为空、数据范围类型为空，
+     *                                  或非 {@code CUSTOM} 却带指定货主明细
+     * @throws NullPointerException     {@code menuIds} 或 {@code ownerIds} 中含有 {@code null} 元素，
      *                                  属于调用方编程错误，不包装成业务错误
      */
     public NewRole {
@@ -63,6 +77,15 @@ public record NewRole(String code, String name, String remark, Set<Long> menuIds
         }
         // 集合语义：同一 id 传两次不该变成主键冲突；用不可变集合同时挡住事后篡改
         menuIds = menuIds == null ? Set.of() : Set.copyOf(menuIds);
+        if (dataScopeType == null) {
+            throw new IllegalArgumentException("数据范围类型不能为空，应在用例层补默认值");
+        }
+        ownerIds = ownerIds == null ? Set.of() : Set.copyOf(ownerIds);
+        if (!dataScopeType.usesOwnerDetails() && !ownerIds.isEmpty()) {
+            // 与 sys_data_scope_owner 的注释同一口径：ALL 与 ASSIGNED 不落明细，
+            // 带着明细建角色会写出一份「永远不生效」的数据，而界面上看不出它不生效
+            throw new IllegalArgumentException("数据范围类型 " + dataScopeType.name() + " 不能指定货主明细");
+        }
     }
 
     /**
