@@ -2,11 +2,11 @@
 
 ## 状态
 
-**实现完成，验收待执行，暂不归档。**
+**实现与验收完成，可归档。**
 
 - `tasks.md` 的 16 条任务全部勾选。
 - 仓网端已从 Element Plus 切到 Ant Design Vue 4，`packages/ui` 与 `tokens/element-plus` 已按任务记录删除。
-- 2026-10-27 的架构审计只做静态核对，没有重新运行前端构建或浏览器走查，因此不能把“任务已勾选”当作最终验收。
+- 2026-10-27 完成前端 typecheck/test/build、UI 边界检查与浏览器页面走查，结果见下文。
 
 ## 目标与实际交付
 
@@ -34,21 +34,13 @@
 - 16/16 任务在 `tasks.md` 勾选。
 - 仓网端依赖中无 `element-plus`。
 - `packages/ui` 与 `packages/tokens/src/element-plus.css` 不存在。
+- `pnpm -r typecheck`、`pnpm -r test`、`pnpm -r build`、`pnpm check:ui` 通过。
+- 浏览器走查：真实后端完成登录、首次强制改密、进入客户管理；工作台、商品中心、仓库网络、系统管理页面均能打开并渲染标题。
+- 客户页进一步完成新建、详情、编辑、状态流转、终止确认与删除草稿。
 
-本轮未执行：
+## 归档条件
 
-- `pnpm -r typecheck`
-- `pnpm -r test`
-- `pnpm -r build`
-- 浏览器走查登录、商品、工作台、系统管理与客户页
-
-## 归档前置条件
-
-调用方完成以下检查后，才可归档本 change：
-
-1. `cd code/frontend && pnpm -r typecheck && pnpm -r test && pnpm -r build` 通过。
-2. 两个应用登录、改密、工作台与仓网端 5 个页面可正常打开。
-3. 确认菜单、表格没有明显回归，且仓库无 Element Plus 残留引用。
+归档条件已满足：构建与页面走查通过，Element Plus 无残留。像素级视觉差异仍建议在后续 UI 走查中人工确认。
 
 ## 已知风险
 
