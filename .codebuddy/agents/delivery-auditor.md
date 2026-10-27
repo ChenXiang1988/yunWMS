@@ -24,7 +24,8 @@ enabledAutoRun: true
 python3 code/tools/audit-delivery/audit_delivery.py --anchor <anchor> \
   --change <change-id> \
   --allow '<allowed-path-glob>' \
-  --forbid-ext .java --forbid-ext .sql --forbid-ext .vue --forbid-ext .ts
+  --forbid-ext .java --forbid-ext .sql --forbid-ext .vue --forbid-ext .ts \
+  --forbid-ext .tsx --forbid-ext .css
 ```
 
 - 脚本只输出 JSON，不写文件；禁止用 `tee`、重定向或自行创建临时文件。

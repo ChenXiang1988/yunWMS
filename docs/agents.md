@@ -248,7 +248,8 @@ CodeBuddy 机制无法在 `git commit` 时自动唤起子 Agent，能强制要�
 python3 code/tools/audit-delivery/audit_delivery.py --anchor main --staged \
   --change <change-id> \
   --allow 'openspec/changes/<change-id>/**' \
-  --forbid-ext .java --forbid-ext .sql --forbid-ext .vue --forbid-ext .ts
+  --forbid-ext .java --forbid-ext .sql --forbid-ext .vue --forbid-ext .ts \
+  --forbid-ext .tsx --forbid-ext .css
 
 # 提交后：审 anchor..HEAD 的每笔提交
 python3 code/tools/audit-delivery/audit_delivery.py --anchor main \
