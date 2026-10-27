@@ -50,40 +50,39 @@
 
 ## 调用方待执行验证
 
-以下均未在本轮执行：
-
 | 项 | 命令 | 预期 | 实际 |
 |---|---|---|---|
-| 后端 | `cd code/backend && ./mvnw -B verify` | 编译、单测、ArchUnit、Testcontainers 全部通过 | 待回填 |
-| 前端 | `cd code/frontend && pnpm -r typecheck && pnpm -r test && pnpm -r build` | 类型检查、现有测试、构建通过 | 待回填 |
-| api-inventory | `cd code/tools/api-inventory && python3 -m unittest discover -s tests` | 全部通过 | 待回填 |
-| cad-parser | `cd code/tools/cad-parser && python3 -m unittest discover -s tests` | 全部通过 | 待回填 |
-| DDL 约束 | 全量迁移后 `python3 code/backend/tools/verify_constraints.py` | 63/63 通过 | 待回填 |
+| 后端 | `cd code/backend && JAVA_HOME=/opt/homebrew/opt/openjdk@21 ./mvnw -B verify` | 编译、单测、ArchUnit、Testcontainers 全部通过 | 通过；88 个测试，0 失败，0 错误 |
+| 前端 | `cd code/frontend && pnpm -r typecheck && pnpm -r test && pnpm -r build` | 类型检查、现有测试、构建通过 | 通过；3 个令牌测试通过，两个应用构建成功 |
+| api-inventory | `cd code/tools/api-inventory && python3 -m unittest discover -s tests` | 全部通过 | 通过；45 个测试 |
+| cad-parser | `cd code/tools/cad-parser && python3 -m unittest discover -s tests` | 全部通过 | 通过；13 个测试 |
+| DDL 约束 | 全量迁移后 `python3 code/backend/tools/verify_constraints.py` | 63/63 通过 | 通过；63/63 |
+
+注意：本机默认 Java 为 26，首次后端测试因 Mockito inline mock 与 JDK 26 不兼容失败；改用 Homebrew JDK 21.0.11 后通过。项目声明基线为 Java 21，该失败属于环境版本问题，不是代码回归。
+
+DDL 首次运行 60/63，暴露脚本原有的固定用户 ID 与 `OWNER` 种子规则冲突；已改为按登录名取用户、使用 `TEST_RULE`，重跑 63/63。
 
 ## 并发验证结果
 
-执行方法见 `audit.md` 第 4 节；实际结果需由调用方回填。
+在隔离 PostgreSQL 16 容器和临时后端实例上执行，每个场景 20 轮。
 
-| 场景 | 两个响应 | 最终状态 | updated_at / updated_by | 结论 |
-|---|---|---|---|---|
-| ACTIVE：终止 vs 暂停 | 待回填 | 待回填 | 待回填 | 待执行 |
-| SUSPENDED：终止 vs 恢复 | 待回填 | 待回填 | 待回填 | 待执行 |
-| ACTIVE：重复终止 | 待回填 | 待回填 | 待回填 | 待执行 |
+| 场景 | 两个响应 | 最终状态 | 结论 |
+|---|---|---|---|
+| ACTIVE：终止 vs 暂停 | 终止成功 20/20，部分轮次两个请求均返回成功 | 6/20（首轮）与 12/20（重跑）最终为 SUSPENDED | **复现**：终止成功后可被暂停覆盖 |
+| SUSPENDED：终止 vs 恢复 | 终止成功 20/20，部分轮次两个请求均返回成功 | 9/20 最终为 ACTIVE | **复现**：终止成功后可被恢复覆盖 |
+| ACTIVE：重复终止 | 两个请求均成功 | 20/20 最终为 TERMINATED | 通过：重复终止保持幂等 |
 
 判定基线：终止返回成功后最终状态不得被暂停或恢复覆盖；重复终止应两次成功且最终为 TERMINATED。
 
 ## 未验证项
 
-- 未运行后端、前端、Python 测试或构建。
-- 未启动应用做真实 HTTP 调用和并发验证。
-- 未执行数据库迁移或 DDL 约束脚本。
-- 未重新生成 OpenAPI 与 inventory。
 - 未做浏览器视觉走查，因此 `migrate-network-console` 不归档。
+- 未重新生成 OpenAPI 与 inventory。
 - 未检查完整 Git 历史，无法确认历史迁移是否曾被修改。
 
 ## 已知风险
 
-- 静态代码显示货主状态流转存在读后写窗口，终止可能被并发暂停/恢复覆盖；需调用方并发验证确认。
+- 货主状态流转并发覆盖已实机复现：ACTIVE 终止 vs 暂停出现 6/20、12/20 次覆盖；SUSPENDED 终止 vs 恢复出现 9/20 次覆盖；重复终止通过。需要独立 `fix-owner-status-concurrency`。
 - `OwnerNameMapper` 仍是 auth 读取 master 表的债务；直接替换会造成软删除货主名称显示回归。
 - 三个跨模块外键保证引用存在，但不保证货主未软删除，业务可用性仍需应用层判断。
 - 请求体 ID 类型仍与契约规范冲突，属于后续 `align-api-id-contract`。
