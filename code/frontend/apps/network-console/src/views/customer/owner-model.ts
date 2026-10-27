@@ -1,7 +1,9 @@
 import type { OwnerListQuery, OwnerStatus } from '@/api/owner'
 
 /**
- * 纯展示模型：状态文案、类型标签、时间格式与查询参数归一化。
+ * 纯展示与查询模型：占位符、类型标签、时间格式与查询参数归一化。
+ *
+ * 状态文案与流转见 `owner-status.ts`，表单与请求体见 `owner-form.ts`。
  *
  * 这里不 import 请求层——`http` 依赖 `import.meta.env` 与浏览器环境，一旦引入就
  * 无法用 `node:test` 直接跑。数据由页面注入，函数只做无副作用的转换。
@@ -16,24 +18,6 @@ export const DEFAULT_PAGE_SIZE = 20
 /** 每页条数上限，与后端一致：越界时后端直接返回 40000，前端不发越界值 */
 export const MAX_PAGE_SIZE = 200
 
-/** 五态文案：键与后端 `OwnerStatus` 一一对应，值为界面展示词 */
-export const OWNER_STATUS_TEXT: Record<OwnerStatus, string> = {
-  DRAFT: '草稿',
-  POTENTIAL: '潜在',
-  ACTIVE: '合作中',
-  SUSPENDED: '暂停',
-  TERMINATED: '终止'
-}
-
-/** 状态筛选选项，顺序与状态流转方向一致（草稿 → 潜在 → 合作中 → 暂停 → 终止） */
-export const OWNER_STATUS_OPTIONS: ReadonlyArray<{ value: OwnerStatus; label: string }> = [
-  { value: 'DRAFT', label: OWNER_STATUS_TEXT.DRAFT },
-  { value: 'POTENTIAL', label: OWNER_STATUS_TEXT.POTENTIAL },
-  { value: 'ACTIVE', label: OWNER_STATUS_TEXT.ACTIVE },
-  { value: 'SUSPENDED', label: OWNER_STATUS_TEXT.SUSPENDED },
-  { value: 'TERMINATED', label: OWNER_STATUS_TEXT.TERMINATED }
-]
-
 /** 筛选栏字段，与 `OwnerFilters` 的输入一一对应 */
 export interface OwnerFilterValues {
   keyword?: string
@@ -45,16 +29,6 @@ export interface OwnerFilterValues {
 export interface OwnerQueryInput extends OwnerFilterValues {
   pageNo?: number
   pageSize?: number
-}
-
-/**
- * 货主状态文案。
- *
- * 未知状态回退原值：后端将来新增状态时，界面显示原文总好过显示空白或
- * `undefined`——原文至少能和接口日志对上。
- */
-export function ownerStatusText(status: string): string {
-  return OWNER_STATUS_TEXT[status as OwnerStatus] ?? status
 }
 
 /**
@@ -117,6 +91,18 @@ export function normalizeOwnerQuery(input: OwnerQueryInput = {}): OwnerListQuery
   }
 
   return query
+}
+
+/** 下拉选项：字典项的最小投影，只保留渲染所需的两列。页面与表单抽屉共用，避免各写一份 */
+export interface OwnerSelectOption {
+  value: string
+  label: string
+}
+
+/** 详情展示用：null、空串与纯空白都显示占位符 */
+export function displayText(value: string | null | undefined): string {
+  const text = value?.trim()
+  return text ? text : PLACEHOLDER
 }
 
 /** 取整并保证不小于 1；非有限数（NaN、Infinity）回退默认值 */

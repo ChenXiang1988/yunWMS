@@ -3,32 +3,11 @@ import assert from 'node:assert/strict'
 import {
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
-  OWNER_STATUS_OPTIONS,
-  OWNER_STATUS_TEXT,
   PLACEHOLDER,
   formatIsoDateTime,
   normalizeOwnerQuery,
-  ownerStatusText,
   ownerTypeLabel
 } from './owner-model.ts'
-
-test('五态文案覆盖后端全部状态', () => {
-  assert.deepEqual(
-    OWNER_STATUS_OPTIONS.map((option) => option.value),
-    ['DRAFT', 'POTENTIAL', 'ACTIVE', 'SUSPENDED', 'TERMINATED']
-  )
-  assert.deepEqual(
-    OWNER_STATUS_OPTIONS.map((option) => option.label),
-    ['草稿', '潜在', '合作中', '暂停', '终止']
-  )
-  assert.equal(Object.keys(OWNER_STATUS_TEXT).length, 5)
-})
-
-test('状态文案：已知状态取中文，未知状态回退原值', () => {
-  assert.equal(ownerStatusText('ACTIVE'), '合作中')
-  assert.equal(ownerStatusText('TERMINATED'), '终止')
-  assert.equal(ownerStatusText('ARCHIVED'), 'ARCHIVED')
-})
 
 test('客户类型标签：取字典 label，未知类型回退原值，空值显示占位符', () => {
   const labels = new Map([
