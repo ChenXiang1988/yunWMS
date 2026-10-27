@@ -282,11 +282,14 @@ class OwnerQueryIntegrationTest extends AbstractIntegrationTest {
         int emptyStatements = STATEMENT_COUNTER.count();
         System.out.println("货主列表（空结果）SQL 条数：" + emptyStatements);
 
-        // 构成：鉴权 3（用户角色 / 角色 / 权限点，见 SaTokenPermissionResolver）+ 计数 1 + 分页 1。
+        // 构成：鉴权 3（用户角色 / 角色 / 权限点，见 SaTokenPermissionResolver）
+        //     + 数据范围 3（用户覆盖 / 用户角色 / 角色，见 DataScopeResolver；每请求只解析一次）
+        //     + 计数 1 + 分页 1。
         // 逐行查负责人或 SKU 数会让它随行数增长，两条计数不等就是那条 N+1 退化
         assertThat(statements)
-                .as("列表全链路执行了 %d 条 SQL，多于「鉴权 3 + 计数 1 + 分页 1」说明引入了逐行查询", statements)
-                .isLessThanOrEqualTo(5);
+                .as("列表全链路执行了 %d 条 SQL，多于「鉴权 3 + 数据范围 3 + 计数 1 + 分页 1」说明引入了逐行查询",
+                        statements)
+                .isLessThanOrEqualTo(8);
         assertThat(statements)
                 .as("少于 2 条说明计数器没挂上，这条断言会空转通过")
                 .isGreaterThanOrEqualTo(2);

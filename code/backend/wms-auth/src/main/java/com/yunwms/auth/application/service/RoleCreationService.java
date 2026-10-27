@@ -2,6 +2,7 @@ package com.yunwms.auth.application.service;
 
 import com.yunwms.auth.application.command.CreateRoleCommand;
 import com.yunwms.auth.application.dto.CreatedRole;
+import com.yunwms.auth.domain.model.DataScopeType;
 import com.yunwms.auth.domain.model.NewRole;
 import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.RoleRegistrar;
@@ -30,8 +31,9 @@ import java.util.Set;
  * 外键，插入时数据库会拦下不存在的 id；预查只是把同一条判定做两遍，还留下「查完到插入之间
  * 该 id 被删掉」的窗口。外键冲突同样由 {@link RoleConstraintTranslator} 翻成参数错误。
  *
- * <p>写两张表（{@code sys_role} 与 {@code sys_role_menu}）必须同一个事务：只写进角色没写授权时，
- * 管理员看到「建成功」而角色一个权限都没有，与「故意建一个无权限角色」在库里无法区分。
+ * <p>写三张表（{@code sys_role}、{@code sys_role_menu} 与 {@code sys_data_scope_owner}）必须同一个事务：
+ * 只写进角色没写授权或范围时，管理员看到「建成功」而角色一个权限、一个货主都看不到，
+ * 与「故意建一个无权限角色」在库里无法区分。
  *
  * <p>不写审计日志（{@code sys_audit_log}）：那属于审计能力（2.8），本用例只保证
  * {@code created_by} / {@code updated_by} 记下操作人。
@@ -39,20 +41,32 @@ import java.util.Set;
 @Service
 public class RoleCreationService {
 
+    /** 未指定数据范围时的默认类型：保守方向，空明细即无权。 */
+    private static final DataScopeType DEFAULT_DATA_SCOPE_TYPE = DataScopeType.CUSTOM;
+
     private final RoleRegistrar roleRegistrar;
     private final CurrentSession currentSession;
+    private final DataScopeOwnerValidator dataScopeOwnerValidator;
 
-    public RoleCreationService(RoleRegistrar roleRegistrar, CurrentSession currentSession) {
+    public RoleCreationService(RoleRegistrar roleRegistrar,
+                               CurrentSession currentSession,
+                               DataScopeOwnerValidator dataScopeOwnerValidator) {
         this.roleRegistrar = roleRegistrar;
         this.currentSession = currentSession;
+        this.dataScopeOwnerValidator = dataScopeOwnerValidator;
     }
 
     /**
-     * 创建一个角色，落库为启用、非内置、数据范围 {@code CUSTOM}。
+     * 创建一个角色，落库为启用、非内置。
+     *
+     * <p>数据范围可选：未指定类型时取 {@link DataScopeType#CUSTOM} 加空明细（保守方向，空集即无权）。
+     * 明细里的货主必须是存在且启用中的货主，判定委托给 {@link DataScopeOwnerValidator}——
+     * 那条规则三个入口共用，写在这里会让「建角色」与「改范围」两处迟早判得不一样。
      *
      * @param command 建角色入参
      * @return 新角色的标识与编码
      * @throws BizException 当前会话无效（40100）；编码或名称为空、编码格式不合规、
+     *                      数据范围类型与明细矛盾、明细里有不存在或未启用的货主、
      *                      勾选的菜单或权限点不存在（40000）；编码已被占用（40902）
      */
     @Transactional
@@ -80,7 +94,14 @@ public class RoleCreationService {
         Set<Long> menuIds = command.menuIds() == null
                 ? Set.of()
                 : Set.copyOf(command.menuIds());
-        NewRole role = new NewRole(code, name, stripToNull(command.remark()), menuIds);
+
+        DataScopeType dataScopeType = command.dataScopeType() == null
+                ? DEFAULT_DATA_SCOPE_TYPE
+                : command.dataScopeType();
+        Set<Long> ownerIds = command.ownerIds() == null ? Set.of() : Set.copyOf(command.ownerIds());
+        dataScopeOwnerValidator.requireConfigurable(dataScopeType, ownerIds);
+
+        NewRole role = new NewRole(code, name, stripToNull(command.remark()), menuIds, dataScopeType, ownerIds);
         try {
             return new CreatedRole(roleRegistrar.register(role, operatorId), code);
         } catch (DataIntegrityViolationException e) {

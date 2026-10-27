@@ -16,7 +16,10 @@ import java.util.List;
  * @param summary       与列表行同源的摘要
  * @param email         邮箱；货主账号可为 {@code null}
  * @param wecomUserId   企业微信 userid，内部员工用于应用消息推送；可为 {@code null}
- * @param dataScopeType 用户级数据范围覆盖值；{@code null} 表示继承角色默认（本批只读，配置属于 2.4）
+ * @param dataScopeType 用户级数据范围覆盖值；{@code null} 表示继承角色默认
+ * @param ownerIds      {@code dataScopeType = CUSTOM} 时该覆盖配置里的指定货主标识，按标识升序；
+ *                      其他情况为空列表。与 {@code dataScopeType} 一起构成完整的覆盖配置，
+ *                      只回显类型会让编辑页无法回填已选的货主
  * @param createdAt     创建时刻
  * @param roleIds       已分配的角色标识，按角色排序号升序；没有角色时为空列表
  */
@@ -24,6 +27,7 @@ public record UserProfile(UserSummary summary,
                           String email,
                           String wecomUserId,
                           String dataScopeType,
+                          List<Long> ownerIds,
                           Instant createdAt,
                           List<Long> roleIds) {
 }

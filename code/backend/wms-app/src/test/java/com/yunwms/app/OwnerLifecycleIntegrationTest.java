@@ -73,6 +73,9 @@ class OwnerLifecycleIntegrationTest extends AbstractIntegrationTest {
 
         Long noDeleteRoleId = seedRole(NO_DELETE_ROLE, "测试用货主无删除权限角色");
         link(noDeleteId, noDeleteRoleId);
+        // 数据范围给 ALL：本类验证的是「缺哪个权限点就不行」，不是数据范围。角色默认的 CUSTOM
+        // 空明细按规格等价于「无权限」，会把下面的「能读到这条货主」变成 404，测到的就不是权限点了
+        jdbcTemplate.update("UPDATE sys_role SET data_scope_type = 'ALL' WHERE id = ?", noDeleteRoleId);
         // 只放行列表 / 建档 / 编辑三个点：删除单独成点（V036），这里要验证的是「缺它就不行」
         jdbcTemplate.update("""
                 INSERT INTO sys_role_menu (role_id, menu_id)

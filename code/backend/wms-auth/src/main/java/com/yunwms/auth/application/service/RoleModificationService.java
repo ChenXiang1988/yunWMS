@@ -1,9 +1,11 @@
 package com.yunwms.auth.application.service;
 
 import com.yunwms.auth.application.command.ChangeRoleStatusCommand;
+import com.yunwms.auth.application.command.ConfigureRoleDataScopeCommand;
 import com.yunwms.auth.application.command.UpdateRoleCommand;
 import com.yunwms.auth.domain.model.RoleSummary;
 import com.yunwms.auth.domain.port.CurrentSession;
+import com.yunwms.auth.domain.port.DataScopeOwnerRegistrar;
 import com.yunwms.auth.domain.port.RoleQuery;
 import com.yunwms.auth.domain.port.RoleUpdater;
 import com.yunwms.web.api.ErrorCode;
@@ -16,9 +18,9 @@ import java.time.Instant;
 import java.util.Set;
 
 /**
- * 管理员维护已有角色的用例：编辑基本信息与授权、启用停用、删除。
+ * 管理员维护已有角色的用例：编辑基本信息与授权、配置数据范围、启用停用、删除。
  *
- * <p>三个用例放在同一个类里，是因为它们共用同一条前置规则：<b>内置角色一律拒绝</b>。
+ * <p>四个用例放在同一个类里，是因为它们共用同一条前置规则：<b>内置角色一律拒绝</b>。
  * 这条规则的依据是它的失效后果不可逆——超级管理员的权限在鉴权时动态展开为全部权限点，
  * 一旦被停用或删除，系统里再没有任何账号能配置权限，而界面上没有恢复入口（改库除外）。
  * 把它拆到三个类里各写一遍，改一处忘一处时就会出现「能停用、也能删除」的漏网路径。
@@ -38,14 +40,51 @@ public class RoleModificationService {
 
     private final RoleQuery roleQuery;
     private final RoleUpdater roleUpdater;
+    private final DataScopeOwnerRegistrar dataScopeOwnerRegistrar;
+    private final DataScopeOwnerValidator dataScopeOwnerValidator;
     private final CurrentSession currentSession;
 
     public RoleModificationService(RoleQuery roleQuery,
                                    RoleUpdater roleUpdater,
+                                   DataScopeOwnerRegistrar dataScopeOwnerRegistrar,
+                                   DataScopeOwnerValidator dataScopeOwnerValidator,
                                    CurrentSession currentSession) {
         this.roleQuery = roleQuery;
         this.roleUpdater = roleUpdater;
+        this.dataScopeOwnerRegistrar = dataScopeOwnerRegistrar;
+        this.dataScopeOwnerValidator = dataScopeOwnerValidator;
         this.currentSession = currentSession;
+    }
+
+    /**
+     * 用入参<b>整批替换</b>角色的数据范围：类型与明细一起换。
+     *
+     * <p>独立成一条用例而不是并入 {@link #update}：编辑资料与配置范围是两件事，合在一起之后
+     * 「只改名称」的请求必须把范围也提交，漏传就等于清空。
+     *
+     * <p>两处写入（{@code sys_role.data_scope_type} 与 {@code sys_data_scope_owner}）在同一个事务里：
+     * 只改了类型时，{@code CUSTOM} 的明细仍是上一个类型留下的旧数据，那一段中间态里的范围解析
+     * 读到的是谁的数据取决于提交顺序。
+     *
+     * <p>停用中的角色同样允许配置：管理员通常先配好范围再启用，禁止只会逼他先启用一个没配好的角色。
+     *
+     * @param command 配置入参；{@code ownerIds} 在非 {@code CUSTOM} 时必须为空
+     * @throws BizException 当前会话无效（40100）；角色不存在（40400）；内置角色（40900）；
+     *                      类型为空、类型与明细矛盾、明细里有不存在或未启用的货主（40000）
+     */
+    @Transactional
+    public void configureDataScope(ConfigureRoleDataScopeCommand command) {
+        long operatorId = requireOperatorId();
+        RoleSummary role = requireModifiableRole(command.roleId(), "配置数据范围");
+
+        Set<Long> ownerIds = command.ownerIds() == null ? Set.of() : Set.copyOf(command.ownerIds());
+        dataScopeOwnerValidator.requireConfigurable(command.dataScopeType(), ownerIds);
+
+        roleUpdater.updateDataScopeType(role.id(), command.dataScopeType(), operatorId, Instant.now());
+        // 非 CUSTOM 时传空集合：ALL 与 ASSIGNED 是规则而不是名单，留着旧明细会让「这条明细算不算数」
+        // 变成只有读过解析逻辑才能回答的问题
+        dataScopeOwnerRegistrar.replaceRoleOwners(role.id(),
+                command.dataScopeType().usesOwnerDetails() ? ownerIds : Set.of());
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.yunwms.auth.domain.port;
 
+import com.yunwms.auth.domain.model.DataScopeType;
 import com.yunwms.auth.domain.model.RoleStatus;
 
 import java.time.Instant;
@@ -51,6 +52,25 @@ public interface RoleUpdater {
      */
     void updateWithMenus(long roleId, String name, String remark, Collection<Long> menuIds,
                          long operatorId, Instant updatedAt);
+
+    /**
+     * 写入角色的数据范围类型，并更新审计列。
+     *
+     * <p>只写 {@code data_scope_type} 与审计列：{@code CUSTOM} 的明细在另一张表，由
+     * {@link DataScopeOwnerRegistrar} 负责替换。两个动作由用例包在同一个事务里——只改了类型没换明细时，
+     * 「类型是 {@code CUSTOM}、明细还是上个类型留下的」这种状态会真实存在一小段时间，
+     * 而在那一段里范围解析读到的是谁的明细，取决于提交顺序。
+     *
+     * <p>与 {@link #updateWithMenus} 分开成两个方法而不是加一个可空参数：编辑资料永远不该顺带改范围
+     * （那正是「资料更新漏传字段就把范围清空」的来源），配置范围也不该顺带改名称。
+     *
+     * @param roleId     角色标识
+     * @param type       目标数据范围类型
+     * @param operatorId 操作人标识，写入 {@code updated_by}
+     * @param updatedAt  变更时刻，写入 {@code updated_at}
+     * @throws IllegalStateException 角色在本次操作过程中被删除，库内没有任何一行被改动
+     */
+    void updateDataScopeType(long roleId, DataScopeType type, long operatorId, Instant updatedAt);
 
     /**
      * 改变角色状态。

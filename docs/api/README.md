@@ -44,9 +44,9 @@ python3 code/tools/api-inventory/gen_api_inventory.py --from-file docs/api/opena
 
 ## 当前状态
 
-当前台账的源 commit 为 `8d2f7a2`，共 **25 个 operation**（GET 10 / POST 4 / PUT 9 / DELETE 2）。
+当前台账的源 commit 为 `fe45410`，共 **27 个 operation**（GET 10 / POST 4 / PUT 11 / DELETE 2）。
 
-2026-10-27 已在隔离数据库和本地实例上重新生成，请求体中的 `ownerId`、`roleIds`、`menuIds` 已改为字符串类型；路径参数仍按 OpenAPI `integer(int64)` 描述。下次任何接口或 DTO 变更后仍必须按上文重新生成并更新源 commit。
+2026-10-27 已在隔离数据库和本地实例上重新生成。请求体中的 `ownerId`、`roleIds`、`menuIds`、`ownerIds` 按字符串传输；路径参数仍按 OpenAPI `integer(int64)` 描述。角色与用户各新增一条数据范围配置端点，详情回显 `dataScopeType/ownerIds`。下次任何接口或 DTO 变更后仍必须按上文重新生成并更新源 commit。
 
 ## 前端子 Agent 的取数边界
 

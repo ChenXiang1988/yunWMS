@@ -139,8 +139,9 @@ public class OwnerController {
      *
      * <p>筛选与分页参数全部可选，全部省略即返回全量分页。
      *
-     * <p>本批<b>不做数据范围过滤</b>：任何有 {@code system:owner:list} 的账号都能看到全部货主。
-     * 这是任务 2.3 / 2.4 要解决的问题，在这里先自行加一层过滤会让本批的行为依赖一个尚未定义的权限模型。
+     * <p><b>结果受当前账号的数据范围约束：</b>计数与分页两条语句在持久化层按当前请求追加货主范围条件，
+     * 因此 {@code records} 与 {@code total} 说的是同一个范围。Controller 不参与这件事——
+     * 在这里再判一次会让范围出现两个落点，一处漏改时列表少了而 {@code total} 还是全部。
      *
      * @param pageNo    页码，从 1 开始；省略时取 1
      * @param pageSize  每页条数，上限 200；省略时取 20
@@ -156,8 +157,9 @@ public class OwnerController {
                     + "仍在字典中——存量货主可能引用已停用的字典项，按它筛选不该因此报错。status 取状态枚举名，"
                     + "未知值返回 40000。页码从 1 开始，每页条数上限 200，越界返回 40000（拒绝而不是静默截断）。"
                     + "本批不返回主负责人与 SKU 数：两个字段分别依赖联系人（3.5）与商品模块，尚无数据来源，"
-                    + "字段因此不出现，而不是返回 null 或 0 冒充已有能力。列表当前返回全部货主，"
-                    + "数据范围过滤属后续任务。")
+                    + "字段因此不出现，而不是返回 null 或 0 冒充已有能力。"
+                    + "结果按当前账号的数据范围过滤：指定货主（CUSTOM）只看明细里的货主，负责客服（ASSIGNED）"
+                    + "只看自己负责的货主，无任何范围时返回空列表；total 与 records 同范围。")
     @SaCheckPermission("system:owner:list")
     @GetMapping
     public ApiResult<PageResult<OwnerListItemResponse>> page(
@@ -184,14 +186,15 @@ public class OwnerController {
      * 本批不返回任何占位字段。
      *
      * @param id 货主标识
-     * @return 货主详情；货主不存在或已逻辑删除时返回 40400
+     * @return 货主详情；货主不存在、已逻辑删除或不在当前账号的数据范围内时返回 40400
      */
     @Operation(summary = "查询货主详情",
             description = "取单个货主的完整档案：列表行已有的标识、编码、名称、客户类型、状态与更新时间之外，"
                     + "再带出英文名称、简称、外部码、SKU 前缀、结算主体、注册地址六字段、备注与创建时间，"
                     + "供详情页「基本信息」页签回填。SKU 前缀只读——它是已生成 SKUID 的前四位，创建后不可修改。"
                     + "本批只做基本信息页签：联系人（3.5）、税号（3.6）与主账号（3.3）不在响应里，"
-                    + "也不返回占位字段。货主不存在或已被逻辑删除返回 40400。")
+                    + "也不返回占位字段。货主不存在、已被逻辑删除或不在当前账号的数据范围内返回 40400——"
+                    + "范围外的货主与「不存在」同口径，两者的区别本身就是一条能拿来枚举他方数据的信息。")
     @SaCheckPermission("system:owner:list")
     @GetMapping("/{id}")
     public ApiResult<OwnerDetailResponse> detail(
@@ -294,14 +297,15 @@ public class OwnerController {
      * 为一个只读的两个数字再拆一个权限点，只会多一次配置而没有边界收益。
      *
      * @param id 货主标识
-     * @return 该货主下仍存在的商品数与账号数；货主不存在或已逻辑删除时返回 40400
+     * @return 该货主下仍存在的商品数与账号数；货主不存在、已逻辑删除或不在当前账号的数据范围内时返回 40400
      */
     @Operation(summary = "查询终止影响清单",
             description = "取该货主下仍存在的商品数与账号数，供终止前的确认弹窗使用。"
                     + "商品数排除已删除的商品；账号数含已停用的账号（停用不等于不存在），"
                     + "只排除已删除的账号。两个数字都不会因终止而改变——终止只改货主状态，"
                     + "不改商品档案状态、也不停用账号。没有商品或没有账号时对应字段为 0，不返回 null。"
-                    + "货主不存在或已被逻辑删除返回 40400。")
+                    + "货主不存在、已被逻辑删除或不在当前账号的数据范围内返回 40400：两个数字本身就能证明"
+                    + "「这个标识是一条真实货主」，范围外的货主必须与不存在同口径。")
     @SaCheckPermission("system:owner:list")
     @GetMapping("/{id}/termination-impact")
     public ApiResult<OwnerTerminationImpactResponse> terminationImpact(

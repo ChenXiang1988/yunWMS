@@ -1,5 +1,6 @@
 package com.yunwms.auth.domain.port;
 
+import com.yunwms.auth.domain.model.DataScopeType;
 import com.yunwms.auth.domain.model.UserStatus;
 
 import java.time.Instant;
@@ -41,6 +42,27 @@ public interface UserAccountUpdater {
      */
     void updateProfile(long userId, String displayName, String email, String wecomUserId,
                        long operatorId, Instant updatedAt);
+
+    /**
+     * 写入或清除账号的用户级数据范围覆盖类型。
+     *
+     * <p>{@code type} 为 {@code null} 表示<b>清除覆盖</b>（{@code data_scope_type = NULL}），
+     * 生效范围回落到角色并集。这是列上唯一能表达「没有覆盖」的写法——写一个具体类型都是
+     * 「有覆盖」，两者在解析时的分支不同。
+     *
+     * <p>只碰 {@code data_scope_type} 与审计列：{@code CUSTOM} 的明细在 {@code sys_data_scope_owner}，
+     * 由 {@code DataScopeOwnerRegistrar} 替换；两处由用例包在同一个事务里。
+     *
+     * <p>不在这里判「货主账号不能配置覆盖」：那要用主体类型，而主体类型是本方法调用方刚读过的
+     * 账号行里的字段，再读一次只会多一个可能不一致的来源。
+     *
+     * @param userId     用户标识
+     * @param type       目标类型；{@code null} 表示清除覆盖
+     * @param operatorId 操作人标识，写入 {@code updated_by}
+     * @param updatedAt  变更时刻，写入 {@code updated_at}
+     * @throws IllegalStateException 账号在本次操作过程中被删除，库内没有任何一行被改动
+     */
+    void updateDataScopeType(long userId, DataScopeType type, long operatorId, Instant updatedAt);
 
     /**
      * 改变账号状态。

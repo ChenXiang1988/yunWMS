@@ -2,6 +2,7 @@ package com.yunwms.auth.interfaces.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.yunwms.auth.application.command.ChangeRoleStatusCommand;
+import com.yunwms.auth.application.command.ConfigureRoleDataScopeCommand;
 import com.yunwms.auth.application.command.CreateRoleCommand;
 import com.yunwms.auth.application.command.UpdateRoleCommand;
 import com.yunwms.auth.application.query.RoleQueryService;
@@ -11,6 +12,7 @@ import com.yunwms.auth.domain.model.RoleStatus;
 import com.yunwms.auth.interfaces.controller.assembler.RoleResponseAssembler;
 import com.yunwms.auth.interfaces.controller.request.ChangeRoleStatusRequest;
 import com.yunwms.auth.interfaces.controller.request.CreateRoleRequest;
+import com.yunwms.auth.interfaces.controller.request.DataScopeRequest;
 import com.yunwms.auth.interfaces.controller.request.RequestIds;
 import com.yunwms.auth.interfaces.controller.request.UpdateRoleRequest;
 import com.yunwms.auth.interfaces.controller.response.CreatedRoleResponse;
@@ -73,17 +75,20 @@ public class RoleController {
     /**
      * 创建角色。
      *
-     * <p>新角色以启用状态落库，{@code builtin} 恒为 {@code false}，数据范围固定 {@code CUSTOM}：
-     * 三者都不是请求参数，理由见 {@code NewRole}。
+     * <p>新角色以启用状态落库，{@code builtin} 恒为 {@code false}：两者都不是请求参数，理由见 {@code NewRole}。
+     * 数据范围可以一次给全，省略时为 {@code CUSTOM} 空明细（保守方向，即什么都看不见）。
      *
      * @param request 建角色请求
      * @return 新角色的标识与编码；编码格式不合规、编码已被占用、勾选的菜单或权限点不存在、
-     *         {@code menuIds} 含非十进制整数的字符串通过业务错误码返回
+     *         数据范围类型与明细矛盾、明细里的货主不存在或未启用、
+     *         {@code menuIds} 或 {@code ownerIds} 含非十进制整数的字符串通过业务错误码返回
      */
     @Operation(summary = "创建角色",
-            description = "新建一个自定义角色并同时写入它勾选的菜单与权限点。三个属性不在请求体里、也不能由调用方指定："
-                    + "新角色一律启用、builtin 恒为 false、数据范围固定 CUSTOM——接口不能创建内置角色，"
-                    + "否则等于绕开权限体系造一个超级管理员。角色编码是程序引用角色的标识，格式不合规或已被占用"
+            description = "新建一个自定义角色并同时写入它勾选的菜单、权限点与数据范围。两个属性不在请求体里、"
+                    + "也不能由调用方指定：新角色一律启用、builtin 恒为 false——接口不能创建内置角色，"
+                    + "否则等于绕开权限体系造一个超级管理员。数据范围可选：省略时是 CUSTOM 空明细，"
+                    + "管理员随后在 PUT /{id}/data-scope 里明确设置；ALL 与 ASSIGNED 不接受货主明细，"
+                    + "CUSTOM 的货主必须存在且启用。角色编码是程序引用角色的标识，格式不合规或已被占用"
                     + "（含已删除的角色，因为唯一索引不带删除条件）返回 40000/40902；勾选的菜单或权限点不存在"
                     + "同样返回 40000。响应只回带标识与编码。")
     @SaCheckPermission("system:role:create")
@@ -95,7 +100,9 @@ public class RoleController {
                 request.code(),
                 request.name(),
                 request.remark(),
-                RequestIds.optionalIds(request.menuIds(), "menuIds"));
+                RequestIds.optionalIds(request.menuIds(), "menuIds"),
+                request.dataScopeType(),
+                RequestIds.optionalIds(request.ownerIds(), "ownerIds"));
         return ApiResult.ok(roleResponseAssembler.toCreatedResponse(roleCreationService.create(command)));
     }
 
@@ -180,6 +187,41 @@ public class RoleController {
         roleModificationService.update(new UpdateRoleCommand(
                 id, request.name(), request.remark(),
                 RequestIds.optionalIds(request.menuIds(), "menuIds")));
+        return ApiResult.ok();
+    }
+
+    /**
+     * 配置角色的数据范围。
+     *
+     * <p><b>整批替换</b>：提交的类型与明细就是该角色此后的全部范围。独立成一条端点而不是并入
+     * {@code PUT /{id}}：合在一起之后「只改名称」的请求必须把范围也提交，漏传就等于清空范围，
+     * 而漏传只需要界面上少渲染一个字段。
+     *
+     * <p>权限点用 {@code system:role:update}：改数据范围和改名称一样，动的都是「这个角色本身」，
+     * 而它决定这个角色的人能看见哪些货主，与改名同级而不是与删除同级。
+     *
+     * @param id      角色标识
+     * @param request 目标类型与明细
+     * @return 成功无数据；角色不存在（40400）、内置角色（40900）、类型为空、类型与明细矛盾、
+     *         明细里的货主不存在或未启用、{@code ownerIds} 含非十进制整数的字符串（40000）
+     *         通过业务错误码返回
+     */
+    @Operation(summary = "配置角色数据范围（整批替换）",
+            description = "把角色的数据范围整体替换为提交的这一组：dataScopeType 与 ownerIds 就是该角色此后的"
+                    + "全部范围，重复提交同一组是幂等的。独立成一条端点而不是并入编辑角色，是为了避免"
+                    + "「资料编辑漏传字段就把数据范围清空」。ALL（全部货主）与 ASSIGNED（我负责的货主）"
+                    + "是规则而不是名单，不接受 ownerIds（返回 40000）；CUSTOM 允许空数组，效果是看不见任何货主。"
+                    + "CUSTOM 的货主必须存在且启用，否则返回 40000。内置角色不可修改（40900），"
+                    + "角色不存在返回 40400。成功后不回带范围，需要最新值时取详情。")
+    @SaCheckPermission("system:role:update")
+    @PutMapping("/{id}/data-scope")
+    public ApiResult<Void> configureDataScope(
+            @Parameter(description = "角色标识，取自列表或详情响应里的 id")
+            @PathVariable long id,
+            @Valid @RequestBody DataScopeRequest request) {
+        roleModificationService.configureDataScope(new ConfigureRoleDataScopeCommand(
+                id, request.dataScopeType(), RequestIds.optionalIds(request.ownerIds(), "ownerIds")));
+        // 不回带范围：前端提交的就是它屏幕上那份数据；需要最新值（例如被并发改过）时重新取详情
         return ApiResult.ok();
     }
 

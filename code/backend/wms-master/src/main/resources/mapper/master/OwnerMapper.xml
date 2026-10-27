@@ -86,6 +86,50 @@
     </select>
 
     <!--
+        详情与终止影响清单的存在性判定：按标识取一行，并且接受数据范围过滤。
+
+        与 selectByIdForUpdate 等写路径语句的区别是刻意的：写路径按「这一行是否存在」判定 404
+        （编辑、流转、删除的既有语义不变），读路径必须按「这一行当前是否可见」判定——
+        否则知道标识的人可以读到、甚至可以借影响清单的计数探测到不属于自己范围的货主。
+
+        本语句不写任何货主范围条件：过滤片段（1 = 0 或 o.id IN (...)）由数据权限拦截器按当前请求追加，
+        写死在 SQL 里就只能表达一种范围。语句标识登记在 wms-auth 的 OwnerScopedStatements，
+        **本方法改名必须同步登记**；漏登记的表现是详情重新变成不过滤，集成测试会红。
+
+        deleted_at IS NULL 必须手写：MyBatis-Plus 的逻辑删除只作用于它自己生成的语句。
+        显式列出全部列（含 deleted_at）：与 selectPageByFilter 保持同一份投影，
+        读回的行不会出现「这列到底有没有读」的疑问。
+    -->
+    <select id="selectVisibleById"
+            resultType="com.yunwms.master.infrastructure.persistence.entity.OwnerEntity">
+        SELECT o.id,
+               o.code,
+               o.name,
+               o.short_name,
+               o.name_en,
+               o.external_code,
+               o.sku_prefix,
+               o.owner_type,
+               o.settlement_entity,
+               o.status,
+               o.country,
+               o.province,
+               o.city,
+               o.district,
+               o.postal_code,
+               o.address_line,
+               o.remark,
+               o.created_at,
+               o.created_by,
+               o.updated_at,
+               o.updated_by,
+               o.deleted_at
+        FROM owner o
+        WHERE o.id = #{id}
+          AND o.deleted_at IS NULL
+    </select>
+
+    <!--
         状态流转用的锁读：按标识取一行并加排他行锁。
 
         为什么必须是「同一条语句里的 FOR UPDATE」：分两步（先 SELECT 再锁）会留下一个
@@ -256,6 +300,28 @@
         FROM owner o
         WHERE o.sku_prefix = #{skuPrefix}
         LIMIT 1
+    </select>
+
+    <!--
+        可用货主批量筛选：口径是「存在、未删除且状态为 ACTIVE」，供数据范围配置的校验使用。
+
+        与下面的 selectNamesByIds 口径正好相反（那条刻意包含已删除的货主）：这里回答的是
+        「这些货主现在还能不能被写进配置」，而停用或已删除的货主界面上选不到，
+        配置指向它们只会让管理员事后无法判断这条配置为什么不起作用。
+
+        deleted_at IS NULL 必须手写：MyBatis-Plus 的逻辑删除只作用于它自己生成的语句。
+        只取 id 一列：调用方只需要判定哪些标识可用，不需要重建聚合。
+        空集合由用例层短路，本语句不处理空 IN——那会拼出非法的 IN () 或退化成全表扫描。
+    -->
+    <select id="selectExistingActiveIds" resultType="java.lang.Long">
+        SELECT o.id
+        FROM owner o
+        WHERE o.id IN
+        <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+            #{ownerId}
+        </foreach>
+          AND o.deleted_at IS NULL
+          AND o.status = 'ACTIVE'
     </select>
 
     <!--

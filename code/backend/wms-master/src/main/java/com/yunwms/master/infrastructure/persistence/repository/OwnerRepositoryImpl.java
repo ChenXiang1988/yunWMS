@@ -122,6 +122,19 @@ public class OwnerRepositoryImpl implements OwnerRepository {
     /**
      * {@inheritDoc}
      *
+     * <p>走 XML 的 {@code selectVisibleById} 而不是 {@code selectById}：只有前者登记在数据权限清单里，
+     * 因此只有它会带上当前请求的货主范围条件。两条语句的投影与重建路径完全一致，
+     * 差别仅在于「看不看得见」，不会出现「详情读到的字段与写路径读到的不同」。
+     */
+    @Override
+    public Optional<Owner> findVisibleById(long id) {
+        OwnerEntity entity = ownerMapper.selectVisibleById(id);
+        return entity == null ? Optional.empty() : Optional.of(toDomain(entity));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
      * <p><b>实现里不做任何「加锁前后」的加工：</b>锁由 XML 里那条 {@code SELECT ... FOR UPDATE} 获得，
      * 生命周期由调用方的事务管理。这里如果自己开事务，锁会在本方法返回时释放，调用方随后的
      * 状态判定与写回就在锁外——看上去加了锁，实际什么都没有保护。

@@ -2,8 +2,11 @@ package com.yunwms.auth.application.query;
 
 import com.yunwms.auth.application.dto.RoleDetail;
 import com.yunwms.auth.application.dto.RolePage;
+import com.yunwms.auth.domain.model.DataScopeSetting;
+import com.yunwms.auth.domain.model.DataScopeType;
 import com.yunwms.auth.domain.model.RoleStatus;
 import com.yunwms.auth.domain.model.RoleSummary;
+import com.yunwms.auth.domain.port.DataScopeQuery;
 import com.yunwms.auth.domain.port.RoleQuery;
 import com.yunwms.web.api.ErrorCode;
 import com.yunwms.web.exception.BizException;
@@ -13,6 +16,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -35,12 +39,14 @@ class RoleQueryServiceTest {
     private static final long ROLE_ID = 2L;
 
     private RoleQuery roleQuery;
+    private DataScopeQuery dataScopeQuery;
     private RoleQueryService roleQueryService;
 
     @BeforeEach
     void setUp() {
         roleQuery = mock(RoleQuery.class);
-        roleQueryService = new RoleQueryService(roleQuery);
+        dataScopeQuery = mock(DataScopeQuery.class);
+        roleQueryService = new RoleQueryService(roleQuery, dataScopeQuery);
     }
 
     @Test
@@ -112,12 +118,17 @@ class RoleQueryServiceTest {
     void shouldReturnDetailWithMenuIds() {
         given(roleQuery.findById(ROLE_ID)).willReturn(Optional.of(summary()));
         given(roleQuery.findMenuIds(ROLE_ID)).willReturn(List.of(3L, 4L));
+        given(dataScopeQuery.findRoleSetting(ROLE_ID))
+                .willReturn(Optional.of(new DataScopeSetting(DataScopeType.CUSTOM, Set.of(5L, 6L))));
 
         RoleDetail detail = roleQueryService.detail(ROLE_ID);
 
         assertThat(detail.summary().code()).isEqualTo("CS_STAFF");
         assertThat(detail.summary().userCount()).isZero();
         assertThat(detail.menuIds()).containsExactly(3L, 4L);
+        // 数据范围随详情回显：配置页要按它回填类型与已选货主
+        assertThat(detail.dataScopeType()).isEqualTo(DataScopeType.CUSTOM);
+        assertThat(detail.ownerIds()).containsExactly(5L, 6L);
     }
 
     @Test

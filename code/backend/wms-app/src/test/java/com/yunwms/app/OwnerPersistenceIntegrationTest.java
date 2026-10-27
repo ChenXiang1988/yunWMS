@@ -1,5 +1,7 @@
 package com.yunwms.app;
 
+import com.yunwms.auth.application.service.DataScopeResolver;
+import com.yunwms.auth.domain.model.DataScope;
 import com.yunwms.master.domain.model.NewOwner;
 import com.yunwms.master.domain.model.Owner;
 import com.yunwms.master.domain.model.OwnerAddress;
@@ -7,14 +9,17 @@ import com.yunwms.master.domain.model.OwnerStatus;
 import com.yunwms.master.domain.model.SkuPrefix;
 import com.yunwms.master.domain.port.OwnerCodeGenerator;
 import com.yunwms.master.domain.port.OwnerRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.BDDMockito.given;
 
 /**
  * 货主持久化与 {@code V033} 权限点的端到端验证。
@@ -37,11 +42,27 @@ class OwnerPersistenceIntegrationTest extends AbstractIntegrationTest {
     /** 操作人标识；{@code created_by} 无外键，取一个固定值即可。 */
     private static final long OPERATOR_ID = 1L;
 
+    /**
+     * 生效数据范围固定为「全部货主」。
+     *
+     * <p><b>为什么必须是 mock：</b>列表与计数语句已经接入数据权限过滤，而本类的调用发生在请求之外，
+     * 解析器按「没有登录上下文」给出「无范围」，那两条语句会一律返回空——那测到的不是 SQL 映射，
+     * 而是「没有调用方上下文」。真实的范围行为在 {@code OwnerDataScopeStaffIntegrationTest} 里用
+     * MockMvc 覆盖，本类只需一个能看见全部货主的上下文。
+     */
+    @MockitoBean
+    private DataScopeResolver dataScopeResolver;
+
     @Autowired
     private OwnerRepository ownerRepository;
 
     @Autowired
     private OwnerCodeGenerator ownerCodeGenerator;
+
+    @BeforeEach
+    void useFullDataScope() {
+        given(dataScopeResolver.resolve()).willReturn(DataScope.all());
+    }
 
     @Test
     @DisplayName("V033：客户管理菜单与三个权限点就位，且挂在正确的父节点下")

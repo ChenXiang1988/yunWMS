@@ -3,11 +3,13 @@ package com.yunwms.auth.interfaces.controller;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.yunwms.auth.application.command.AssignRolesCommand;
 import com.yunwms.auth.application.command.ChangeUserStatusCommand;
+import com.yunwms.auth.application.command.ConfigureUserDataScopeCommand;
 import com.yunwms.auth.application.command.CreateUserCommand;
 import com.yunwms.auth.application.command.ResetUserPasswordCommand;
 import com.yunwms.auth.application.command.UpdateUserCommand;
 import com.yunwms.auth.application.query.UserQueryService;
 import com.yunwms.auth.application.service.UserCreationService;
+import com.yunwms.auth.application.service.UserDataScopeConfigurationService;
 import com.yunwms.auth.application.service.UserPasswordResetService;
 import com.yunwms.auth.application.service.UserRoleAssignmentService;
 import com.yunwms.auth.application.service.UserStatusChangeService;
@@ -18,6 +20,7 @@ import com.yunwms.auth.interfaces.controller.assembler.UserResponseAssembler;
 import com.yunwms.auth.interfaces.controller.request.AssignRolesRequest;
 import com.yunwms.auth.interfaces.controller.request.ChangeUserStatusRequest;
 import com.yunwms.auth.interfaces.controller.request.CreateUserRequest;
+import com.yunwms.auth.interfaces.controller.request.DataScopeRequest;
 import com.yunwms.auth.interfaces.controller.request.RequestIds;
 import com.yunwms.auth.interfaces.controller.request.ResetUserPasswordRequest;
 import com.yunwms.auth.interfaces.controller.request.UpdateUserRequest;
@@ -45,8 +48,9 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>路径前缀 {@code /api/console} 表示仓网端：货主端（{@code /api/portal}）不提供建号能力，
  * 它的账号由管理员在仓网端开通。
  *
- * <p>本类做建号、列表、详情、编辑基本信息、启停、重置密码与分配角色。
- * 数据范围覆盖属于 2.3/2.4，不在这里预留空方法：一个返回 501 的占位实现，比没有这个接口更难解释。
+ * <p>本类做建号、列表、详情、编辑基本信息、配置数据范围覆盖、启停、重置密码与分配角色。
+ * 数据范围走独立端点 {@code PUT /{id}/data-scope}，不并入编辑基本信息：合在一起之后
+ * 「只改展示名」的请求必须把范围也提交，漏传就等于把某个人的范围清空。
  *
  * <p>权限点分四个：列表与详情共用 {@code system:user:list}（看得到列表的人本来就能从列表点进详情，
  * 拆成两个权限点只会多一次配置而没有边界收益）；建号用 {@code system:user:create}；
@@ -70,6 +74,7 @@ public class UserController {
     private final UserUpdateService userUpdateService;
     private final UserStatusChangeService userStatusChangeService;
     private final UserPasswordResetService userPasswordResetService;
+    private final UserDataScopeConfigurationService userDataScopeConfigurationService;
     private final UserResponseAssembler userResponseAssembler;
 
     public UserController(UserCreationService userCreationService,
@@ -78,6 +83,7 @@ public class UserController {
                           UserUpdateService userUpdateService,
                           UserStatusChangeService userStatusChangeService,
                           UserPasswordResetService userPasswordResetService,
+                          UserDataScopeConfigurationService userDataScopeConfigurationService,
                           UserResponseAssembler userResponseAssembler) {
         this.userCreationService = userCreationService;
         this.userQueryService = userQueryService;
@@ -85,6 +91,7 @@ public class UserController {
         this.userUpdateService = userUpdateService;
         this.userStatusChangeService = userStatusChangeService;
         this.userPasswordResetService = userPasswordResetService;
+        this.userDataScopeConfigurationService = userDataScopeConfigurationService;
         this.userResponseAssembler = userResponseAssembler;
     }
 
@@ -202,6 +209,44 @@ public class UserController {
             @Valid @RequestBody UpdateUserRequest request) {
         userUpdateService.update(new UpdateUserCommand(
                 id, request.displayName(), request.email(), request.wecomUserId()));
+        return ApiResult.ok();
+    }
+
+    /**
+     * 配置或清除用户级数据范围覆盖。
+     *
+     * <p><b>整批替换</b>，两种意图分开表达：
+     * <ul>
+     *   <li>{@code dataScopeType} 非空：写入覆盖，生效范围只按它算，<b>不再回退角色</b>；</li>
+     *   <li>{@code dataScopeType} 为 {@code null}：清除覆盖，回落到角色并集。</li>
+     * </ul>
+     * 合并成一种会让「管理员清不掉某个人的权限」或「清除没生效」二者必居其一。
+     *
+     * <p>独立成一条端点而不是并入 {@code PUT /{id}}：资料更新的契约不变，避免「编辑资料漏传字段
+     * 就把数据范围清空」。
+     *
+     * @param id      用户标识
+     * @param request 目标类型与明细；类型为 {@code null} 表示清除覆盖
+     * @return 成功无数据；用户不存在（40400）、账号是货主账号、类型与明细矛盾、
+     *         明细里的货主不存在或未启用、清除时却提交了明细、{@code ownerIds} 含非十进制整数的字符串
+     *         （40000）通过业务错误码返回
+     */
+    @Operation(summary = "配置用户级数据范围覆盖（整批替换）",
+            description = "把账号的数据范围覆盖整体替换为提交的这一组：dataScopeType 与 ownerIds 就是它此后的"
+                    + "全部覆盖，重复提交同一组是幂等的。dataScopeType 传 null 表示清除覆盖、回落到角色默认，"
+                    + "此时不能提交 ownerIds（40000）。ALL 与 ASSIGNED 是规则而不是名单，不接受 ownerIds；"
+                    + "CUSTOM 允许空数组（效果是看不见任何货主），其货主必须存在且启用。货主账号的范围由所属货主"
+                    + "强制决定，不接受覆盖配置（40000）。账号不存在返回 40400。成功后不回带范围，"
+                    + "需要最新值时取详情。")
+    @SaCheckPermission("system:user:update")
+    @PutMapping("/{id}/data-scope")
+    public ApiResult<Void> configureDataScope(
+            @Parameter(description = "用户标识，取自列表或详情响应里的 id")
+            @PathVariable long id,
+            @Valid @RequestBody DataScopeRequest request) {
+        userDataScopeConfigurationService.configure(new ConfigureUserDataScopeCommand(
+                id, request.dataScopeType(), RequestIds.optionalIds(request.ownerIds(), "ownerIds")));
+        // 不回带范围：前端提交的就是它屏幕上那份数据；需要最新值时重新取详情
         return ApiResult.ok();
     }
 

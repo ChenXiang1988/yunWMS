@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+    放在 mapper/master/ 下与 OwnerMapper.xml 同级：本表属于货主侧事实（谁负责哪个货主），
+    按模块分目录便于多个模块各自添加 XML 后仍能看出归属。
+-->
+<mapper namespace="com.yunwms.master.infrastructure.persistence.mapper.OwnerAssigneeMapper">
+
+    <!--
+        某人负责的货主：ASSIGNED 数据范围的推导依据。
+
+        DISTINCT 不是防重复的随手写法：唯一索引建在 (owner_id, relation_type) 上，
+        同一个人对同一个货主可以既是主负责人又是副负责人（两行），投影出来是同一个标识。
+        不去重会让上层拿到重复 id，虽然并集计算会收敛，但「一次查询到底返回了什么」就不再可读。
+
+        不加 deleted_at / status 条件：owner_assignee 没有软删除列；货主状态也不在这里过滤——
+        本查询回答的是「关系」，一个已终止的货主仍属于这位客服负责过，
+        看不看得见由货主自身的查询条件决定。
+
+        只取 owner_id 一列：调用方做的是集合并集，不需要货主名称或状态。
+    -->
+    <select id="selectOwnerIdsByUserId" resultType="java.lang.Long">
+        SELECT DISTINCT a.owner_id
+        FROM owner_assignee a
+        WHERE a.user_id = #{userId}
+        ORDER BY a.owner_id
+    </select>
+
+</mapper>

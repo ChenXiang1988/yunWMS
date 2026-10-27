@@ -58,6 +58,9 @@ public class RoleResponseAssembler {
         List<String> menuIds = detail.menuIds().stream()
                 .map(String::valueOf)
                 .toList();
+        List<String> ownerIds = detail.ownerIds().stream()
+                .map(String::valueOf)
+                .toList();
         return new RoleDetailResponse(
                 Long.toString(summary.id()),
                 summary.code(),
@@ -67,7 +70,9 @@ public class RoleResponseAssembler {
                 summary.userCount(),
                 summary.permissionCount(),
                 summary.remark(),
-                menuIds);
+                menuIds,
+                detail.dataScopeType().name(),
+                ownerIds);
     }
 
     private static RoleListItemResponse toListItem(RoleSummary summary) {

@@ -25,7 +25,8 @@ import java.util.List;
  * @param lastLoginAt   最后登录时刻；从未登录过为 {@code null}
  * @param email         邮箱；货主账号可为 {@code null}
  * @param wecomUserId   企业微信 userid；可为 {@code null}
- * @param dataScopeType 用户级数据范围覆盖值；{@code null} 表示继承角色默认（本批只读，配置属于 2.4）
+ * @param dataScopeType 用户级数据范围覆盖值；{@code null} 表示继承角色默认
+ * @param ownerIds      覆盖范围为 {@code CUSTOM} 时已选定的货主标识；其他情况为空数组
  * @param createdAt     创建时刻
  * @param roleIds       已分配的角色标识，字符串形式；没有角色时为空数组
  */
@@ -63,8 +64,13 @@ public record UserDetailResponse(
         @Schema(description = "企业微信 userid，用于应用消息推送；可为 null。编辑接口按全量替换处理")
         String wecomUserId,
 
-        @Schema(description = "用户级数据范围覆盖值；null 表示继承角色默认。本批只读，配置入口在后续任务")
+        @Schema(description = "用户级数据范围覆盖值：ALL 全部货主，ASSIGNED 我负责的货主，CUSTOM 指定货主；"
+                + "null 表示没有覆盖、继承角色默认")
         String dataScopeType,
+
+        @Schema(description = "覆盖范围为 CUSTOM 时已选定的货主标识（字符串形式的十进制整数），按标识升序；"
+                + "其他情况为空数组。与 dataScopeType 一起用于回填数据范围配置")
+        List<String> ownerIds,
 
         @Schema(description = "账号创建时刻，ISO 8601 带时区（UTC）")
         Instant createdAt,
