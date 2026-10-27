@@ -16,7 +16,9 @@ import java.util.List;
  *       之间的差异读代码时看不出来；</li>
  *   <li>两条存在性判定的 {@code deleted_at} 口径<b>不相同</b>（前缀是全表唯一，外部码是未删除时唯一），
  *       而 Wrapper 会被逻辑删除配置统一加上条件——把差异写在 XML 里才看得见；</li>
- *   <li>编辑要能把列写成 {@code NULL}，而 {@code updateById} 会略过空字段，见 {@link #updateProfile}。</li>
+ *   <li>编辑要能把列写成 {@code NULL}，而 {@code updateById} 会略过空字段，见 {@link #updateProfile}；</li>
+ *   <li>锁读要拼 {@code FOR UPDATE}，而 {@code BaseMapper} 与 Wrapper 都没有这个能力，
+ *       见 {@link #selectByIdForUpdate}。</li>
  * </ul>
  */
 public interface OwnerMapper extends BaseMapper<OwnerEntity> {
@@ -48,6 +50,24 @@ public interface OwnerMapper extends BaseMapper<OwnerEntity> {
                                          @Param("keyword") String keyword,
                                          @Param("limit") int limit,
                                          @Param("offset") long offset);
+
+    /**
+     * 按标识读取一行货主并加排他行锁（{@code SELECT ... FOR UPDATE}）。
+     *
+     * <p>不能改用 {@code BaseMapper#selectById} 加别的手段：{@code FOR UPDATE} 必须与那条 {@code SELECT}
+     * 是同一条语句，先查再锁会留下一个「查到与锁上之间被别人改掉」的窗口，而状态流转的整个正确性
+     * 都建立在「判定用的值与写回时的值属于同一份」之上。
+     *
+     * <p>手写 SQL 必须自己带 {@code deleted_at IS NULL}：MyBatis-Plus 的逻辑删除只作用于它生成的语句。
+     * 漏掉这一条，一次针对已删除货主的流转会读到行、锁住行、更新却命中零行，
+     * 调用方看到的是一次成功而库里什么都没变。
+     *
+     * <p>调用方必须在事务内调用：没有事务时锁在语句结束即释放，读到的只是一个可能立刻过期的快照。
+     *
+     * @param id 货主标识
+     * @return 被锁住的货主行；不存在或已删除时为 {@code null}
+     */
+    OwnerEntity selectByIdForUpdate(@Param("id") long id);
 
     /**
      * 覆盖货主的档案列与审计列。

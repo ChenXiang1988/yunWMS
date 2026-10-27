@@ -119,6 +119,22 @@ public class OwnerRepositoryImpl implements OwnerRepository {
         return entity == null ? Optional.empty() : Optional.of(toDomain(entity));
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p><b>实现里不做任何「加锁前后」的加工：</b>锁由 XML 里那条 {@code SELECT ... FOR UPDATE} 获得，
+     * 生命周期由调用方的事务管理。这里如果自己开事务，锁会在本方法返回时释放，调用方随后的
+     * 状态判定与写回就在锁外——看上去加了锁，实际什么都没有保护。
+     *
+     * <p>{@code toDomain} 与 {@link #findById} 共用：锁读读到的列必须与普通读完全一致，
+     * 两条重建路径出现差异时，问题会表现成「加了锁之后校验行为变了」，最难联想到锁上。
+     */
+    @Override
+    public Optional<Owner> findByIdForUpdate(long id) {
+        OwnerEntity entity = ownerMapper.selectByIdForUpdate(id);
+        return entity == null ? Optional.empty() : Optional.of(toDomain(entity));
+    }
+
     @Override
     public List<Owner> findPage(OwnerStatus status, String ownerType, String keyword, int limit, long offset) {
         return ownerMapper.selectPageByFilter(codeOf(status), ownerType, keyword, limit, offset).stream()

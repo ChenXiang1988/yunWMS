@@ -80,7 +80,7 @@ class OwnerStatusChangeServiceTest {
     @Test
     @DisplayName("货主不存在或已删除：40400，且不查影响清单、不写库")
     void shouldRejectUnknownOwner() {
-        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.empty());
+        given(ownerRepository.findByIdForUpdate(OWNER_ID)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.change(command(OwnerStatus.ACTIVE, true)))
                 .isInstanceOfSatisfying(BizException.class,
@@ -93,7 +93,7 @@ class OwnerStatusChangeServiceTest {
     @Test
     @DisplayName("目标状态编码未知：40000，提示里带原值；不查影响清单、不写库")
     void shouldRejectUnknownTargetStatus() {
-        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.ACTIVE)));
+        given(ownerRepository.findByIdForUpdate(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.ACTIVE)));
 
         assertThatThrownBy(() -> service.change(new ChangeOwnerStatusCommand(OWNER_ID, "FOO", true)))
                 .isInstanceOfSatisfying(BizException.class, e -> {
@@ -108,7 +108,7 @@ class OwnerStatusChangeServiceTest {
     @Test
     @DisplayName("目标状态为空：40000，不当作「不改」处理")
     void shouldRejectBlankTargetStatus() {
-        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.ACTIVE)));
+        given(ownerRepository.findByIdForUpdate(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.ACTIVE)));
 
         assertThatThrownBy(() -> service.change(new ChangeOwnerStatusCommand(OWNER_ID, "  ", true)))
                 .isInstanceOfSatisfying(BizException.class,
@@ -120,7 +120,7 @@ class OwnerStatusChangeServiceTest {
     @Test
     @DisplayName("不允许的流转：40900，提示含当前状态与允许目标，且不查影响清单、不写库")
     void shouldRejectIllegalTransition() {
-        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.ACTIVE)));
+        given(ownerRepository.findByIdForUpdate(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.ACTIVE)));
 
         assertThatThrownBy(() -> service.change(command(OwnerStatus.DRAFT, true)))
                 .isInstanceOfSatisfying(BizException.class, e -> {
@@ -140,7 +140,7 @@ class OwnerStatusChangeServiceTest {
     @Test
     @DisplayName("终止未确认影响清单：40900，提示带商品数与账号数，不写库")
     void shouldRejectTerminationWithoutAcknowledgedImpact() {
-        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.ACTIVE)));
+        given(ownerRepository.findByIdForUpdate(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.ACTIVE)));
         given(ownerImpactQueryService.terminationImpact(OWNER_ID)).willReturn(new TerminationImpact(3L, 2L));
 
         assertThatThrownBy(() -> service.change(command(OwnerStatus.TERMINATED, false)))
@@ -162,7 +162,7 @@ class OwnerStatusChangeServiceTest {
     @Test
     @DisplayName("终止已确认：写库，且不再为提示去查影响清单")
     void shouldTerminateWhenImpactAcknowledged() {
-        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.ACTIVE)));
+        given(ownerRepository.findByIdForUpdate(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.ACTIVE)));
 
         service.change(command(OwnerStatus.TERMINATED, true));
 
@@ -174,7 +174,7 @@ class OwnerStatusChangeServiceTest {
     @Test
     @DisplayName("重复提交终止：幂等成功，不要求确认、不查影响清单")
     void shouldTreatRepeatedTerminationAsIdempotent() {
-        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.TERMINATED)));
+        given(ownerRepository.findByIdForUpdate(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.TERMINATED)));
 
         // 未带确认也按成功处理：这次调用不会产生任何新的后果，确认一次没有意义
         assertThatCode(() -> service.change(command(OwnerStatus.TERMINATED, false)))
@@ -187,7 +187,7 @@ class OwnerStatusChangeServiceTest {
     @Test
     @DisplayName("非终止目标忽略确认字段：暂停不要求确认影响清单")
     void shouldIgnoreAcknowledgementForNonTerminationTargets() {
-        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.ACTIVE)));
+        given(ownerRepository.findByIdForUpdate(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.ACTIVE)));
 
         service.change(command(OwnerStatus.SUSPENDED, false));
 
@@ -198,7 +198,7 @@ class OwnerStatusChangeServiceTest {
     @Test
     @DisplayName("暂停后恢复合作中：写库，且沿用同一个流转表")
     void shouldResumeFromSuspension() {
-        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.SUSPENDED)));
+        given(ownerRepository.findByIdForUpdate(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.SUSPENDED)));
 
         service.change(command(OwnerStatus.ACTIVE, false));
 
@@ -208,7 +208,7 @@ class OwnerStatusChangeServiceTest {
     @Test
     @DisplayName("仅变更货主状态：不触碰商品与账号（本用例没有那两个端口可调）")
     void shouldOnlyChangeOwnerStatus() {
-        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.ACTIVE)));
+        given(ownerRepository.findByIdForUpdate(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.ACTIVE)));
 
         service.change(command(OwnerStatus.TERMINATED, true));
 
@@ -232,7 +232,7 @@ class OwnerStatusChangeServiceTest {
     }
 
     /**
-     * 库中已存在的那条货主记录，供 {@code findById} 返回。
+     * 库中已存在的那条货主记录，供 {@code findByIdForUpdate} 返回。
      *
      * @param status 当前状态
      * @return 已存在的货主

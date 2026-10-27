@@ -124,6 +124,33 @@ public interface OwnerRepository {
     Optional<Owner> findById(long id);
 
     /**
+     * 按标识读取货主并排他锁定该行（{@code SELECT ... FOR UPDATE}），供「读当前值 → 判定 → 写回」的用例使用。
+     *
+     * <p><b>为什么单独成方法，而不是给 {@link #findById} 加一个布尔开关：</b>加锁是会影响别人的副作用——
+     * 一次本可以并发执行的查询会让其他事务排队。让这件事出现在方法名里，调用方与评审者都无法忽略它；
+     * 藏在一个参数后面时，「顺手把开关打开」不会留下任何可读的痕迹。
+     *
+     * <p><b>锁语义：</b>锁从本方法读到该行起，由调用方所在事务持有，直到该事务提交或回滚；
+     * 期间其他事务对同一行的 {@code UPDATE}、{@code DELETE} 与同类锁读都会阻塞等待。
+     * <b>因此本方法必须在已开启的事务内调用</b>：没有事务时 PostgreSQL 在语句结束（自动提交）时就释放锁，
+     * 调用方拿到的等于一次普通读，而后面的写仍然可以基于一个已经被别人改过的旧值。
+     * 这一点是本方法唯一的使用前提，也是 {@code OwnerStatusChangeService#change} 必须带
+     * {@code @Transactional} 的原因。
+     *
+     * <p><b>未删除口径与 {@link #findById} 完全一致：</b>只返回 {@code deleted_at IS NULL} 的行，
+     * 已逻辑删除的货主与「不存在」同样返回空。否则调用方会拿一条已删除的货主去走状态流转，
+     * 而所有写语句都带 {@code deleted_at IS NULL}，那次流转既不生效也不报错——最难排查的一类静默失败。
+     *
+     * <p><b>不在此处判断业务状态：</b>读到什么就返回什么，流转是否允许仍由
+     * {@link OwnerStatus#requireTransitionTo} 判定。仓储若在这里补一次判定，规则就有了第二个落点。
+     *
+     * @param id 货主标识
+     * @return 被本事务锁住的货主；不存在或已删除时为空
+     * @throws IllegalArgumentException 库里的状态编码未知，说明数据已损坏
+     */
+    Optional<Owner> findByIdForUpdate(long id);
+
+    /**
      * 按筛选条件取一页货主，按标识升序。
      *
      * <p>排序只用标识：它是唯一的，翻页不会漏行或重复行；按创建时间排需要再补一个唯一列兜底，
