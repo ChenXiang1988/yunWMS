@@ -66,6 +66,17 @@ class UserManagementIntegrationTest extends AbstractIntegrationTest {
     private static final String OWNER_NAME = "集成测试货主";
     private static final String OWNER_SKU_PREFIX = "UMTX";
 
+    /**
+     * 用例自造、随后被软删除的货主：用来钉住「货主删除之后，绑定它的账号仍显示得出名称」。
+     *
+     * <p>编码、名称与 SKU 前缀都必须与库里的其他货主不同：库由整个测试 JVM 共用，
+     * {@code ux_owner_code} 与 {@code ux_owner_sku_prefix} 都是全表唯一索引。
+     * 前缀同样以 {@code D} 结尾而不是数字，理由见 {@link #OWNER_SKU_PREFIX} 的说明。
+     */
+    private static final String DELETED_OWNER_CODE = "OWNER-UMT-DEL";
+    private static final String DELETED_OWNER_NAME = "已删除的集成测试货主";
+    private static final String DELETED_OWNER_SKU_PREFIX = "UMTD";
+
     /** 错误码来自 {@code ErrorCode}：40000 参数问题，40300 无权访问，40400 不存在，40900 状态不允许。 */
     private static final int BAD_REQUEST_CODE = 40000;
     private static final int FORBIDDEN_CODE = 40300;
@@ -197,6 +208,27 @@ class UserManagementIntegrationTest extends AbstractIntegrationTest {
         JsonNode disabledOnly = getJson(token, "/api/console/users?keyword=lister&status=DISABLED").path("data");
         assertThat(disabledOnly.path("total").asInt()).isEqualTo(1);
         assertThat(disabledOnly.path("records").get(0).path("loginName").asText()).isEqualTo("umt-disabled-lister");
+    }
+
+    @Test
+    @DisplayName("列表：账号绑定的货主已被软删除时，名称仍随行带出")
+    void shouldKeepOwnerNameOfSoftDeletedOwner() throws Exception {
+        String token = consoleToken();
+        Long ownerId = seedOwner(DELETED_OWNER_CODE, DELETED_OWNER_NAME, DELETED_OWNER_SKU_PREFIX);
+        // 账号建在货主还在的时候：先删货主再建号，就把「删除之后仍显示」这个前提测掉了
+        createdUserId(createUser(token, new CreateUserPayload(
+                "umt-deleted-owner", "已删货主用户", "OWNER", Long.toString(ownerId), null,
+                null, INITIAL_PASSWORD, List.of())));
+        softDeleteOwner(ownerId);
+
+        JsonNode row = getJson(token, "/api/console/users?keyword=umt-deleted-owner")
+                .path("data").path("records").get(0);
+
+        assertThat(row.path("ownerId").asText()).isEqualTo(Long.toString(ownerId));
+        assertThat(row.path("ownerName").asText())
+                .as("货主被软删除后名称仍须显示：退化成 null 会让「绑了一个已删除的货主」与「没绑货主」"
+                        + "在界面上长得一样，而这两种情况该做的处理完全不同")
+                .isEqualTo(DELETED_OWNER_NAME);
     }
 
     @Test
@@ -479,11 +511,38 @@ class UserManagementIntegrationTest extends AbstractIntegrationTest {
      * 而这里的目标是「不存在就补一个」，重复执行时插入零行是正常结果。
      */
     private void seedOwner() {
+        seedOwner(OWNER_CODE, OWNER_NAME, OWNER_SKU_PREFIX);
+    }
+
+    /**
+     * 造一个指定编码的货主并返回标识。
+     *
+     * <p>编码已存在时只取回既有行：库由整个测试 JVM 共用，用例重复执行不该撞唯一索引。
+     *
+     * @param code      货主编码，全表唯一
+     * @param name      货主名称
+     * @param skuPrefix SKU 前缀，全表唯一，必须符合 {@code [A-Z0-9]{4}} 且排除易混淆字符
+     * @return 货主标识
+     */
+    private Long seedOwner(String code, String name, String skuPrefix) {
         jdbcTemplate.update("""
                 INSERT INTO owner (code, name, sku_prefix, owner_type, settlement_entity, country, city, address_line)
                 SELECT ?, ?, ?, 'THIRD_PARTY', '集成测试结算主体', 'CN', '上海', '测试路 1 号'
                 WHERE NOT EXISTS (SELECT 1 FROM owner WHERE code = ?)
-                """, OWNER_CODE, OWNER_NAME, OWNER_SKU_PREFIX, OWNER_CODE);
+                """, code, name, skuPrefix, code);
+        return ownerId(code);
+    }
+
+    /**
+     * 软删除一个货主。
+     *
+     * <p>直接改库而不走删除接口：这里要构造的是「早已被删掉的货主」，而走接口还要先满足权限点与
+     * 终止影响清单的前置状态，那些与「名称还能不能显示」无关。
+     *
+     * @param ownerId 货主标识
+     */
+    private void softDeleteOwner(long ownerId) {
+        jdbcTemplate.update("UPDATE owner SET deleted_at = now() WHERE id = ? AND deleted_at IS NULL", ownerId);
     }
 
     /** 按编码取角色标识；不存在时按给定名称创建。 */

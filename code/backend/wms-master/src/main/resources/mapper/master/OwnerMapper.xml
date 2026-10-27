@@ -258,4 +258,29 @@
         LIMIT 1
     </select>
 
+    <!--
+        名称批量查询：**刻意不带 deleted_at 条件**，与上面两条判重语句同一路数。
+
+        这不是漏写：账号绑的货主可能已被软删除，而账号列表仍要显示这个名字。按未删除口径查，
+        已删除的货主会从映射里消失，界面把它渲染成「没绑货主」——两种情况该做的处理完全不同，
+        却长得一样。
+
+        正因为要包含已删除行，本语句不能走 BaseMapper + Wrapper：逻辑删除配置会给它生成的语句
+        统一加上 deleted_at IS NULL，而那段条件拿不掉。
+
+        只搬 id 与 name 两列，不用 SELECT *：投影收窄到显示所需的列，读回的数据也就不会触发
+        与显示无关的聚合重建校验。空集合由用例层短路（见 OwnerNameLookupService），
+        本语句不处理空 IN——那会拼出非法的 IN () 或退化成全表扫描。
+    -->
+    <select id="selectNamesByIds"
+            resultType="com.yunwms.master.infrastructure.persistence.entity.OwnerNameRow">
+        SELECT o.id,
+               o.name
+        FROM owner o
+        WHERE o.id IN
+        <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+            #{ownerId}
+        </foreach>
+    </select>
+
 </mapper>

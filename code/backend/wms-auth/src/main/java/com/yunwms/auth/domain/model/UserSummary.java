@@ -20,7 +20,9 @@ import java.util.List;
  * @param displayName 展示名
  * @param subjectType 主体类型：内部员工或货主用户
  * @param ownerId     所属货主标识；内部员工为 {@code null}
- * @param ownerName   所属货主名称；内部员工或货主已被逻辑删除时为 {@code null}
+ * @param ownerName   所属货主名称；内部员工为 {@code null}。货主已被逻辑删除时仍返回名称：
+ *                    那时「绑了一个已删除的货主」与「没绑货主」必须能分辨，见
+ *                    {@link com.yunwms.auth.domain.port.OwnerNameQuery}
  * @param status      账号状态
  * @param roleCodes   已分配的角色编码，按角色排序号升序；没有角色时为空列表
  * @param lastLoginAt 最后登录时刻；从未登录过为 {@code null}
