@@ -151,9 +151,10 @@ class UserCreationIntegrationTest extends AbstractIntegrationTest {
                 """, ROLE_CODE, "测试角色", ROLE_CODE);
         Long roleId = jdbcTemplate.queryForObject("SELECT id FROM sys_role WHERE code = ?", Long.class, ROLE_CODE);
 
+        String roleIdText = Long.toString(roleId);
         JsonNode created = createUser(consoleToken(), new CreateUserPayload(
                 "zhouba", "周八", "STAFF", null, "zb@example.com", null, INITIAL_PASSWORD,
-                List.of(roleId, roleId)));
+                List.of(roleIdText, roleIdText)));
 
         assertThat(created.path("code").asInt()).isZero();
         Integer roles = jdbcTemplate.queryForObject("""
@@ -180,12 +181,40 @@ class UserCreationIntegrationTest extends AbstractIntegrationTest {
     @DisplayName("货主用户指定不存在的货主：外键拦下并转成 40000，库里不留账号")
     void shouldRejectOwnerThatDoesNotExist() throws Exception {
         JsonNode response = createUser(consoleToken(), new CreateUserPayload(
-                "owner99", "不存在的货主账号", "OWNER", 999L, "o99@example.com", null, INITIAL_PASSWORD, List.of()));
+                "owner99", "不存在的货主账号", "OWNER", "999", "o99@example.com", null,
+                INITIAL_PASSWORD, List.of()));
 
         assertThat(response.path("code").asInt()).isEqualTo(BAD_REQUEST_CODE);
         // 这条同时证明 V024 的外键真的生效：wms-auth 查不到 owner 表，只有数据库能拦下这个 id
         assertThat(response.path("message").asText()).isEqualTo("指定的货主不存在");
         assertThat(countUser("owner99")).isZero();
+    }
+
+    @Test
+    @DisplayName("ownerId 不是十进制整数：返回 40000 且提示带字段名，库里不留账号")
+    void shouldRejectOwnerIdThatIsNotNumeric() throws Exception {
+        JsonNode response = createUser(consoleToken(), new CreateUserPayload(
+                "owner-nonnumeric", "货主账号", "OWNER", "abc", "on@example.com", null,
+                INITIAL_PASSWORD, List.of()));
+
+        // 不能落到 50000：字符串是协议事实，值错是调用方的输入问题，必须能被它自己看懂并修好
+        assertThat(response.path("code").asInt()).isEqualTo(BAD_REQUEST_CODE);
+        assertThat(response.path("message").asText())
+                .as("提示必须点出是哪个字段，否则前端无法把错误挂到具体输入框上")
+                .contains("ownerId");
+        assertThat(countUser("owner-nonnumeric")).isZero();
+    }
+
+    @Test
+    @DisplayName("roleIds 含非十进制整数：逐项解析后返回 40000，库里不留账号")
+    void shouldRejectRoleIdThatIsNotNumeric() throws Exception {
+        JsonNode response = createUser(consoleToken(), new CreateUserPayload(
+                "role-nonnumeric", "员工账号", "STAFF", null, "rn@example.com", null,
+                INITIAL_PASSWORD, List.of("1x", "2")));
+
+        assertThat(response.path("code").asInt()).isEqualTo(BAD_REQUEST_CODE);
+        assertThat(response.path("message").asText()).contains("roleIds");
+        assertThat(countUser("role-nonnumeric")).isZero();
     }
 
     @Test
@@ -216,7 +245,7 @@ class UserCreationIntegrationTest extends AbstractIntegrationTest {
     @DisplayName("角色不存在：拒绝建号并回滚，账号不留库")
     void shouldRollbackWholeRegistrationWhenRoleMissing() throws Exception {
         JsonNode response = createUser(consoleToken(), new CreateUserPayload(
-                "sunqi", "孙七", "STAFF", null, "s@example.com", null, INITIAL_PASSWORD, List.of(999L)));
+                "sunqi", "孙七", "STAFF", null, "s@example.com", null, INITIAL_PASSWORD, List.of("999")));
 
         assertThat(response.path("code").asInt()).isEqualTo(BAD_REQUEST_CODE);
         assertThat(response.path("message").asText()).isEqualTo("指定的角色不存在");
@@ -272,24 +301,28 @@ class UserCreationIntegrationTest extends AbstractIntegrationTest {
      * <p>不复用生产侧的 {@code CreateUserRequest}：用同一个类型序列化再反序列化，
      * 会掩盖字段名被改而测试仍然通过的情况——接口契约要按「HTTP 上的 JSON」来验证。
      *
+     * <p>{@code ownerId} 与 {@code roleIds} 用 {@code String} / {@code List<String>}：契约要求
+     * 标识在 JSON 里是字符串（见 {@code docs/api-convention.md} 第五节），超过 2^53 的 Long
+     * 在 JS 里会丢精度。用字符串拼请求体，才能证明后端真的收下了字符串形式。
+     *
      * @param loginName       登录名
      * @param displayName     展示名
      * @param subjectType     主体类型编码
-     * @param ownerId         所属货主标识，可为 {@code null}
+     * @param ownerId         所属货主标识，字符串形式；内部员工传 {@code null}
      * @param email           邮箱，可为 {@code null}
      * @param wecomUserId     企业微信 userid，可为 {@code null}
      * @param initialPassword 初始密码明文
-     * @param roleIds         角色标识，可为空数组
+     * @param roleIds         角色标识，字符串形式，可为空数组
      */
     private record CreateUserPayload(
             String loginName,
             String displayName,
             String subjectType,
-            Long ownerId,
+            String ownerId,
             String email,
             String wecomUserId,
             String initialPassword,
-            List<Long> roleIds) {
+            List<String> roleIds) {
     }
 
     /**

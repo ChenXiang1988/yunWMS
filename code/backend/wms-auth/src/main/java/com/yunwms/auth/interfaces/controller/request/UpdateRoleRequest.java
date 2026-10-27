@@ -19,13 +19,13 @@ import java.util.List;
  * 但省略更可能是前端没想清楚要提交什么，而它的后果是「悄悄清空了这个角色的全部授权」。
  * 空数组是明确的意图表达，因此合法。
  *
- * <p>元素标识按契约以字符串传输、由 Jackson 反序列化为 {@code Long}：
- * {@code docs/api-convention.md} 第五节要求标识在 JSON 里是字符串，超过 2^53 的 Long
- * 在 JS 里会丢精度。
+ * <p>元素标识按契约以字符串传输：{@code docs/api-convention.md} 第五节要求标识在 JSON 里是字符串，
+ * 超过 2^53 的 Long 在 JS 里会丢精度。字符串是协议事实，因此请求体保持 {@code String}，
+ * 由 Controller 在构造 Command 前经 {@link RequestIds} 解析为 {@code Long}，用例层只见数值标识。
  *
  * @param name    角色名称，必填
  * @param remark  备注，可为 {@code null}，传 {@code null} 表示清空
- * @param menuIds 替换后的菜单与权限点标识；空数组合法，表示清空该角色的全部授权
+ * @param menuIds 替换后的菜单与权限点标识，字符串形式；空数组合法，表示清空该角色的全部授权
  */
 public record UpdateRoleRequest(
         @NotBlank(message = "角色名称不能为空")
@@ -38,7 +38,8 @@ public record UpdateRoleRequest(
         String remark,
 
         @NotNull(message = "菜单标识集合不能省略，清空授权请传空数组")
-        @Schema(description = "替换后的菜单与权限点标识集合，必传，元素为字符串形式的十进制整数；"
-                + "语义是整批替换而非增量，空数组合法且表示清空该角色的全部授权，省略字段则被拒绝")
-        List<@NotNull(message = "菜单标识不能为空") Long> menuIds) {
+        @Schema(description = "替换后的菜单与权限点标识集合，必传，以字符串传输：元素是字符串形式的十进制整数，"
+                + "形如 [\"4\", \"5\"]；语义是整批替换而非增量，空数组合法且表示清空该角色的全部授权，"
+                + "省略字段则被拒绝；元素不是十进制整数的字符串返回 40000")
+        List<@NotNull(message = "菜单标识不能为空") String> menuIds) {
 }

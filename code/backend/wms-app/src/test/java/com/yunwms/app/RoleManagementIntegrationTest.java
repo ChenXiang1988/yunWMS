@@ -274,6 +274,24 @@ class RoleManagementIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("menuIds 含非十进制整数：返回 40000，角色不落库")
+    void shouldRejectNonNumericMenuId() throws Exception {
+        String code = "ROLE_BAD_MENU_TEXT";
+        // 直接拼字符串数组：契约要求标识以字符串传输，这里验证的就是「字符串但不是数字」这一种输入
+        String body = objectMapper.writeValueAsString(
+                new CreateRolePayload(code, "非法标识", null, List.of("not-a-number")));
+
+        JsonNode response = postJson(consoleToken(), "/api/console/roles", body);
+
+        // 不能落到 50000：值错是调用方的输入问题，必须能被它自己看懂并修好
+        assertThat(response.path("code").asInt()).isEqualTo(BAD_REQUEST_CODE);
+        assertThat(response.path("message").asText())
+                .as("提示必须点出是哪个字段，否则前端无法把错误挂到授权树上")
+                .contains("menuIds");
+        assertThat(countRole(code)).isZero();
+    }
+
+    @Test
     @DisplayName("请求体里带 builtin：按未知字段拒绝，角色不落库")
     void shouldRejectBuiltinInPayload() throws Exception {
         String code = "ROLE_BUILTIN";

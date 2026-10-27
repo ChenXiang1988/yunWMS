@@ -241,11 +241,11 @@ class PermissionAuthorizationIntegrationTest extends AbstractIntegrationTest {
             String loginName,
             String displayName,
             String subjectType,
-            Long ownerId,
+            String ownerId,
             String email,
             String wecomUserId,
             String initialPassword,
-            List<Long> roleIds) {
+            List<String> roleIds) {
     }
 
     /**

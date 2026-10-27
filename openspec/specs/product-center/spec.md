@@ -80,8 +80,8 @@
 
 #### Scenario: 生成 SKUID
 
-- **WHEN** 货主前缀为 `AMZ1`，该货主第 123 个商品建档
-- **THEN** 系统生成 SKUID `AMZ1000123`
+- **WHEN** 货主前缀为 `AMZ2`，该货主第 123 个商品建档
+- **THEN** 系统生成 SKUID `AMZ2000123`
 
 #### Scenario: 前缀与客户编码解耦
 

@@ -18,6 +18,7 @@ import com.yunwms.auth.interfaces.controller.assembler.UserResponseAssembler;
 import com.yunwms.auth.interfaces.controller.request.AssignRolesRequest;
 import com.yunwms.auth.interfaces.controller.request.ChangeUserStatusRequest;
 import com.yunwms.auth.interfaces.controller.request.CreateUserRequest;
+import com.yunwms.auth.interfaces.controller.request.RequestIds;
 import com.yunwms.auth.interfaces.controller.request.ResetUserPasswordRequest;
 import com.yunwms.auth.interfaces.controller.request.UpdateUserRequest;
 import com.yunwms.auth.interfaces.controller.response.CreatedUserResponse;
@@ -95,7 +96,8 @@ public class UserController {
      *
      * @param request 建号请求
      * @return 新账号的标识与登录名；主体与货主不匹配、内部员工缺邮箱、密码不合规、
-     *         登录名或邮箱已被占用通过业务错误码返回
+     *         登录名或邮箱已被占用通过业务错误码返回；{@code ownerId} 或 {@code roleIds}
+     *         不是十进制整数的字符串时返回 40000
      */
     @Operation(summary = "创建用户账号",
             description = "由管理员开通一个账号，供内部员工或货主用户登录。新账号一律启用，初始密码由管理员给出，"
@@ -106,15 +108,17 @@ public class UserController {
     @SaCheckPermission("system:user:create")
     @PostMapping
     public ApiResult<CreatedUserResponse> create(@Valid @RequestBody CreateUserRequest request) {
+        // 请求体里的标识按契约以字符串传输（见 docs/api-convention.md 第五节），
+        // 在这里解析成 Long：字符串是 HTTP 协议事实，不带进用例层
         CreateUserCommand command = new CreateUserCommand(
                 request.loginName(),
                 request.displayName(),
                 request.subjectType(),
-                request.ownerId(),
+                RequestIds.optionalId(request.ownerId(), "ownerId"),
                 request.email(),
                 request.wecomUserId(),
                 request.initialPassword(),
-                request.roleIds());
+                RequestIds.optionalIds(request.roleIds(), "roleIds"));
         return ApiResult.ok(userResponseAssembler.toResponse(userCreationService.create(command)));
     }
 
@@ -266,7 +270,8 @@ public class UserController {
      * @param id      用户标识
      * @param request 替换后的角色标识集合
      * @return 成功无数据；用户不存在（40400）、角色不存在（40000）、
-     *         把自己最后的初始角色换掉（40900）通过业务错误码返回
+     *         把自己最后的初始角色换掉（40900）、{@code roleIds} 含非十进制整数的字符串（40000）
+     *         通过业务错误码返回
      */
     @Operation(summary = "分配用户角色（整批替换）",
             description = "把账号的角色集合整体替换为提交的这一组：请求体里的 roleIds 就是这个人之后拥有的全部角色，"
@@ -281,7 +286,9 @@ public class UserController {
             @Parameter(description = "用户标识，取自列表或详情响应里的 id")
             @PathVariable long id,
             @Valid @RequestBody AssignRolesRequest request) {
-        userRoleAssignmentService.assign(new AssignRolesCommand(id, request.roleIds()));
+        // 元素按契约以字符串传输，解析与建号同一口径：非法值一律 40000 并带出字段名
+        userRoleAssignmentService.assign(
+                new AssignRolesCommand(id, RequestIds.optionalIds(request.roleIds(), "roleIds")));
         // 不回带新的角色列表：前端保存后本就持有它提交的集合，原样回显没有信息量；
         // 需要最新数据（例如角色被并发改过）时重新取详情
         return ApiResult.ok();

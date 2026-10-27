@@ -44,9 +44,9 @@ python3 code/tools/api-inventory/gen_api_inventory.py --from-file docs/api/opena
 
 ## 当前状态
 
-当前台账的源 commit 为 `2d7ccc9`，共 **25 个 operation**（GET 10 / POST 4 / PUT 9 / DELETE 2）。该 commit 是 `865d2ae` 的祖先，且 `2d7ccc9..865d2ae` 之间 Controller、Request、Response 没有源码变更，因此静态内容仍对应当前接口。
+当前台账的源 commit 为 `8d2f7a2`，共 **25 个 operation**（GET 10 / POST 4 / PUT 9 / DELETE 2）。
 
-台账尚未在 `865d2ae` 上重新生成。2026-10-27 的审计只做静态比对，没有启动后端拉取 `/v3/api-docs`；下次任何接口或 DTO 变更后仍必须按上文重新生成并更新源 commit。
+2026-10-27 已在隔离数据库和本地实例上重新生成，请求体中的 `ownerId`、`roleIds`、`menuIds` 已改为字符串类型；路径参数仍按 OpenAPI `integer(int64)` 描述。下次任何接口或 DTO 变更后仍必须按上文重新生成并更新源 commit。
 
 ## 前端子 Agent 的取数边界
 
