@@ -47,6 +47,32 @@ jobs:
       - name: 构建
         run: pnpm -r build
 
+      - name: UI 边界
+        run: pnpm check:ui
+
+  tools:
+    name: Python 工具测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: API 台账工具
+        working-directory: code/tools/api-inventory
+        run: python3 -m unittest discover -s tests
+
+      - name: CAD 解析工具
+        working-directory: code/tools/cad-parser
+        run: python3 -m unittest discover -s tests
+
+      - name: 交付审计工具
+        working-directory: code/tools/audit-delivery
+        run: python3 -m unittest discover -s tests
+
   # 后端此前没有任何 CI：AGENTS.md 第 45 行要求的模块依赖拦截（ArchUnit）
   # 与全部单测、集成测试都只在本地跑。集成测试用 Testcontainers，
   # ubuntu-latest 自带 Docker；setup-java 的 cache 会自动找 **/pom.xml。
