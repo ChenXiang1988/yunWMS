@@ -1,6 +1,8 @@
 # 审计结论：架构边界与门禁
 
-- 基线：`main@865d2ae4be3fa5e4ec47d07994ab0e252eb3c264`
+- change：`audit-architecture-boundaries`
+- anchor：`main@865d2ae4be3fa5e4ec47d07994ab0e252eb3c264`
+- 审计时间：2026-10-27
 - 完整证据快照：`docs/research/architecture-boundary-snapshot-2026-10-27.md`
 - 决策记录：`design.md`
 - 方法：只读源码、迁移、测试与文档；未执行构建、测试或数据库。
@@ -168,7 +170,7 @@ DRAFT / POTENTIAL / ACTIVE / SUSPENDED / TERMINATED
 
 ## 6. 文档与工具修正范围
 
-- `verify_constraints.py`：替换违反 `V035` 的 `AMZ1/UNL1` 及关联 SKUID 和期望值，保持用例数量与约束目标不变。
+- `verify_constraints.py`：替换违反 `V035` 的 `AMZ1/UNL1` 及关联 SKUID 字面量，期望值不变，保持用例数量与约束目标不变。
 - `docs/api/README.md`：接口数改为 25，说明源 commit `2d7ccc9` 是已核对的祖先版本，未重新生成。
 - `README.md`：只描述实际已实现的 Controller 能力。
 - `code/backend/README.md`：迁移数改为 36；已完成/未完成能力按源码修正。
@@ -184,3 +186,29 @@ DRAFT / POTENTIAL / ACTIVE / SUSPENDED / TERMINATED
 - `align-api-id-contract`：请求体 ID 改字符串，重生成台账。
 - `harden-architecture-guards`：补 domain、层间、白名单、Mapper 跨表或前端 lint 门禁。
 - `wire-owner-console-contract`：前端客户页按真实契约接线，删除 mock 四态与多余列。
+
+## 逐项结论
+
+截至修正提交 `9051b15` 的交付审计：
+
+| 检查项 | 结论 | 证据 |
+| --- | --- | --- |
+| 路径白名单 | 通过 | `main...9051b15` 共 13 个文件，全部为审计文档、README、Python 校验工具与 OpenSpec 记录 |
+| 单次提交 ≤400 行 | 通过 | 7 笔提交增删合计分别为 128、202、283、60、29、57、7 行 |
+| 迁移与代码分离 | 通过 | 全分支无 `db/migration`、`.sql` 或数据库变更 |
+| 违规依赖 | 通过 | 无 `pom.xml`、`package.json`、lock 文件改动 |
+| 测试断言 | 通过 | 未改任何测试；`verify_constraints.py` 的 SETUP 5、CASES 63、True/False 期望序列均未变 |
+| 生成物 | 通过 | `openapi.json`、`inventory.md`、`primitive.css` 均未改 |
+| OpenSpec 工件 | 通过 | `openspec validate audit-architecture-boundaries` 通过；migrate-network-console 仍 complete 未归档 |
+| 运行时验证 | 无法判定 | 按要求未运行构建、测试、数据库、应用或并发请求 |
+
+## 存量违约
+
+| 提交 | 违规 | 处置 |
+| --- | --- | --- |
+| 本分支 | 无 | 不适用 |
+| main 存量 | 14 笔提交超过 400 行 | 已在 `docs/agents.md:130` 登记，不重写历史；不属于本 change |
+
+## 结论
+
+**通过（仅限静态交付审计）。** 运行时与并发验证仍需调用方按 `completion.md` 执行并回填。
