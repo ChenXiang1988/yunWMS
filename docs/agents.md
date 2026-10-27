@@ -228,6 +228,51 @@ CodeBuddy 机制无法在 `git commit` 时自动唤起子 Agent，能强制要�
 
 `openspec/changes/<change>/audit.md`，归档时随 change 进入 `archive/`，之后可回查。
 
+### 审计输入包
+
+派发审计时必须一次给全：
+
+- `anchor`：`git merge-base main HEAD`，不得让 auditor 自行推断
+- 允许路径 glob（`--allow`，可重复）
+- 禁止扩展名（`--forbid-ext`，可重复）
+- 生成物 glob（`--generated`，可重复）
+- change 名（`--change`，用于 OpenSpec validate）
+- 明确禁止：写文件、`tee`、shell 重定向、临时文件、构建、测试、安装依赖、Git 写操作
+
+### 只读证据脚本
+
+先由主 Agent 或 auditor 运行只读脚本，把 JSON 作为事实输入：
+
+```bash
+# 提交前：先 git add，再审计 staged diff
+python3 code/tools/audit-delivery/audit_delivery.py --anchor main --staged \
+  --change <change-id> \
+  --allow 'openspec/changes/<change-id>/**' \
+  --forbid-ext .java --forbid-ext .sql --forbid-ext .vue --forbid-ext .ts \
+  --forbid-ext .tsx --forbid-ext .css
+
+# 提交后：审 anchor..HEAD 的每笔提交
+python3 code/tools/audit-delivery/audit_delivery.py --anchor main \
+  --change <change-id> \
+  --allow 'openspec/changes/<change-id>/**'
+```
+
+脚本只向 stdout 输出 JSON，不写文件。`blocking` 是必须处理项，`unknowns` 是证据不足项，统计数字必须由脚本复算，不靠人工数。
+
+### 结论分级
+
+- **阻塞**：白名单越界、禁止扩展名、生成物改动、单笔 >400 行、OpenSpec 校验失败
+- **建议**：不阻塞但需主 Agent 决定的事项
+- **无法判定**：未执行的构建、测试、数据库、浏览器或外部环境验证
+
+### 两段式审计
+
+1. 提交前审计 staged diff，先修再提交。
+2. 提交后审计 `anchor..HEAD`，核对提交拆分与累计范围。
+3. 主 Agent 必须重新读取被审计文件；审计建议只能作为线索，不能直接照改。
+
+### 审计记录模板
+
 ```markdown
 # 审计记录
 
@@ -239,11 +284,12 @@ CodeBuddy 机制无法在 `git commit` 时自动唤起子 Agent，能强制要�
 
 | 检查项 | 结论 | 证据 |
 | --- | --- | --- |
-| 路径白名单 | 通过 | `git diff <anchor> --stat` 全部落在 `code/backend/wms-auth/**` |
+| 路径白名单 | 通过 | 脚本 JSON `violations.outsideAllowlist` 为空 |
 | 单次提交 ≤400 行 | 不通过 | `c1b5936` 增删合计 542 行 |
 | 迁移与代码分离 | 通过 | 无迁移改动 |
 | 违规依赖 | 通过 | 本轮无新增依赖 |
 | 测试断言 | 通过 | `git diff <anchor> -- '**/test/**'` 只新增用例，无既有断言被削弱 |
+| 生成物 | 通过 | `docs/api/openapi.json`、`inventory.md` 未改 |
 
 ## 存量违约
 
