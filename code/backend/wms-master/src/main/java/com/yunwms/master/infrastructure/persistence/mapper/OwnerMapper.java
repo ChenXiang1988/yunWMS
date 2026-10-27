@@ -2,8 +2,10 @@ package com.yunwms.master.infrastructure.persistence.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.yunwms.master.infrastructure.persistence.entity.OwnerEntity;
+import com.yunwms.master.infrastructure.persistence.entity.OwnerNameRow;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -18,7 +20,9 @@ import java.util.List;
  *       而 Wrapper 会被逻辑删除配置统一加上条件——把差异写在 XML 里才看得见；</li>
  *   <li>编辑要能把列写成 {@code NULL}，而 {@code updateById} 会略过空字段，见 {@link #updateProfile}；</li>
  *   <li>锁读要拼 {@code FOR UPDATE}，而 {@code BaseMapper} 与 Wrapper 都没有这个能力，
- *       见 {@link #selectByIdForUpdate}。</li>
+ *       见 {@link #selectByIdForUpdate}；</li>
+ *   <li>名称批量查询要<b>包含已软删除的货主</b>，而逻辑删除配置会给 Wrapper 生成的语句统一加上
+ *       {@code deleted_at IS NULL}，见 {@link #selectNamesByIds}。</li>
  * </ul>
  */
 public interface OwnerMapper extends BaseMapper<OwnerEntity> {
@@ -142,4 +146,21 @@ public interface OwnerMapper extends BaseMapper<OwnerEntity> {
      * @return 占用方编码；前缀未被占用时为 {@code null}
      */
     String selectCodeBySkuPrefix(@Param("skuPrefix") String skuPrefix);
+
+    /**
+     * 按标识批量取货主的标识与名称，<b>口径是全表，刻意不带 {@code deleted_at} 条件</b>。
+     *
+     * <p>不是漏写：账号绑定的货主可能已被逻辑删除，而账号列表仍要显示它的名称，否则
+     * 「绑了一个已删除的货主」与「没绑货主」在界面上长得一样。
+     *
+     * <p>因此本语句不能走 {@code BaseMapper} + Wrapper：逻辑删除配置会给它生成的语句统一加上
+     * {@code deleted_at IS NULL}，那段条件拿不掉。也不复用 {@link OwnerEntity}：只搬两列，
+     * 而整行读回要经过 {@code Owner} 聚合的重建校验，历史数据会在与显示无关的规则上失败。
+     *
+     * <p>调用方保证 {@code ownerIds} 非空：空集合会拼出 {@code IN ()}，或退化成不带条件的全表查询。
+     *
+     * @param ownerIds 货主标识集合，调用方保证非空
+     * @return 标识与名称；查不到的标识不出现在结果里
+     */
+    List<OwnerNameRow> selectNamesByIds(@Param("ownerIds") Collection<Long> ownerIds);
 }
