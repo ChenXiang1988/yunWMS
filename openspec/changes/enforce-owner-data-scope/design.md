@@ -78,7 +78,8 @@ DataScope =
 
 - 父 pom 管理并在需要改写的模块引入 `mybatis-plus-jsqlparser:3.5.9`。
 - 注册 `MybatisPlusInterceptor` + `DataPermissionInterceptor`，handler 使用 `MultiDataPermissionHandler`。
-- 通过 Mapper 方法上的 `@DataScope(table = "owner", ownerColumn = "id")` 标注，handler 根据 mappedStatementId 反射读取注解；未标注的方法不处理。
+- 使用 auth 内的显式 `OwnerScopedStatements` 清单登记 mappedStatementId 与 owner 列；未登记的方法不解析范围、不追加条件。
+- 不采用 `@DataScope` 注解：注解若放 auth，master 会反向依赖 auth；放 `wms-web` 则破坏其协议白名单。字符串 statement 清单零编译依赖，行为仍通过集成测试锁定。
 - 条件：
   - ALL：无追加。
   - NONE：`1 = 0`。
@@ -109,6 +110,8 @@ DataScope =
 - **大 CUSTOM 集合**：`IN` 列表可能变长；当前管理端规模可接受，后续可改临时表/子查询。
 - **OWNER 主体**：角色配置可能看起来存在但不生效；接口拒绝配置，避免误导。
 - **无请求上下文**：MCP/定时任务查询货主会得到 NONE；当前没有此类任务，后续需要显式系统上下文。
+- **写路径仍不过滤**：本轮只覆盖列表、详情和终止影响；编辑/状态/删除仍按 id 定位。知道他方 id 的内部员工仍可能写他方货主，需后续独立任务收口。
+- **SQL 全量解析开销**：DataPermissionInterceptor 对所有 SELECT 做 JSqlParser 解析，即使未登记；当前规模可接受，若成为热点需在拦截器入口短路。
 
 ## Migration
 
