@@ -24,9 +24,9 @@ import java.util.List;
  * 第二处写入，也没有「计数与分页必须看到同一快照」的要求——两个独立语句在默认隔离级别下本来就
  * 各看各的快照，加注解不会让它们更一致，只会多一层事务包装。
  *
- * <p><b>不做数据范围过滤：</b>列表当前返回全部货主，这正是任务 2.3 / 2.4 要解决的问题。
- * 在这里先补一个「按当前用户的货主范围筛」会与那两个任务的实现撞车，也会让本批的行为
- * 依赖一个尚未定义的权限模型。
+ * <p><b>本类不自己筛数据范围：</b>列表的计数与分页、详情的单行读取都由持久化层按当前请求
+ * 追加货主范围条件（MyBatis 数据权限拦截器）。在这里再按 userId 判一次会得到两个落点：
+ * 一处改了另一处没改时，列表少了而 total 还是全部——两个数字对不上，且不报错。
  */
 @Service
 public class OwnerQueryService {
@@ -103,13 +103,16 @@ public class OwnerQueryService {
      * <p>只查一次：详情需要的字段全部在主档里，联系人、税号与账号是另外三个页签（3.5 / 3.6 / 3.3），
      * 本批不读它们的表——为一个尚未实现的页签提前联表，只会让这条查询在那些表写满数据后变慢。
      *
+     * <p>读的是 {@code findVisibleById} 而不是 {@code findById}：详情必须按当前请求的数据范围判定可见性，
+     * 范围外的货主与「不存在」返回同一个 404——两者的区别本身就是一条信息，能拿来枚举他方数据。
+     *
      * @param ownerId 货主标识
      * @return 货主详情
-     * @throws BizException 货主不存在或已逻辑删除（40400）
+     * @throws BizException 货主不存在、已逻辑删除或不在当前数据范围内（40400）
      */
     public OwnerDetail detail(long ownerId) {
-        Owner owner = ownerRepository.findById(ownerId)
-                // 已逻辑删除的货主与「不存在」同口径：管理端看不到它，接口因此返回同一个结果
+        Owner owner = ownerRepository.findVisibleById(ownerId)
+                // 已逻辑删除的货主、范围外的货主与「不存在」同口径：管理端看不到它，接口因此返回同一个结果
                 .orElseThrow(() -> BizException.notFound("货主不存在"));
         return new OwnerDetail(
                 toSummary(owner),

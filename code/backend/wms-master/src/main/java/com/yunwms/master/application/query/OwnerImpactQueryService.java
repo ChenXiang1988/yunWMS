@@ -45,13 +45,16 @@ public class OwnerImpactQueryService {
     /**
      * 取该货主的终止影响清单。
      *
+     * <p>存在性判定走 {@code findVisibleById}：影响清单只返回两个数字，但数字本身能被拿来探测
+     * 「这个标识对应一条真实货主」——范围外的货主必须与「不存在」返回同一个 404。
+     *
      * @param ownerId 货主标识
      * @return 商品数与账号数；两者都没有时是两个 0，而不是空对象
-     * @throws BizException 货主不存在或已逻辑删除（40400）
+     * @throws BizException 货主不存在、已逻辑删除或不在当前数据范围内（40400）
      */
     public TerminationImpact terminationImpact(long ownerId) {
-        // 已逻辑删除的货主与「不存在」同口径：管理端看不到它，它也就没有影响清单可看
-        ownerRepository.findById(ownerId)
+        // 已逻辑删除、范围外的货主与「不存在」同口径：管理端看不到它，它也就没有影响清单可看
+        ownerRepository.findVisibleById(ownerId)
                 .orElseThrow(() -> BizException.notFound("货主不存在"));
         return new TerminationImpact(
                 ownerSkuCounter.countByOwnerId(ownerId),
