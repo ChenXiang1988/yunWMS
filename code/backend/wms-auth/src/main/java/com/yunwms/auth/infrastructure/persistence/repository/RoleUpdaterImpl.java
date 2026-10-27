@@ -1,6 +1,7 @@
 package com.yunwms.auth.infrastructure.persistence.repository;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.yunwms.auth.domain.model.DataScopeType;
 import com.yunwms.auth.domain.model.RoleStatus;
 import com.yunwms.auth.domain.port.RoleUpdater;
 import com.yunwms.auth.infrastructure.persistence.entity.SysRoleEntity;
@@ -61,6 +62,19 @@ public class RoleUpdaterImpl implements RoleUpdater {
             row.setMenuId(menuId);
             // created_at 交给库默认值：应用侧再取一次时钟只会在同一次操作里引入两个时间来源
             sysRoleMenuMapper.insert(row);
+        }
+    }
+
+    @Override
+    public void updateDataScopeType(long roleId, DataScopeType type, long operatorId, Instant updatedAt) {
+        // 枚举入库显式存 name()：库里该列是 varchar 且有 CHECK，存 ordinal 会在枚举顺序调整后静默错位
+        int updated = sysRoleMapper.update(null, Wrappers.<SysRoleEntity>lambdaUpdate()
+                .eq(SysRoleEntity::getId, roleId)
+                .set(SysRoleEntity::getDataScopeType, type.name())
+                .set(SysRoleEntity::getUpdatedBy, operatorId)
+                .set(SysRoleEntity::getUpdatedAt, updatedAt));
+        if (updated == 0) {
+            throw new IllegalStateException("配置数据范围时没有任何一行被改动，角色已不存在：" + roleId);
         }
     }
 
