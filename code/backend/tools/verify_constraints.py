@@ -62,11 +62,14 @@ CASES: list[tuple[str, str, bool]] = [
 
     # ---- 负责客服一主一副 ----
     ("第一个主负责人",
-     "INSERT INTO owner_assignee(owner_id,user_id,relation_type) VALUES(1,2,'PRIMARY')", True),
+     "INSERT INTO owner_assignee(owner_id,user_id,relation_type) "
+     "SELECT 1,id,'PRIMARY' FROM sys_user WHERE login_name='zhangsan'", True),
     ("第二个主负责人被拒",
-     "INSERT INTO owner_assignee(owner_id,user_id,relation_type) VALUES(1,3,'PRIMARY')", False),
+     "INSERT INTO owner_assignee(owner_id,user_id,relation_type) "
+     "SELECT 1,id,'PRIMARY' FROM sys_user WHERE login_name='zhangsan'", False),
     ("副负责人可建",
-     "INSERT INTO owner_assignee(owner_id,user_id,relation_type) VALUES(1,3,'SECONDARY')", True),
+     "INSERT INTO owner_assignee(owner_id,user_id,relation_type) "
+     "SELECT 1,id,'SECONDARY' FROM sys_user WHERE login_name='zhangsan'", True),
 
     # ---- 主要联系人唯一 ----
     ("第一个主要联系人",
@@ -210,13 +213,13 @@ CASES: list[tuple[str, str, bool]] = [
     # ---- 编码规则 ----
     ("编码规则",
      "INSERT INTO sys_code_rule(rule_code,name,prefix,seq_length) "
-     "VALUES('OWNER','货主编码','OWNER',4)", True),
+     "VALUES('TEST_RULE','测试编码规则','TEST',4)", True),
     ("编码规则重复被拒",
      "INSERT INTO sys_code_rule(rule_code,name,prefix,seq_length) "
-     "VALUES('OWNER','货主编码2','OWNER',4)", False),
+     "VALUES('TEST_RULE','测试编码规则2','TEST',4)", False),
     ("流水位数超范围被拒",
      "INSERT INTO sys_code_rule(rule_code,name,prefix,seq_length) "
-     "VALUES('SKU','商品编码','',13)", False),
+     "VALUES('TEST_SKU','商品编码','',13)", False),
 
     # ---- 审计日志 ----
     ("审计日志写入",
