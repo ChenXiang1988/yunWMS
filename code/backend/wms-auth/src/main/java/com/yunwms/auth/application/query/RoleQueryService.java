@@ -2,8 +2,10 @@ package com.yunwms.auth.application.query;
 
 import com.yunwms.auth.application.dto.RoleDetail;
 import com.yunwms.auth.application.dto.RolePage;
+import com.yunwms.auth.domain.model.DataScopeSetting;
 import com.yunwms.auth.domain.model.RoleStatus;
 import com.yunwms.auth.domain.model.RoleSummary;
+import com.yunwms.auth.domain.port.DataScopeQuery;
 import com.yunwms.auth.domain.port.RoleQuery;
 import com.yunwms.web.exception.BizException;
 import org.springframework.stereotype.Service;
@@ -34,9 +36,11 @@ public class RoleQueryService {
     private static final int DEFAULT_PAGE_NO = 1;
 
     private final RoleQuery roleQuery;
+    private final DataScopeQuery dataScopeQuery;
 
-    public RoleQueryService(RoleQuery roleQuery) {
+    public RoleQueryService(RoleQuery roleQuery, DataScopeQuery dataScopeQuery) {
         this.roleQuery = roleQuery;
+        this.dataScopeQuery = dataScopeQuery;
     }
 
     /**
@@ -76,18 +80,28 @@ public class RoleQueryService {
     /**
      * 取单个角色的详情。
      *
-     * <p>两次查询（角色摘要、勾选的菜单）而不是一次联表：两次都是单表条件查询，
-     * 联表要处理「一个角色多个菜单」的行展开，读起来比两次读取难，省下的往返在个位数角色上无意义。
+     * <p>三次查询（角色摘要、勾选的菜单、数据范围）而不是一次联表：每次都是单表条件查询，
+     * 联表要处理「一个角色多个菜单」「一个角色多个货主」的行展开，读起来比分开读取难，
+     * 省下的往返在个位数角色上无意义。
+     *
+     * <p>数据范围的类型与明细各自从 {@link DataScopeQuery} 取，而不是给 {@code RoleQuery} 的
+     * 摘要投影加一列：列表页不需要这两份数据，加进摘要会让每次列表查询都多读与列表无关的列。
      *
      * @param roleId 角色标识
-     * @return 角色摘要与其勾选的菜单及权限点标识
+     * @return 角色摘要、勾选的菜单及权限点标识与数据范围配置
      * @throws BizException 角色不存在或已逻辑删除（40400）
      */
     @Transactional(readOnly = true)
     public RoleDetail detail(long roleId) {
         RoleSummary summary = roleQuery.findById(roleId)
                 .orElseThrow(() -> BizException.notFound("角色不存在"));
-        return new RoleDetail(summary, roleQuery.findMenuIds(roleId));
+        // 摘要刚读到、范围却读不到，只可能是这一行在两次查询之间被删除：按 404 处理，
+        // 与「角色不存在」同一口径，而不是抛 500
+        DataScopeSetting dataScope = dataScopeQuery.findRoleSetting(roleId)
+                .orElseThrow(() -> BizException.notFound("角色不存在"));
+        // 明细按标识升序回显：集合本身无序，直接透传会让同一个角色两次请求的响应顺序不同
+        return new RoleDetail(summary, roleQuery.findMenuIds(roleId), dataScope.type(),
+                dataScope.ownerIds().stream().sorted().toList());
     }
 
     /**

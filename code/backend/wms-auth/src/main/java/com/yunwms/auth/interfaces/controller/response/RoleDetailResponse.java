@@ -19,6 +19,8 @@ import java.util.List;
  * @param permissionCount 已勾选的菜单与权限点数量
  * @param remark          备注，可为 {@code null}
  * @param menuIds         已勾选的菜单与权限点标识；未勾选时为空数组
+ * @param dataScopeType   数据范围类型编码
+ * @param ownerIds        {@code CUSTOM} 时已选定的货主标识；其他类型为空数组
  */
 public record RoleDetailResponse(
         @Schema(description = "角色标识，字符串形式的十进制整数；与列表行同名字段含义一致")
@@ -47,5 +49,12 @@ public record RoleDetailResponse(
 
         @Schema(description = "已勾选的菜单与权限点标识（字符串形式的十进制整数），含菜单与操作两级；"
                 + "未勾选时为空数组。用于回填授权配置页的勾选状态")
-        List<String> menuIds) {
+        List<String> menuIds,
+
+        @Schema(description = "数据范围类型编码：ALL 全部货主，ASSIGNED 我负责的货主，CUSTOM 指定货主")
+        String dataScopeType,
+
+        @Schema(description = "数据范围为 CUSTOM 时已选定的货主标识（字符串形式的十进制整数），按标识升序；"
+                + "ALL 与 ASSIGNED 时为空数组。与 dataScopeType 一起用于回填数据范围配置")
+        List<String> ownerIds) {
 }
