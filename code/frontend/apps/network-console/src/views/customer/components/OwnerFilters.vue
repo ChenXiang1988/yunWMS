@@ -2,7 +2,8 @@
 import { ref } from 'vue'
 import { Button, Form, FormItem, Input, Select, SelectOption } from 'ant-design-vue'
 import type { OwnerStatus } from '@/api/owner'
-import { OWNER_STATUS_OPTIONS, type OwnerFilterValues } from '../owner-model'
+import type { OwnerFilterValues } from '../owner-model'
+import { OWNER_STATUS_OPTIONS } from '../owner-status'
 
 /**
  * 客户类型下拉的选项。字典由页面加载后注入——组件内不发起请求，
