@@ -44,13 +44,9 @@ python3 code/tools/api-inventory/gen_api_inventory.py --from-file docs/api/opena
 
 ## 当前状态
 
-首次生成于 2026-10-24，源 commit `7b1e705`；`change/implement-owner` 合入 main 后于同日重跑，源 commit 更新为 `602ff16`（main）。共 **1 个接口**：
+当前台账的源 commit 为 `2d7ccc9`，共 **25 个 operation**（GET 10 / POST 4 / PUT 9 / DELETE 2）。该 commit 是 `865d2ae` 的祖先，且 `2d7ccc9..865d2ae` 之间 Controller、Request、Response 没有源码变更，因此静态内容仍对应当前接口。
 
-```
-POST /api/auth/login
-```
-
-注意：台账里请求与返回字段的「说明」全是 `—`，说明 `LoginRequest` / `LoginResponse` 的字段没有写 `description`，不符合 `docs/api-convention.md` 第八节。这是台账暴露出的真实缺口，不属于本目录的职责，需在对应模块补注释后重跑。
+台账尚未在 `865d2ae` 上重新生成。2026-10-27 的审计只做静态比对，没有启动后端拉取 `/v3/api-docs`；下次任何接口或 DTO 变更后仍必须按上文重新生成并更新源 commit。
 
 ## 前端子 Agent 的取数边界
 
