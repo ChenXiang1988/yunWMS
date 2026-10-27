@@ -65,20 +65,31 @@ def parse_name_status(output: str) -> list[dict[str, str]]:
     return files
 
 
-def parse_numstat(output: str) -> tuple[int, int, int, list[str]]:
-    added = deleted = 0
-    paths: list[str] = []
+def parse_numstat_rows(output: str) -> list[tuple[int, int, str]]:
+    rows: list[tuple[int, int, str]] = []
     for line in output.splitlines():
         columns = line.split("\t")
         if len(columns) < 3:
             continue
         add, remove, path = columns[0], columns[1], columns[2]
-        if add.isdigit():
-            added += int(add)
-        if remove.isdigit():
-            deleted += int(remove)
-        paths.append(path)
-    return added, deleted, added + deleted, paths
+        rows.append((int(add) if add.isdigit() else 0,
+                     int(remove) if remove.isdigit() else 0,
+                     path))
+    return rows
+
+
+def parse_numstat(output: str) -> tuple[int, int, int, list[str]]:
+    rows = parse_numstat_rows(output)
+    added = sum(row[0] for row in rows)
+    deleted = sum(row[1] for row in rows)
+    return added, deleted, added + deleted, [row[2] for row in rows]
+
+
+def commit_totals(rows: list[tuple[int, int, str]], generated: list[str]) -> tuple[int, int]:
+    total = sum(added + deleted for added, deleted, _ in rows)
+    counted = sum(added + deleted for added, deleted, path in rows
+                  if not is_generated(path, generated))
+    return total, counted
 
 
 def count_mapper_statements(root: Path) -> int:
@@ -162,10 +173,13 @@ def collect(root: Path, anchor: str, staged: bool) -> dict[str, Any]:
         shas = run(["git", "rev-list", "--reverse", f"{anchor}..HEAD"], root).stdout.split()
         for sha in shas:
             numstat = run(["git", "show", "--numstat", "--format=", "--no-renames", sha], root).stdout
-            added, deleted, total, paths = parse_numstat(numstat)
+            rows = parse_numstat_rows(numstat)
+            added = sum(row[0] for row in rows)
+            deleted = sum(row[1] for row in rows)
             subject = run(["git", "show", "-s", "--format=%s", sha], root).stdout.strip()
             commits.append({"sha": sha, "subject": subject, "added": added,
-                            "deleted": deleted, "total": total, "paths": paths})
+                            "deleted": deleted, "total": added + deleted,
+                            "rows": rows})
     return {
         "head": head,
         "branch": branch,
@@ -195,10 +209,10 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]:
         blocking.append("存在生成物改动")
 
     for commit in base["commits"]:
-        non_generated = [path for path in commit["paths"]
-                         if not is_generated(path, args.generated)]
-        if commit["total"] > 400 and non_generated:
-            blocking.append(f"提交 {commit['sha'][:8]} 超过 400 行：{commit['total']}")
+        total, counted = commit_totals(commit.pop("rows"), args.generated)
+        commit["countedTotal"] = counted
+        if counted > 400:
+            blocking.append(f"提交 {commit['sha'][:8]} 超过 400 行：{counted}（含生成物合计 {total}）")
 
     unknowns: list[str] = []
     counts: dict[str, Any] = {}

@@ -1,8 +1,10 @@
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import audit_delivery as audit  # noqa: E402
@@ -45,6 +47,12 @@ class ParsingTest(unittest.TestCase):
         output = "3\t2\tREADME.md\n-\t-\timage.png\n"
         self.assertEqual(audit.parse_numstat(output), (3, 2, 5, ["README.md", "image.png"]))
 
+    def test_generated_lines_are_excluded_from_commit_size(self):
+        rows = [(500, 0, "docs/api/openapi.json"), (100, 0, "src/Main.java")]
+        total, counted = audit.commit_totals(rows, ["docs/api/openapi.json"])
+        self.assertEqual(total, 600)
+        self.assertEqual(counted, 100)
+
     def test_openapi_count(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -69,15 +77,14 @@ class ParsingTest(unittest.TestCase):
 
 
 class CliTest(unittest.TestCase):
-    def test_unknown_openspec_is_not_fatal(self):
+    def test_unknown_openspec_is_reported(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            report = {
-                "available": False,
-                "unknown": ["openspec list 不可用或失败"],
-            }
+            failed = subprocess.CompletedProcess(
+                args=["openspec"], returncode=1, stdout="", stderr="not found")
+            with mock.patch.object(audit, "run", return_value=failed):
+                report = audit.openspec_evidence(Path(tmp), None)
             self.assertFalse(report["available"])
-            self.assertEqual(report["unknown"], ["openspec list 不可用或失败"])
+            self.assertIn("openspec list 不可用或失败", report["unknown"])
 
 
 if __name__ == "__main__":
