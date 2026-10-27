@@ -28,4 +28,4 @@
 
 - [x] 5.1 新增真实 PostgreSQL 集成测试：ALL/CUSTOM/ASSIGNED/覆盖/并集/停用/空范围/OWNER 隔离/超管/分页一致。
 - [x] 5.2 生成 OpenAPI/inventory，运行 `./mvnw -B clean verify`。
-- [ ] 5.3 运行只读交付审计，写 `completion.md`，勾选 `implement-owner` 2.3/2.4/2.5。
+- [x] 5.3 运行只读交付审计，写 `completion.md`，勾选 `implement-owner` 2.3/2.4/2.5。
