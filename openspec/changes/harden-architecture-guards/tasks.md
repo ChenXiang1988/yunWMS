@@ -15,4 +15,4 @@
 
 - [x] 3.1 新增 Python 工具测试 job/步骤，覆盖 api-inventory、cad-parser、audit-delivery，验证：本地命令可通过。
 - [x] 3.2 运行后端全量与前端 typecheck/test/build/check:ui，验证：全部通过。
-- [ ] 3.3 运行只读审计并写 `completion.md`，验证：路径、行数、无业务行为改动合规。
+- [x] 3.3 运行只读审计并写 `completion.md`，验证：路径、行数、无业务行为改动合规。
