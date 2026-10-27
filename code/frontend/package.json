@@ -12,7 +12,8 @@
     "build": "pnpm -r build",
     "build:owner": "pnpm --filter @yunwms/owner-portal build",
     "build:network": "pnpm --filter @yunwms/network-console build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "check:ui": "node scripts/check-ui-boundaries.mjs"
   },
   "devDependencies": {
     "typescript": "~5.7.2",

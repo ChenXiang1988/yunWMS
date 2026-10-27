@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { listPrimitiveVars, renderPrimitiveCss } from './emit.ts'
+import { primitives } from '../src/primitives.ts'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const css = readFileSync(resolve(here, '../src/primitive.css'), 'utf8')
@@ -13,7 +14,7 @@ test('生成物与源码渲染结果完全一致（未被手改）', () => {
 })
 
 test('关键令牌取值正确', () => {
-  assert.match(css, /--blue-500:\s*#2b63e0;/)
+  assert.match(css, new RegExp(`--blue-500:\\s*${primitives.color.blue['500']};`))
   assert.match(css, /--space-4:\s*16px;/)
   assert.match(css, /--space-0:\s*0;/)
   assert.match(css, /--weight-semibold:\s*600;/)
