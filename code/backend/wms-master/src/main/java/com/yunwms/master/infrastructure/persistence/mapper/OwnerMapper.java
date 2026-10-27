@@ -22,7 +22,9 @@ import java.util.List;
  *   <li>锁读要拼 {@code FOR UPDATE}，而 {@code BaseMapper} 与 Wrapper 都没有这个能力，
  *       见 {@link #selectByIdForUpdate}；</li>
  *   <li>名称批量查询要<b>包含已软删除的货主</b>，而逻辑删除配置会给 Wrapper 生成的语句统一加上
- *       {@code deleted_at IS NULL}，见 {@link #selectNamesByIds}。</li>
+ *       {@code deleted_at IS NULL}，见 {@link #selectNamesByIds}；</li>
+ *   <li>详情要接受数据范围过滤，而 {@code BaseMapper#selectById} 与 Wrapper 派生的语句标识是全表共用的，
+ *       对它们登记过滤会波及 {@code sys_user} 等其他表的读取，见 {@link #selectVisibleById}。</li>
  * </ul>
  */
 public interface OwnerMapper extends BaseMapper<OwnerEntity> {
@@ -54,6 +56,25 @@ public interface OwnerMapper extends BaseMapper<OwnerEntity> {
                                          @Param("keyword") String keyword,
                                          @Param("limit") int limit,
                                          @Param("offset") long offset);
+
+    /**
+     * 按标识读取一行货主，并接受当前请求的数据范围过滤。
+     *
+     * <p><b>与 {@code BaseMapper#selectById} 并存，不是重复：</b>那条语句供写路径按「这一行是否存在」
+     * 定位（编辑、状态流转、删除沿用既有语义）；本条供读路径按「这一行现在是否可见」定位。
+     * 两者合并只有两种结果——要么详情与终止影响清单能读到范围外的货主，要么写路径在
+     * 没有请求上下文时（当前解析为「无范围」）整体失效。
+     *
+     * <p>本语句自己不写任何货主范围条件：过滤片段（{@code 1 = 0} 或 {@code o.id IN (...)}）
+     * 由 {@code MybatisPlusInterceptor} 的数据权限插件按当前请求追加，写死在 SQL 里就只能表达一种范围。
+     * 追加的依据是把本方法的语句标识登记在 {@code wms-auth} 的清单里，**方法改名必须同步登记**。
+     *
+     * <p>手写 SQL 必须自己带 {@code deleted_at IS NULL}：MyBatis-Plus 的逻辑删除只作用于它生成的语句。
+     *
+     * @param id 货主标识
+     * @return 货主行；不存在、已删除或不在当前数据范围内时为 {@code null}
+     */
+    OwnerEntity selectVisibleById(@Param("id") long id);
 
     /**
      * 按标识读取一行货主并加排他行锁（{@code SELECT ... FOR UPDATE}）。
@@ -146,6 +167,23 @@ public interface OwnerMapper extends BaseMapper<OwnerEntity> {
      * @return 占用方编码；前缀未被占用时为 {@code null}
      */
     String selectCodeBySkuPrefix(@Param("skuPrefix") String skuPrefix);
+
+    /**
+     * 从给定标识中筛出<b>存在、未删除且状态为 {@code ACTIVE}</b> 的货主。
+     *
+     * <p>口径是「可用货主」，用于数据范围配置的校验：把停用或已删除的货主写进范围配置，
+     * 等于让配置指向一个界面上选不到的对象，事后没人能判断这条配置为什么不起作用。
+     * 因此这里与 {@link #selectNamesByIds} 的口径正好相反——那条刻意包含已删除的货主。
+     *
+     * <p>手写 SQL 必须自己带 {@code deleted_at IS NULL} 与状态条件：MyBatis-Plus 的逻辑删除
+     * 只作用于它生成的语句，用 Wrapper 也不方便表达「只取 id 列」的窄投影。
+     *
+     * <p>调用方保证 {@code ownerIds} 非空：空集合由用例层短路，本语句不处理空 {@code IN}。
+     *
+     * @param ownerIds 货主标识集合，调用方保证非空
+     * @return 可用的货主标识；一个都不可用时为空列表
+     */
+    List<Long> selectExistingActiveIds(@Param("ownerIds") Collection<Long> ownerIds);
 
     /**
      * 按标识批量取货主的标识与名称，<b>口径是全表，刻意不带 {@code deleted_at} 条件</b>。
