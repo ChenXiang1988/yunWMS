@@ -19,6 +19,14 @@ public final class SessionAttributes {
     /** 客户端标识，值为 {@link String}。 */
     public static final String CLIENT_IDENTIFIER = "clientIdentifier";
 
+    /**
+     * 登录用户的展示名，值为 {@link String}。
+     *
+     * <p>审计写入时用它填 {@code operator_name}：那是写入当时的姓名快照，不回查 {@code sys_user}
+     * （人员之后改名或被逻辑删除都不该改写或抹掉历史记录，见 {@code AuditRecorderImpl}）。
+     */
+    public static final String DISPLAY_NAME = "displayName";
+
     /** 主体类型编码，值为 {@link String}，取值见 {@code SubjectType}。 */
     public static final String SUBJECT_TYPE = "subjectType";
 
