@@ -2,6 +2,7 @@ package com.yunwms.auth.interfaces.controller.assembler;
 
 import com.yunwms.auth.domain.model.DictItem;
 import com.yunwms.auth.domain.model.DictTypeSummary;
+import com.yunwms.auth.interfaces.controller.response.CreatedDictItemResponse;
 import com.yunwms.auth.interfaces.controller.response.DictItemResponse;
 import com.yunwms.auth.interfaces.controller.response.DictTypeListItemResponse;
 import org.springframework.stereotype.Component;
@@ -21,6 +22,19 @@ import java.util.Map;
  */
 @Component
 public class DictResponseAssembler {
+
+    /**
+     * 组装新增字典项的响应。
+     *
+     * <p>数字标识到字符串的转换放在这里而不是 Controller 内联：标识的传输形态是接口层约定，
+     * 与其余响应的处理保持一致，将来契约改成别的形式时只有一处要改。
+     *
+     * @param id 数据库生成的字典项标识
+     * @return 可直接序列化的响应体
+     */
+    public CreatedDictItemResponse toCreatedResponse(long id) {
+        return new CreatedDictItemResponse(Long.toString(id));
+    }
 
     /**
      * 组装字典类型列表。
