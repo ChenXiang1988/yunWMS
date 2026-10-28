@@ -26,7 +26,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li><b>审计真的落进了 {@code sys_audit_log}</b>——前后快照经 {@code jsonb} 往返后键仍是
  *       {@code primaryUserId} / {@code secondaryUserId}，值是数值而不是被序列化成对象；</li>
  *   <li><b>可见性随货主</b>——数据范围外的货主，读回 40400、写也回 40400，而不是「两个 null」
- *       或「改成功了」。负责人是货主的子资源，没有独立的可见范围。</li>
+ *       或「改成功了」。负责人是货主的子资源，没有独立的可见范围；</li>
+ *   <li><b>停用员工前必须已转交</b>（规格的验收口径）——停用仍担任负责人的员工要被 40900 拒掉且提示带数量，
+ *       把负责人转交出去之后，同一次运行里同一名员工就能停用。这条链路与数据范围那条同构：关系在
+ *       {@code wms-master}、判定在 {@code wms-auth}，只把关系写进表而不接上校验，上面几条照样全绿。</li>
  * </ul>
  *
  * <p><b>为什么继承 {@link AbstractOwnerDataScopeIntegrationTest} 而不是更上层的
@@ -340,10 +343,42 @@ class OwnerAssigneeIntegrationTest extends AbstractOwnerDataScopeIntegrationTest
         assertThat(transferred.path("afterValue").path("secondaryUserId").asLong()).isEqualTo(secondaryId);
     }
 
+    @Test
+    @DisplayName("停用校验：仍担任货主负责人的员工被 40900 拒掉且提示带数量，转交后即可停用")
+    void shouldRejectDisablingStaffWhoStillOwnsAssignments() throws Exception {
+        String token = loginToken(OPERATOR_LOGIN_NAME);
+        long ownerId = seedOwner("OWNER-OA-DISABLE", "负责客服停用癸", "RAK3", "ACTIVE");
+        long responsibleId = seedStaff("oa-disable-responsible", "负责客服停用责任人");
+        long successorId = seedStaff("oa-disable-successor", "负责客服停用接手人");
+
+        // 前提：这名员工确实是主负责人，否则「被拒绝」可能只是校验根本没跑到他名下
+        assertThat(saveAssignees(token, ownerId, String.valueOf(responsibleId), null).path("code").asInt())
+                .as("前置配置失败").isZero();
+
+        JsonNode rejected = changeUserStatus(token, responsibleId, "DISABLED");
+        // 409 段位而不是 40000：停用请求本身合法，被拒绝的是「货主因此失去负责人」这个后果
+        assertThat(rejected.path("code").asInt()).as("仍担任负责人的员工必须被拒绝停用：%s", rejected)
+                .isEqualTo(CONFLICT_CODE);
+        // 数量与下一步一起进提示：只说「名下有货主」的话，管理员仍要自己翻一遍才知道要转交几个
+        assertThat(rejected.path("message").asText()).as("提示要说清还有几个货主、下一步做什么：%s", rejected)
+                .contains("仍担任 1 个货主的负责人", "请先转交");
+        // 被拒的那次不得落库：停用同时会踢掉会话，落了库就退不回来
+        assertThat(statusInDb(responsibleId)).as("被拒绝的停用不得落库").isEqualTo("ACTIVE");
+
+        // 转交：主负责人换成另一名员工，原责任人不再占主或副任何一边
+        assertThat(saveAssignees(token, ownerId, String.valueOf(successorId), null).path("code").asInt())
+                .as("转交失败").isZero();
+
+        JsonNode allowed = changeUserStatus(token, responsibleId, "DISABLED");
+        assertThat(allowed.path("code").asInt()).as("转交后同一员工应当可以停用：%s", allowed).isZero();
+        // 放行的那次必须真的写进库：只判响应码时，「没报错但也没停用」会漏过去
+        assertThat(statusInDb(responsibleId)).as("放行后状态要真的落库").isEqualTo("DISABLED");
+    }
+
     /**
      * 负责客服子资源的路径。
      *
-     * <p>抽出来是因为八个用例都要拼同一个前缀：路径写错一次会让 40400 出现在不该出现的用例里，
+     * <p>抽出来是因为九个用例都要拼同一个前缀：路径写错一次会让 40400 出现在不该出现的用例里，
      * 而那种失败看起来像业务 bug。
      *
      * @param ownerId 货主标识
@@ -432,6 +467,36 @@ class OwnerAssigneeIntegrationTest extends AbstractOwnerDataScopeIntegrationTest
     }
 
     /**
+     * 启用或停用某个账号，返回原始响应。
+     *
+     * <p>不在这里断言业务码：被拒的用例要的正是 40900，由调用方按场景断言。
+     *
+     * @param token  操作人令牌，需持有 {@code system:user:update}
+     * @param userId 目标账号标识
+     * @param status 目标状态，取 {@code ACTIVE} 或 {@code DISABLED}
+     * @return 接口响应
+     * @throws Exception 请求构造或执行失败
+     */
+    private JsonNode changeUserStatus(String token, long userId, String status) throws Exception {
+        return putJson(token, "/api/console/users/" + userId + "/status",
+                objectMapper.writeValueAsString(new StatusPayload(status)));
+    }
+
+    /**
+     * 直接读库里的账号状态。
+     *
+     * <p>用来判定「被拒绝的那次没有落库」与「放行的那次真的落库」：停用成功时响应不带数据，
+     * 而用户详情接口要求 {@code system:user:list}——本用例关心的是状态本身，不该再借一个与它
+     * 无关的读接口来间接推断。
+     *
+     * @param userId 账号标识
+     * @return 库里的状态编码
+     */
+    private String statusInDb(long userId) {
+        return jdbcTemplate.queryForObject("SELECT status FROM sys_user WHERE id = ?", String.class, userId);
+    }
+
+    /**
      * 建一个既持 {@code system:owner:list} 又持 {@code system:owner:update} 的角色。
      *
      * <p>越权用例要同时证读侧与写侧，而基类的 {@link #seedScopedRole} 只授列表权限点：
@@ -465,5 +530,16 @@ class OwnerAssigneeIntegrationTest extends AbstractOwnerDataScopeIntegrationTest
      * @param secondaryUserId 副负责人标识；{@code null} 序列化为显式 null
      */
     private record AssigneePayload(String primaryUserId, String secondaryUserId) {
+    }
+
+    /**
+     * 启停请求体的最小映射，按 HTTP 上的 JSON 字段名验证契约。
+     *
+     * <p>与 {@link AssigneePayload} 同一理由不复用生产侧的请求类型：同一个类序列化再反序列化，
+     * 会掩盖字段名被改而测试仍然通过的情况。
+     *
+     * @param status 目标状态
+     */
+    private record StatusPayload(String status) {
     }
 }
