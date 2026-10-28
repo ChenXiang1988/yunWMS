@@ -1,8 +1,8 @@
 # 接口台账
 
 > **生成物，禁止手改。** 由 `code/tools/api-inventory/gen_api_inventory.py` 生成。
-> 来源：实时拉取 `http://localhost:18092/v3/api-docs`
-> 源 commit：`e935abc`
+> 来源：实时拉取 `http://localhost:18093/v3/api-docs`
+> 源 commit：`a85f2b6`
 > 计数口径：OpenAPI operation（path × method），不是 Java 方法数
 > 字段记号：`a.b` 嵌套，`a[]` 数组元素，`↻` 自引用已截断，`…` 嵌套过深已截断
 
@@ -51,7 +51,7 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `loginName` | string | 是 | 登录名，不能为空；员工账号由管理员在仓网端指定，货主账号由系统生成。全局唯一且不区分大小写 |
+| `loginName` | string | 是 | 登录名，不能为空，最长 64 个字符；员工账号由管理员在仓网端指定，货主账号由系统生成。全局唯一且不区分大小写 |
 | `password` | string | 是 | 明文密码，不能为空，仅在本次请求体中出现；服务端只保存哈希，不落库明文、不写日志、不回显 |
 
 **返回字段**

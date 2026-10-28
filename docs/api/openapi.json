@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:18092",
+      "url": "http://localhost:18093",
       "description": "Generated server url"
     }
   ],
@@ -2225,8 +2225,10 @@
         "type": "object",
         "properties": {
           "loginName": {
+            "maxLength": 64,
+            "minLength": 0,
             "type": "string",
-            "description": "登录名，不能为空；员工账号由管理员在仓网端指定，货主账号由系统生成。全局唯一且不区分大小写"
+            "description": "登录名，不能为空，最长 64 个字符；员工账号由管理员在仓网端指定，货主账号由系统生成。全局唯一且不区分大小写"
           },
           "password": {
             "type": "string",

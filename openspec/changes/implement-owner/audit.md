@@ -214,3 +214,54 @@ anchor 范围与白名单范围一致。
 **但这不构成对规则的豁免**：新提交仍须控制在 400 行内，超限须在提交时主动说明并在本表登记。
 集成测试单文件的可拆性问题已连续六次出现，属规则的结构性盲区，应在规则层面决定「是否给
 单文件测试设例外」，不宜继续逐笔登记了事。
+
+---
+
+# 审计记录（第四回：任务 2.8b 审计接入 + 5.1 主链路）
+
+- anchor: `a0cb2fb`
+- 范围: `a0cb2fb..HEAD`（原 19 笔，重排后 18 笔）
+- 审计时间：2026-10-28
+- 审计者：`delivery-auditor`（只读），结论由主 Agent 转录并标注处置
+
+## 结论
+
+**不通过（3 条阻塞）**，全部在推送前处置完毕。
+
+| # | 问题 | 处置 |
+|---|---|---|
+| 1 | `a85f2b6` 439 行超限 | **登记为存量**（第七个撞线的集成测试文件） |
+| 2 | `d60fda2` 起连续 **7 笔主源码编译不过**：`UserQueryImpl` 先删 `existsById` 实现，`UserQuery` 到 `45e6d14` 才删声明 | **已重排**。把 `existsById` 的删除统一挪到最后一笔，实现与声明同笔删。两个关键中间态（`4de797e`、`527daf3`）已实测 `mvnw -pl wms-auth -am compile` 通过 |
+| 3 | `df7da27` 改了 `PasswordLoginService` 构造器，测试到下一笔才跟上 | **已重排**，实现与其单测同笔（`1730d95`，385 行） |
+
+## 逐项结果
+
+| 检查项 | 结论 | 证据 |
+|---|---|---|
+| 路径白名单 | 通过 | 57 个变更文件全在白名单内；另一会话的 `docs/coding.md`、`docs/research/**`、`clean-redundant-validation/**` **未被卷入** |
+| 单次提交 ≤400 行 | 1 笔超限 | `1394f59` 439 行，已登记 |
+| 迁移与代码分离 | 不适用 | 本轮 0 个 `.sql` 变更 |
+| 违规依赖 | 通过 | 无 `pom.xml` / 锁文件改动 |
+| 修改既有测试断言 | 通过（有改动，无弱化） | 两类替换：`verifyNoInteractions(X)` → `verifyNoInteractions(X, auditRecorder)`（**增强**）；`existsById` → `findById`（等价，布尔换 Optional）。除这两类外无断言被删 |
+| 交付三件事 | 通过 | 文件清单、验证输出、未完成项齐全 |
+
+## 四项专项核对
+
+**① 密码永不出现在审计里**：通过。用户快照 9 键、角色快照 7 键，均无密码面；`grep passwordHash` 在 `application/audit/` 下唯一命中是一句 Javadoc（「刻意不被读取」），代码体无调用。重置密码前后值均为 `null`，登录失败摘要取自固定枚举文案而非入参拼接。
+
+**② 只追加未被破坏**：通过。`SysAuditLogMapper` 仍不继承 `BaseMapper`；全仓无 `DELETE FROM sys_audit_log` / `update sys_audit_log`；`SysAuditLogMapper` 只有两个消费者（`AuditRecorderImpl` 写、`AuditQueryImpl` 读），无第三处绕过。
+
+**③ master 未依赖 auth**：通过（静态）。`grep -rn "com.yunwms.auth" wms-master/src/main/java` 零命中；master 未自建访问审计表的 Mapper；`sys_audit_log` 归属仍为 `wms-auth`。
+
+**④ 中间态可构建**：**原不通过，重排后通过**。原序列有 7 笔主源码断裂、4 笔测试断裂。重排后两处关键中间态实测编译通过。
+
+## 本轮做对的一处
+
+`AuditTrail` 桥接适配器（`81e482a`）严格早于首个使用方（`cc49eb6`）。这与前几轮「服务先于实现」的错法正好相反，可作为后续批次的范式：**跨模块端口的适配器必须先落地**，否则 Spring 容器在该笔就起不来。
+
+## 两条待办
+
+| # | 项 | 说明 |
+|---|---|---|
+| 1 | `openapi.json` 混入本机地址 | 每次重跑写入 `"url": "http://localhost:<端口>"`，端口随人生成不同。属**既有**问题（上一版是 18092），非本批引入。应在生成工具里归一为固定值 |
+| 2 | `OwnerCreationService` 无事务 | 已知缺口：审计写失败时货主已提交。要修需把「占用方反查」移出事务，另立一项 |
