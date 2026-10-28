@@ -1,11 +1,16 @@
 package com.yunwms.auth.application.service;
 
+import com.yunwms.auth.application.audit.UserAuditSnapshots;
 import com.yunwms.auth.application.command.CreateUserCommand;
 import com.yunwms.auth.application.dto.CreatedUser;
+import com.yunwms.auth.domain.model.AuditAction;
+import com.yunwms.auth.domain.model.AuditBizType;
+import com.yunwms.auth.domain.model.AuditEntry;
 import com.yunwms.auth.domain.model.NewUserAccount;
 import com.yunwms.auth.domain.model.PasswordPolicy;
 import com.yunwms.auth.domain.model.PasswordRuleViolation;
 import com.yunwms.auth.domain.model.SubjectType;
+import com.yunwms.auth.domain.port.AuditRecorder;
 import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.PasswordHasher;
 import com.yunwms.auth.domain.port.UserAccountRegistrar;
@@ -33,8 +38,12 @@ import java.util.List;
  * <p>建号写两张表（{@code sys_user} 与 {@code sys_user_role}），必须同一个事务：
  * 只写进账号没写角色时，管理员看到「建成功」而权限少了，且没有任何入口能看出缺哪一步。
  *
- * <p>不写审计日志（{@code sys_audit_log}）：那属于审计能力（2.8），本用例只保证
- * {@code created_by} / {@code updated_by} 记下操作人。
+ * <p><b>留痕与两张表同一个事务</b>：审计对象是 {@code USER}，对象标识用登录名——管理端按登录名
+ * 核对账号，用主键则要先知道一个界面上不出现的数字。审计写在这两条写入之后、同一个事务里：
+ * 唯一冲突抛出时整单回滚，那条「建了但没建成」的日志不会留下。
+ *
+ * <p><b>快照里没有密码。</b>不含哈希，也不含明文、长度、首字符：审计表只追加、不可修改，
+ * 凭据一旦写进去就撤不回来。见 {@link UserAuditSnapshots} 的白名单。
  */
 @Service
 public class UserCreationService {
@@ -45,13 +54,16 @@ public class UserCreationService {
     private final UserAccountRegistrar userAccountRegistrar;
     private final PasswordHasher passwordHasher;
     private final CurrentSession currentSession;
+    private final AuditRecorder auditRecorder;
 
     public UserCreationService(UserAccountRegistrar userAccountRegistrar,
                               PasswordHasher passwordHasher,
-                              CurrentSession currentSession) {
+                              CurrentSession currentSession,
+                              AuditRecorder auditRecorder) {
         this.userAccountRegistrar = userAccountRegistrar;
         this.passwordHasher = passwordHasher;
         this.currentSession = currentSession;
+        this.auditRecorder = auditRecorder;
     }
 
     /**
@@ -106,13 +118,17 @@ public class UserCreationService {
                 // 明文到此为止：跨层传递的只有哈希，日志与异常里都不会出现初始密码
                 passwordHasher.hash(command.initialPassword()));
         List<Long> roleIds = command.roleIds() == null ? List.of() : command.roleIds();
+        long userId;
         try {
-            long userId = userAccountRegistrar.register(account, roleIds, operatorId);
-            // 回 loginName 而不是 auth 的 displayName：出问题时管理员要靠它去登录框里核对这个账号
-            return new CreatedUser(userId, loginName);
+            userId = userAccountRegistrar.register(account, roleIds, operatorId);
         } catch (DataIntegrityViolationException e) {
+            // 冲突时一行都没留下，也不留审计：这次建号没有发生
             throw translateConstraintViolation(e);
         }
+        auditRecorder.record(new AuditEntry(AuditBizType.USER, loginName, AuditAction.CREATE,
+                "新建用户 " + loginName, null, UserAuditSnapshots.ofCreated(account)));
+        // 回 loginName 而不是 auth 的 displayName：出问题时管理员要靠它去登录框里核对这个账号
+        return new CreatedUser(userId, loginName);
     }
 
     /**
