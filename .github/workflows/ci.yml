@@ -61,6 +61,14 @@ jobs:
         with:
           python-version: '3.12'
 
+      # 任何未登记的后端/前端直接依赖都会让这一步失败，登记方式见报错与 tools 下 README
+      - name: 依赖准入核对
+        run: python3 code/tools/dependency-guard/check_dependencies.py
+
+      - name: 依赖准入工具自检
+        working-directory: code/tools/dependency-guard
+        run: python3 -m unittest discover -s tests
+
       - name: API 台账工具
         working-directory: code/tools/api-inventory
         run: python3 -m unittest discover -s tests
