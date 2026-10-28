@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+    审计日志的三条语句：追加一条、按对象计数、按对象倒序取一页。
+
+    为什么没有 UPDATE / DELETE，也没有按其它条件检索的语句：规格要求审计日志只追加不可修改，
+    能力上不提供这条路径比事后校验「有没有人删过」可靠。按操作人、按时间范围的检索等有真实消费者
+    再加，现在加上去只会得到几条没人调用、也没人验证过索引的语句。
+-->
+<mapper namespace="com.yunwms.auth.infrastructure.persistence.mapper.SysAuditLogMapper">
+
+    <!--
+        追加一条日志。
+
+        两处 CAST 是必需的，不是防御性写法：
+          - before_value / after_value 是 jsonb。JDBC 把 String 参数以 varchar 发送（连接未配
+            stringtype=unspecified），直接赋给 jsonb 列会报类型不匹配；显式 CAST 让 PG 按目标类型解析。
+          - operator_ip 是 inet，同理。取不到当前请求时该参数为 null，CAST(NULL AS inet) 仍是 null，
+            列本身允许为空。
+
+        id 与 created_at 不出现在列清单里：前者是 GENERATED ALWAYS AS IDENTITY（显式写入会被拒绝），
+        后者有 DEFAULT now()，交给库可以保证「同一事务里的几条日志时间来源一致」。
+    -->
+    <insert id="append">
+        INSERT INTO sys_audit_log (biz_type,
+                                   biz_id,
+                                   action,
+                                   operator_id,
+                                   operator_name,
+                                   operator_ip,
+                                   source_portal,
+                                   summary,
+                                   before_value,
+                                   after_value)
+        VALUES (#{bizType},
+                #{bizId},
+                #{action},
+                #{operatorId},
+                #{operatorName},
+                CAST(#{operatorIp} AS inet),
+                #{sourcePortal},
+                #{summary},
+                CAST(#{beforeValue} AS jsonb),
+                CAST(#{afterValue} AS jsonb))
+    </insert>
+
+    <!--
+        某个对象的日志条数。条件只有 (biz_type, biz_id)：这两个值来自查询端点，由用例层保证非空，
+        因此这里不写 <if>——省略条件的后果是「查全部日志」，那比报错危险。
+    -->
+    <select id="countByObject" resultType="java.lang.Long">
+        SELECT count(*)
+        FROM sys_audit_log
+        WHERE biz_type = #{bizType}
+          AND biz_id = #{bizId}
+    </select>
+
+    <!--
+        按对象倒序取一页。
+
+        排序用 (created_at DESC, id DESC)：created_at 精度到微秒，同一事务里连续写入的两条日志可能
+        拿到同一个 now()（PG 的 now() 是事务开始时间），只按它排序时翻页会漏行或重复行。
+        id 是唯一值，兜住这个不确定性，方向与时间一致，读起来仍是「最新的在前」。
+
+        LIMIT / OFFSET 用参数而不是拼字符串：拼字符串会引入外部输入，也让「上限 200」散落到 SQL 里；
+        范围判定在 AuditQueryService 一处完成。
+    -->
+    <select id="selectPageByObject"
+            resultType="com.yunwms.auth.infrastructure.persistence.entity.SysAuditLogEntity">
+        SELECT id,
+               biz_type,
+               biz_id,
+               action,
+               operator_id,
+               operator_name,
+               operator_ip,
+               source_portal,
+               summary,
+               before_value,
+               after_value,
+               created_at
+        FROM sys_audit_log
+        WHERE biz_type = #{bizType}
+          AND biz_id = #{bizId}
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+</mapper>
