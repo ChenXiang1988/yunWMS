@@ -241,3 +241,99 @@ export function getTerminationImpact(id: string): Promise<TerminationImpact> {
 export function deleteOwner(id: string): Promise<void> {
   return http.delete<void, void>(`/console/owners/${id}`)
 }
+
+/**
+ * 货主联系人，字段与后端 `OwnerContactResponse` 一一对应。
+ *
+ * 不含 ownerId：它就在请求路径上，响应里再带一份会让前端出现两处可能不一致的来源。
+ * `roleType` 是 CONTACT_ROLE 字典的 value，不是枚举：角色通过字典扩展，写成联合类型
+ * 会让每加一个角色都得改前端类型。
+ */
+export interface OwnerContact {
+  /** 联系人标识，编辑、删除都用它定位 */
+  id: string
+  /** 姓名，可以重名——它是称呼，不是标识 */
+  name: string
+  /** 角色取值，展示时按字典取中文标签，接口只给 value */
+  roleType: string
+  /** 联系电话，必填字段，不会为 null；原样返回，不做脱敏与格式化 */
+  phone: string
+  /** 邮箱，可为 null（未填或已清空） */
+  email: string | null
+  /** 是否主联系人，同一货主至多一条为 true */
+  isPrimary: boolean
+  /** 备注，可为 null */
+  remark: string | null
+}
+
+/**
+ * 联系人请求体，新增与编辑共用同一个结构。
+ *
+ * 编辑是全量替换：字段传 null 表示清空，省略按 null 处理，所以调用方必须提交希望保留
+ * 的全部值——「设为主」只改主标记时也要带上原值，见 `contact-model.ts` 的
+ * `buildPrimaryPayload`。
+ */
+export interface ContactPayload {
+  /** 姓名，必填，最长 64 个字符；只填空白按未填处理 */
+  name: string
+  /** 角色，必填，取 CONTACT_ROLE 字典的启用项 */
+  roleType: string
+  /** 联系电话，必填，最长 32 个字符；不做格式校验 */
+  phone: string
+  /** 邮箱，可为空，最长 128 个字符；传 null 表示清空 */
+  email: string | null
+  /** 是否主联系人，缺省按 false 处理；要保留主标记必须显式传 true */
+  isPrimary: boolean
+  /** 备注，可为空，最长 255 个字符；传 null 表示清空 */
+  remark: string | null
+}
+
+/**
+ * 查询某货主的全部联系人。
+ *
+ * 不分页：单个货主的联系人是几条到几十条。货主不存在、已逻辑删除或不在数据范围内
+ * 返回 40400，而不是空列表——空列表的意思只是「这个货主没有联系人」。
+ */
+export function listOwnerContacts(ownerId: string): Promise<OwnerContact[]> {
+  return http.get<OwnerContact[], OwnerContact[]>(`/console/owners/${ownerId}/contacts`)
+}
+
+/**
+ * 新增联系人，返回新联系人（含标识）。
+ *
+ * 置 `isPrimary` 为 true 时后端先把原主联系人置为非主再写入本条，两步同一事务。
+ * 并发抢主可能返回 40900，前端不判错误码、以重新取回的列表为准，见 `OwnerContactTab.vue`。
+ */
+export function createOwnerContact(ownerId: string, payload: ContactPayload): Promise<OwnerContact> {
+  return http.post<OwnerContact, OwnerContact, ContactPayload>(
+    `/console/owners/${ownerId}/contacts`,
+    payload
+  )
+}
+
+/**
+ * 编辑联系人（全量替换）。
+ *
+ * 成功不回带更新后的联系人：设为主会连带改掉另一行，回带单行会让人以为其余行没变，
+ * 需要最新状态时重新取列表。归属不可改——请求体里没有 ownerId。
+ */
+export function updateOwnerContact(
+  ownerId: string,
+  contactId: string,
+  payload: ContactPayload
+): Promise<void> {
+  return http.put<void, void, ContactPayload>(
+    `/console/owners/${ownerId}/contacts/${contactId}`,
+    payload
+  )
+}
+
+/**
+ * 删除联系人（后端软删除）。
+ *
+ * 删除会释放该货主的主联系人名额，之后可以直接把另一条设为主。重复删除返回 40400，
+ * 与读取侧同一口径：已删除与不存在是同一件事。
+ */
+export function deleteOwnerContact(ownerId: string, contactId: string): Promise<void> {
+  return http.delete<void, void>(`/console/owners/${ownerId}/contacts/${contactId}`)
+}
