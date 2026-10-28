@@ -4,8 +4,10 @@ import com.yunwms.master.application.command.ProvisionOwnerAccountCommand;
 import com.yunwms.master.application.dto.ProvisionedOwnerAccount;
 import com.yunwms.master.domain.model.Owner;
 import com.yunwms.master.domain.model.OwnerAddress;
+import com.yunwms.master.domain.model.OwnerAuditEvent;
 import com.yunwms.master.domain.model.OwnerStatus;
 import com.yunwms.master.domain.model.SkuPrefix;
+import com.yunwms.master.domain.port.AuditTrail;
 import com.yunwms.master.domain.port.CurrentOperator;
 import com.yunwms.master.domain.port.OwnerAccountLookup;
 import com.yunwms.master.domain.port.OwnerAccountProvisioner;
@@ -15,8 +17,10 @@ import com.yunwms.web.exception.BizException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -35,7 +39,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 /**
  * 货主主账号开通用例的单测：端口全部替换为 mock，不起 Spring、不连库。
  *
- * <p>要钉住四件事：
+ * <p>要钉住五件事：
  * <ul>
  *   <li><b>校验顺序</b>——「状态」排在「是否已有账号」之前。一个已终止的货主，管理员最该知道的是
  *       它已经终止；顺序反了，终止货主的重复提交会得到「已开通主账号」，把人引去查账号，
@@ -45,8 +49,9 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
  *       还是数据坏了；</li>
  *   <li><b>登录名取自货主系统编码</b>，不接受调用方给：命令里根本没有登录名字段，
  *       这一点只能靠「端口收到的登录名等于 owner.code()」来证；</li>
- *   <li><b>被拒绝的请求不建号</b>——建号在对端的事务里提交，事后无法回退，因此每条拒绝路径
- *       都要断言没有调用建号端口。</li>
+ *   <li><b>被拒绝的请求不建号</b>——建号事后无法回退，因此每条拒绝路径都要断言没有调用建号端口；</li>
+ *   <li><b>开号挂在该货主的时间线上</b>——审计的对象标识是货主编码而不是账号标识，
+ *       快照里只有登录名与账号标识，没有密码。</li>
  * </ul>
  */
 @DisplayName("货主主账号开通")
@@ -77,6 +82,7 @@ class OwnerAccountProvisionServiceTest {
     private OwnerAccountLookup ownerAccountLookup;
     private OwnerAccountProvisioner ownerAccountProvisioner;
     private CurrentOperator currentOperator;
+    private AuditTrail auditTrail;
     private OwnerAccountProvisionService service;
 
     @BeforeEach
@@ -85,8 +91,9 @@ class OwnerAccountProvisionServiceTest {
         ownerAccountLookup = mock(OwnerAccountLookup.class);
         ownerAccountProvisioner = mock(OwnerAccountProvisioner.class);
         currentOperator = mock(CurrentOperator.class);
+        auditTrail = mock(AuditTrail.class);
         service = new OwnerAccountProvisionService(
-                ownerRepository, ownerAccountLookup, ownerAccountProvisioner, currentOperator);
+                ownerRepository, ownerAccountLookup, ownerAccountProvisioner, currentOperator, auditTrail);
 
         given(currentOperator.currentUserId()).willReturn(OptionalLong.of(OPERATOR_ID));
         given(ownerAccountLookup.findOwnerIdByLoginName(OWNER_CODE)).willReturn(OptionalLong.empty());
@@ -213,6 +220,37 @@ class OwnerAccountProvisionServiceTest {
         // 开号不是货主档案的写操作：对货主只有那一次读，不写任何字段、也不改状态
         verify(ownerRepository).findById(OWNER_ID);
         verifyNoMoreInteractions(ownerRepository);
+    }
+
+    @Test
+    @DisplayName("审计：开号写一条 OWNER_ACCOUNT_OPENED，挂货主编码，after 含登录名与账号标识")
+    void shouldRecordAccountProvision() {
+        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.ACTIVE)));
+
+        service.provision(command(DISPLAY_NAME));
+
+        ArgumentCaptor<Map<String, Object>> before = ArgumentCaptor.captor();
+        ArgumentCaptor<Map<String, Object>> after = ArgumentCaptor.captor();
+        verify(auditTrail).record(
+                eq(OwnerAuditEvent.OWNER_ACCOUNT_OPENED), eq(OWNER_CODE), before.capture(), after.capture());
+
+        // 对象标识取货主编码：从货主详情追溯时要能串起「建档 → 改状态 → 开号」整条链
+        assertThat(before.getValue()).as("开号不是对货主档案的修改，没有变更前值").isNull();
+        assertThat(after.getValue())
+                .containsEntry("loginName", OWNER_CODE)
+                // 标识按字符串记录：与接口层「标识一律以字符串传输」同口径
+                .containsEntry("accountId", String.valueOf(ACCOUNT_ID));
+    }
+
+    @Test
+    @DisplayName("审计：被拒绝的开号不写审计（账号与留痕都不该出现）")
+    void shouldNotRecordWhenProvisionIsRejected() {
+        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.DRAFT)));
+
+        assertThatThrownBy(() -> service.provision(command(DISPLAY_NAME)))
+                .isInstanceOf(BizException.class);
+
+        verifyNoInteractions(auditTrail);
     }
 
     /**

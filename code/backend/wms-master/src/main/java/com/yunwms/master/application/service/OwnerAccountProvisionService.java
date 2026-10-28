@@ -1,9 +1,12 @@
 package com.yunwms.master.application.service;
 
+import com.yunwms.master.application.audit.OwnerAuditSnapshots;
 import com.yunwms.master.application.command.ProvisionOwnerAccountCommand;
 import com.yunwms.master.application.dto.ProvisionedOwnerAccount;
 import com.yunwms.master.domain.model.Owner;
+import com.yunwms.master.domain.model.OwnerAuditEvent;
 import com.yunwms.master.domain.model.OwnerStatus;
+import com.yunwms.master.domain.port.AuditTrail;
 import com.yunwms.master.domain.port.CurrentOperator;
 import com.yunwms.master.domain.port.OwnerAccountLookup;
 import com.yunwms.master.domain.port.OwnerAccountProvisioner;
@@ -11,6 +14,7 @@ import com.yunwms.master.domain.port.OwnerRepository;
 import com.yunwms.web.api.ErrorCode;
 import com.yunwms.web.exception.BizException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.OptionalLong;
 
@@ -42,14 +46,17 @@ import java.util.OptionalLong;
  * 请求体里因此没有登录名字段，多传会被 {@code FAIL_ON_UNKNOWN_PROPERTIES} 拒绝——这不是遗漏，
  * 是「谁来决定登录名」的答案。
  *
- * <p><b>不开 {@code @Transactional}：</b>建号在 {@code wms-auth} 自己的事务里提交，本模块只有一次
- * 只读查询与一次端口调用。在 master 侧再开一个事务，既管不到对端事务（跨模块不同数据源配置下
- * 更不可能），也不会让「账号已建但货主状态被并发改了」变得可回滚；多一个空事务只会让人误以为
- * 整条链路原子。真正的并发后果是可接受的：两个请求同时通过判重，后到的那次撞
- * {@code ux_sys_user_login_name}，得到 40901——同一条账号不会建出两条。
+ * <p><b>开 {@code @Transactional}：</b>本用例要写两处——对端的建号与本模块的审计——它们必须一起成功
+ * 或一起回滚。两个模块共用同一个数据源，建号用例的 {@code REQUIRED} 事务因此会加入本方法的事务：
+ * 「建号在 {@code wms-auth} 自己的事务里提交」这句话只在 master 侧没有事务时成立。代价是审计写失败
+ * 会把刚开的账号一并回滚；换来的是不会出现「账号能登录、审计里查不到是谁开的」——后者事后无法补救。
+ * 并发后果不变：两个请求同时通过判重时，后到的那次撞 {@code ux_sys_user_login_name}，得到 40901，
+ * 同一条账号不会建出两条。
  *
- * <p><b>不写审计日志（{@code sys_audit_log}）：</b>那属于审计能力（2.8）。账号侧由
- * {@code wms-auth} 记 {@code created_by}，本用例不重复记一遍。
+ * <p><b>审计记 {@code OWNER_ACCOUNT_OPENED}，对象类型取 {@code OWNER} 而不是 {@code USER}：</b>
+ * 从货主追溯时要能看到「建档 → 改状态 → 开号」整条链。记成 {@code USER} 的话，这一条会从货主的
+ * 时间线上消失，而管理员恰恰是从货主页看这件事的。登录名进摘要与快照；初始密码不进快照——
+ * 审计只追加，任何凭据一旦写进去就撤不回来。
  */
 @Service
 public class OwnerAccountProvisionService {
@@ -58,21 +65,25 @@ public class OwnerAccountProvisionService {
     private final OwnerAccountLookup ownerAccountLookup;
     private final OwnerAccountProvisioner ownerAccountProvisioner;
     private final CurrentOperator currentOperator;
+    private final AuditTrail auditTrail;
 
     /**
      * @param ownerRepository          货主仓储端口，只用于判定货主存在与读取编码、状态
      * @param ownerAccountLookup       登录名反查端口，实现在 {@code wms-app} 的 bridge 包
      * @param ownerAccountProvisioner  建号端口，实现在 {@code wms-app} 的 bridge 包
      * @param currentOperator          当前操作人端口
+     * @param auditTrail               审计留痕端口，由 {@code wms-app} 接到审计能力上
      */
     public OwnerAccountProvisionService(OwnerRepository ownerRepository,
                                         OwnerAccountLookup ownerAccountLookup,
                                         OwnerAccountProvisioner ownerAccountProvisioner,
-                                        CurrentOperator currentOperator) {
+                                        CurrentOperator currentOperator,
+                                        AuditTrail auditTrail) {
         this.ownerRepository = ownerRepository;
         this.ownerAccountLookup = ownerAccountLookup;
         this.ownerAccountProvisioner = ownerAccountProvisioner;
         this.currentOperator = currentOperator;
+        this.auditTrail = auditTrail;
     }
 
     /**
@@ -90,6 +101,7 @@ public class OwnerAccountProvisionService {
      *                      主账号姓名为空（40000）；初始密码不合规（40000）；
      *                      登录名已被内部员工占用（40901，由建号用例透出）
      */
+    @Transactional
     public ProvisionedOwnerAccount provision(ProvisionOwnerAccountCommand command) {
         // ① 操作人：不保留它的值，本次调用的 created_by 由 wms-auth 自己取（见方法注释）
         currentOperator.currentUserId()
@@ -121,6 +133,10 @@ public class OwnerAccountProvisionService {
         // ⑥ 建号。密码策略、主体与货主匹配、登录名唯一冲突的翻译都在对端用例里，这里只做委托
         long accountId = ownerAccountProvisioner.createMainAccount(
                 owner.id(), loginName, displayName, command.initialPassword());
+
+        // ⑦ 留痕。新增没有「变更前」，before 为 null；对象标识用货主编码，开号因此挂在该货主的时间线上
+        auditTrail.record(OwnerAuditEvent.OWNER_ACCOUNT_OPENED, loginName, null,
+                OwnerAuditSnapshots.ofAccountOpened(loginName, accountId));
         return new ProvisionedOwnerAccount(accountId, loginName);
     }
 

@@ -1,10 +1,13 @@
 package com.yunwms.master.application.service;
 
+import com.yunwms.master.application.audit.OwnerAuditSnapshots;
 import com.yunwms.master.application.command.ChangeOwnerStatusCommand;
 import com.yunwms.master.application.dto.TerminationImpact;
 import com.yunwms.master.application.query.OwnerImpactQueryService;
 import com.yunwms.master.domain.model.Owner;
+import com.yunwms.master.domain.model.OwnerAuditEvent;
 import com.yunwms.master.domain.model.OwnerStatus;
+import com.yunwms.master.domain.port.AuditTrail;
 import com.yunwms.master.domain.port.CurrentOperator;
 import com.yunwms.master.domain.port.OwnerRepository;
 import com.yunwms.web.api.ErrorCode;
@@ -59,18 +62,22 @@ public class OwnerStatusChangeService {
     private final OwnerRepository ownerRepository;
     private final OwnerImpactQueryService ownerImpactQueryService;
     private final CurrentOperator currentOperator;
+    private final AuditTrail auditTrail;
 
     /**
      * @param ownerRepository         货主仓储端口
      * @param ownerImpactQueryService 影响清单读取用例；终止未确认时用它把数字写进提示
      * @param currentOperator         当前操作人端口
+     * @param auditTrail              审计留痕端口，由 {@code wms-app} 接到审计能力上
      */
     public OwnerStatusChangeService(OwnerRepository ownerRepository,
                                     OwnerImpactQueryService ownerImpactQueryService,
-                                    CurrentOperator currentOperator) {
+                                    CurrentOperator currentOperator,
+                                    AuditTrail auditTrail) {
         this.ownerRepository = ownerRepository;
         this.ownerImpactQueryService = ownerImpactQueryService;
         this.currentOperator = currentOperator;
+        this.auditTrail = auditTrail;
     }
 
     /**
@@ -121,6 +128,12 @@ public class OwnerStatusChangeService {
         }
 
         ownerRepository.updateStatus(existing.id(), targetStatus, operatorId);
+
+        // 流转是「谁把这个客户停了」的唯一答案，日志必须在锁内的事务里写：与状态同一份提交，
+        // 不会出现「状态变了、没有记录」或反过来。同状态重放同样留痕——那次提交确实发生过，
+        // 前后状态相同正是它的事实（与编辑的「没改就不记」不同：那里的空提交没有语义）
+        auditTrail.record(OwnerAuditEvent.OWNER_STATUS_CHANGED, existing.code(),
+                OwnerAuditSnapshots.of(existing), OwnerAuditSnapshots.ofStatusChanged(existing, targetStatus));
     }
 
     /**
