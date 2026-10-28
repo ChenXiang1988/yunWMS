@@ -34,6 +34,9 @@ final class OwnerConstraintTranslator {
     /** {@code owner_contact.owner_id} 的部分唯一索引，口径是未删除且 {@code is_primary} 的联系人。 */
     private static final String OWNER_CONTACT_PRIMARY_UNIQUE_INDEX = "ux_owner_contact_primary";
 
+    /** {@code owner_assignee} 的 {@code (owner_id, relation_type)} 唯一索引，保证同一货主每角色至多一行。 */
+    private static final String OWNER_ASSIGNEE_ROLE_UNIQUE_INDEX = "ux_owner_assignee_role";
+
     /**
      * 主联系人冲突的提示：必须点明「已有主联系人」，并把下一步动作写出来。
      *
@@ -41,6 +44,14 @@ final class OwnerConstraintTranslator {
      * 也就不会想到先刷新列表再重试。
      */
     private static final String PRIMARY_CONTACT_TAKEN_MESSAGE = "该货主已有主联系人，请刷新列表后重新提交";
+
+    /**
+     * 主负责人冲突的提示：必须点明「已有主负责人」，并把下一步动作写出来。
+     *
+     * <p>与主联系人同源：操作人看到「数据冲突」时无从判断该改什么，只有告诉他别人刚占了这个位置、
+     * 要先刷新看到最新的负责人，他才不会把同一份请求反复提交。
+     */
+    private static final String PRIMARY_ASSIGNEE_TAKEN_MESSAGE = "该货主已有主负责人，请刷新后重试";
 
     private OwnerConstraintTranslator() {
     }
@@ -128,6 +139,42 @@ final class OwnerConstraintTranslator {
         }
         if (cause.contains(OWNER_CONTACT_PRIMARY_UNIQUE_INDEX)) {
             return new BizException(ErrorCode.CONFLICT, PRIMARY_CONTACT_TAKEN_MESSAGE);
+        }
+        return e;
+    }
+
+    /**
+     * 翻译负责客服写入撞上的角色唯一索引，其余约束原样返回。
+     *
+     * <p><b>为什么会撞上：</b>{@code replace} 的语义是「删同角色旧行 + 插新行」，并发下两笔「改主负责人」
+     * 可能都走完了删除那一步（各自删掉自己看到的那一行，删除命中零行也算无操作），后写的一笔插入时
+     * 被 {@code ux_owner_assignee_role} 拒绝。这是一次能被如实解释的正常失败——别人先改了同一角色——
+     * 因此翻译成业务错误，而不是让人在 50000 上看到一条 SQL 报错。
+     *
+     * <p><b>为什么复用泛化的 {@link ErrorCode#CONFLICT} 而不新增专用码：</b>该码的语义正是
+     * 「当前状态与提交冲突，重试可能成功」，与这次失败吻合；为一个低频并发场景扩错误码表，
+     * 会让前端多一个只在极少数时刻才出现的分支。区分度由提示文案承担，见
+     * {@link #PRIMARY_ASSIGNEE_TAKEN_MESSAGE}。负责人写入还受外键与 {@code ck_assignee_relation} 约束，
+     * 那些不属于本用例可解释的失败，仍按类注释的原则原样上抛。
+     *
+     * <p><b>调用方必须只把主角色那一次 {@code replace} 包进 {@code try}：</b>本方法假定入参异常只可能来自
+     * 那一条写语句，而提示说的是「已有主负责人」。把副负责人那次写入、或审计等其他写入一起包住，
+     * 一次「审计表写不进去」就会被报成「该货主已有主负责人」——那是谎报，而且会把真正的存储故障藏起来。
+     * 副负责人撞上同一索引时也不走这里：它的失败不叫「已有主负责人」，按未知约束上抛比编一句假话好。
+     *
+     * <p><b>这里不查库：</b>翻译只需要约束名。因此与 {@link #translateInsert} 的前缀反查不同——
+     * 这条写入发生在事务里，撞约束之后 PostgreSQL 已把事务置为 aborted，本方法不会再发出一条必然失败的查询。
+     *
+     * @param e 数据库抛出的完整性约束冲突
+     * @return 已翻译的业务异常；约束未知时为原始异常，由全局异常处理归到 50000
+     */
+    static RuntimeException translateAssigneeWrite(DataIntegrityViolationException e) {
+        String cause = causeOf(e);
+        if (cause == null) {
+            return e;
+        }
+        if (cause.contains(OWNER_ASSIGNEE_ROLE_UNIQUE_INDEX)) {
+            return new BizException(ErrorCode.CONFLICT, PRIMARY_ASSIGNEE_TAKEN_MESSAGE);
         }
         return e;
     }

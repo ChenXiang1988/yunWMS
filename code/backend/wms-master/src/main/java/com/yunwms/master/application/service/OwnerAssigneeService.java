@@ -13,6 +13,7 @@ import com.yunwms.master.domain.port.OwnerRepository;
 import com.yunwms.master.domain.port.StaffLookup;
 import com.yunwms.web.api.ErrorCode;
 import com.yunwms.web.exception.BizException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,6 +52,16 @@ import java.util.OptionalLong;
  * 两种中间态都不该被别的请求看见；审计又必须与业务变更同生共死，否则会留下「改了但没留痕」与
  * 「留了痕但没改」两种都要人工核对的残局。{@link #view} 不加事务：两次只读查询各取自己的快照，
  * 默认隔离级别下加注解也不会让这一对更一致（与 {@code OwnerAssigneeLookupService} 同一处理）。
+ *
+ * <p><b>并发撞上 {@code ux_owner_assignee_role} 已翻译成 40900，不再按 50000 上抛：</b>
+ * 事务内的原子性只保证单笔请求不留中间态，挡不住两笔并发的替换——两边可能都走完「删同角色旧行」
+ * （删除命中零行也是无操作），后写的插入被唯一索引拒绝。那是一次能被如实解释的正常失败（别人先改了
+ * 同一角色），由 {@link OwnerConstraintTranslator} 翻成「该货主已有主负责人，请刷新后重试」，
+ * 约束名到错误码的映射仍只归那一处，本类不判约束名。
+ *
+ * <p><b>{@code catch} 只包主角色那一次 {@link OwnerAssigneeRepository#replace}：</b>同一个方法里还有副负责人
+ * 写入、{@code remove} 与审计，它们各自的库异常含义不同，一并报成「已有主负责人」既是谎报，
+ * 也会把真正的存储故障（例如审计表写不进去）藏进一条看似正常的业务提示里。
  *
  * <p><b>审计记员工标识，不记姓名：</b>姓名会随改名变化，而审计表只追加——记了姓名就同时存在
  * 「当时的姓名」与「现在的姓名」两份，读日志的人无从判断哪个是准的。对象类型取 {@code OWNER}、
@@ -122,9 +133,13 @@ public class OwnerAssigneeService {
      * 两条语句顺序本身不影响最终结果（唯一索引建在角色上，不是建在人上），
      * 但先写必有的那一条，读代码的人不必先排除「主有没有写完」这个念头。
      *
+     * <p><b>并发写同一角色的失败在这里被翻译：</b>后写的一笔撞上 {@code ux_owner_assignee_role} 时抛 40900，
+     * 提示「该货主已有主负责人，请刷新后重试」——两条并发请求只有一条生效，另一条刷新后再提交。
+     *
      * @param command 配置入参；主负责人为空或与副负责人相同都会被拒绝
      * @throws BizException 当前会话无效（40100）；货主不存在、已逻辑删除或不在当前数据范围内（40400）；
-     *                      主负责人为空、主副为同一名员工、任一标识不是当前在册的启用员工（40000）
+     *                      主负责人为空、主副为同一名员工、任一标识不是当前在册的启用员工（40000）；
+     *                      并发下另一笔请求先写入了同一角色（40900）
      */
     @Transactional
     public void assign(AssignOwnerAssigneeCommand command) {
@@ -157,7 +172,13 @@ public class OwnerAssigneeService {
         Long previousPrimary = findAssigneeUserId(owner.id(), AssigneeRelation.PRIMARY);
         Long previousSecondary = findAssigneeUserId(owner.id(), AssigneeRelation.SECONDARY);
 
-        ownerAssigneeRepository.replace(owner.id(), AssigneeRelation.PRIMARY, primaryUserId, operatorId);
+        try {
+            ownerAssigneeRepository.replace(owner.id(), AssigneeRelation.PRIMARY, primaryUserId, operatorId);
+        } catch (DataIntegrityViolationException e) {
+            // 只包这一条写语句：下面的副负责人写入、remove 与审计各有各的失败含义，
+            // 把它们一并说成「已有主负责人」是谎报，也会把真实的存储故障藏起来（见类注释）
+            throw OwnerConstraintTranslator.translateAssigneeWrite(e);
+        }
         if (secondaryUserId == null) {
             // 提交「不设副」与「本来就没有副」都要落到同一个事实：该角色没有人。
             // remove 命中零行是无操作，因此不必先判有没有旧值

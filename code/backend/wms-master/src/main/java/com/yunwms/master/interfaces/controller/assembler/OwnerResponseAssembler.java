@@ -1,6 +1,7 @@
 package com.yunwms.master.interfaces.controller.assembler;
 
 import com.yunwms.master.application.dto.CreatedOwner;
+import com.yunwms.master.application.dto.OwnerAssigneeView;
 import com.yunwms.master.application.dto.OwnerDetail;
 import com.yunwms.master.application.dto.OwnerPage;
 import com.yunwms.master.application.dto.ProvisionedOwnerAccount;
@@ -8,6 +9,7 @@ import com.yunwms.master.application.dto.TerminationImpact;
 import com.yunwms.master.domain.model.OwnerAddress;
 import com.yunwms.master.domain.model.OwnerContact;
 import com.yunwms.master.interfaces.controller.response.CreatedOwnerResponse;
+import com.yunwms.master.interfaces.controller.response.OwnerAssigneeResponse;
 import com.yunwms.master.interfaces.controller.response.OwnerContactResponse;
 import com.yunwms.master.interfaces.controller.response.OwnerDetailResponse;
 import com.yunwms.master.interfaces.controller.response.OwnerListItemResponse;
@@ -145,6 +147,28 @@ public class OwnerResponseAssembler {
         return contacts.stream()
                 .map(this::toContactResponse)
                 .toList();
+    }
+
+    /**
+     * 组装货主负责客服的响应。
+     *
+     * <p><b>空角色必须转成 {@code null}，不能直接 {@code Long.toString}：</b>对 {@code null} 调用它得到的是
+     * 字符串 {@code "null"}，前端会当成一名标识为 null 的员工渲染出来，而实际情况是「这个角色还没有人」。
+     * 三种「空」在页面上是三件事，转换只在这一处做，避免每个消费点各自判一次。
+     *
+     * <p>{@code ownerId} 原样回带用例给的值（就是路径里那个），不在这里另取一次：它不参与任何判定，
+     * 只是供前端丢弃切换货主后才返回的过期响应（理由见 {@code OwnerAssigneeResponse}）。
+     *
+     * @param view 负责客服的显示模型
+     * @return 负责客服响应体；主、副负责人未配置时对应字段为 {@code null}
+     */
+    public OwnerAssigneeResponse toAssigneeResponse(OwnerAssigneeView view) {
+        Long primaryUserId = view.primaryUserId();
+        Long secondaryUserId = view.secondaryUserId();
+        return new OwnerAssigneeResponse(
+                Long.toString(view.ownerId()),
+                primaryUserId == null ? null : Long.toString(primaryUserId),
+                secondaryUserId == null ? null : Long.toString(secondaryUserId));
     }
 
     private static OwnerListItemResponse toListItem(OwnerPage.Summary summary) {
