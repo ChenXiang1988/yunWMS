@@ -199,9 +199,4 @@ public class UserQueryImpl implements UserQuery {
         return status == null ? null : status.name();
     }
 
-    @Override
-    public boolean existsById(long userId) {
-        return sysUserMapper.selectCount(Wrappers.<SysUserEntity>lambdaQuery()
-                .eq(SysUserEntity::getId, userId)) > 0;
-    }
 }
