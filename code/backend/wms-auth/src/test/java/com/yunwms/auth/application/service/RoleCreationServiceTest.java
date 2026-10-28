@@ -1,9 +1,14 @@
 package com.yunwms.auth.application.service;
 
+import com.yunwms.auth.application.audit.AuditSnapshotKeys;
 import com.yunwms.auth.application.command.CreateRoleCommand;
 import com.yunwms.auth.application.dto.CreatedRole;
+import com.yunwms.auth.domain.model.AuditAction;
+import com.yunwms.auth.domain.model.AuditBizType;
+import com.yunwms.auth.domain.model.AuditEntry;
 import com.yunwms.auth.domain.model.DataScopeType;
 import com.yunwms.auth.domain.model.NewRole;
+import com.yunwms.auth.domain.port.AuditRecorder;
 import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.RoleRegistrar;
 import com.yunwms.web.api.ErrorCode;
@@ -51,6 +56,7 @@ class RoleCreationServiceTest {
     private RoleRegistrar roleRegistrar;
     private CurrentSession currentSession;
     private DataScopeOwnerValidator dataScopeOwnerValidator;
+    private AuditRecorder auditRecorder;
     private RoleCreationService roleCreationService;
 
     @BeforeEach
@@ -60,7 +66,9 @@ class RoleCreationServiceTest {
         // 校验器本身要查「货主是否可用」，那是集成测试的事；这里只关心用例把什么交给它、
         // 以及未指定范围时补的是哪个默认值
         dataScopeOwnerValidator = mock(DataScopeOwnerValidator.class);
-        roleCreationService = new RoleCreationService(roleRegistrar, currentSession, dataScopeOwnerValidator);
+        auditRecorder = mock(AuditRecorder.class);
+        roleCreationService = new RoleCreationService(
+                roleRegistrar, currentSession, dataScopeOwnerValidator, auditRecorder);
         given(currentSession.currentUserId()).willReturn(OptionalLong.of(OPERATOR_ID));
     }
 
@@ -157,6 +165,8 @@ class RoleCreationServiceTest {
 
         assertThat(failure.errorCode()).isEqualTo(ErrorCode.ROLE_CODE_TAKEN);
         assertThat(failure.getMessage()).isEqualTo("角色编码已被占用（含已删除的角色）");
+        // 库里一行都没留下，这次建档没有发生，也就不该留痕
+        verifyNoInteractions(auditRecorder);
     }
 
     @Test
@@ -192,7 +202,7 @@ class RoleCreationServiceTest {
         BizException failure = failureOf(command(CODE, NAME, null, List.of()));
 
         assertThat(failure.errorCode()).isEqualTo(ErrorCode.UNAUTHORIZED);
-        verifyNoInteractions(roleRegistrar);
+        verifyNoInteractions(roleRegistrar, auditRecorder);
     }
 
     @Test
@@ -225,6 +235,40 @@ class RoleCreationServiceTest {
         assertThat(captor.getValue().dataScopeType()).isEqualTo(DataScopeType.CUSTOM);
         assertThat(captor.getValue().ownerIds()).containsExactlyInAnyOrder(7L, 8L);
         verify(dataScopeOwnerValidator).requireConfigurable(DataScopeType.CUSTOM, Set.of(7L, 8L));
+    }
+
+    @Test
+    @DisplayName("留痕：建角色成功写一条 ROLE/CREATE，对象标识与摘要都用角色编码")
+    void shouldRecordCreationAudit() {
+        given(roleRegistrar.register(any(NewRole.class), anyLong())).willReturn(NEW_ROLE_ID);
+
+        roleCreationService.create(command("  CS_STAFF  ", " 客服 ", " 对接货主 ", List.of(4L, 3L)));
+
+        AuditEntry entry = captureSingleAudit();
+        assertThat(entry.bizType()).isEqualTo(AuditBizType.ROLE);
+        assertThat(entry.action()).isEqualTo(AuditAction.CREATE);
+        // 编码是程序引用角色的标识，也是管理端追溯时输入的那一个
+        assertThat(entry.bizId()).isEqualTo(CODE);
+        assertThat(entry.summary()).isEqualTo("新建角色 " + CODE);
+        assertThat(entry.beforeValue()).isNull();
+        assertThat(entry.afterValue()).containsOnlyKeys(AuditSnapshotKeys.ROLE);
+        assertThat(entry.afterValue())
+                .containsEntry("code", CODE)
+                .containsEntry("name", NAME)
+                .containsEntry("builtin", false)
+                .containsEntry("status", "ACTIVE")
+                .containsEntry("dataScopeType", "CUSTOM");
+    }
+
+    /**
+     * 取回本次唯一一条审计内容。
+     *
+     * @return 提交给审计端口的日志内容
+     */
+    private AuditEntry captureSingleAudit() {
+        ArgumentCaptor<AuditEntry> captor = ArgumentCaptor.forClass(AuditEntry.class);
+        verify(auditRecorder).record(captor.capture());
+        return captor.getValue();
     }
 
     private static CreateRoleCommand command(String code, String name, String remark, List<Long> menuIds) {
