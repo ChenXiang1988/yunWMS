@@ -8,11 +8,13 @@ import com.yunwms.master.application.dto.ProvisionedOwnerAccount;
 import com.yunwms.master.application.dto.TerminationImpact;
 import com.yunwms.master.domain.model.OwnerAddress;
 import com.yunwms.master.domain.model.OwnerContact;
+import com.yunwms.master.domain.model.OwnerTaxRegistration;
 import com.yunwms.master.interfaces.controller.response.CreatedOwnerResponse;
 import com.yunwms.master.interfaces.controller.response.OwnerAssigneeResponse;
 import com.yunwms.master.interfaces.controller.response.OwnerContactResponse;
 import com.yunwms.master.interfaces.controller.response.OwnerDetailResponse;
 import com.yunwms.master.interfaces.controller.response.OwnerListItemResponse;
+import com.yunwms.master.interfaces.controller.response.OwnerTaxResponse;
 import com.yunwms.master.interfaces.controller.response.OwnerTerminationImpactResponse;
 import com.yunwms.master.interfaces.controller.response.ProvisionedOwnerAccountResponse;
 import com.yunwms.web.api.PageResult;
@@ -146,6 +148,45 @@ public class OwnerResponseAssembler {
     public List<OwnerContactResponse> toContactListResponse(List<OwnerContact> contacts) {
         return contacts.stream()
                 .map(this::toContactResponse)
+                .toList();
+    }
+
+    /**
+     * 组装单条税号的响应。
+     *
+     * <p>只把标识转成字符串，其余字段原样回带：用例返回的就是这次落库的值（它刻意不回读一次库），
+     * 在这里再裁剪或转义，响应与库里的内容就会不一致，而审计留痕记的是落库值。
+     *
+     * <p><b>中间四列的顺序是本方法唯一的陷阱：</b>国家、州省、类型、号码都是字符串，写反不会被编译
+     * 拦下，只在页签上把国家显示成州省时才会被发现。因此这里的顺序与记录声明的顺序逐字对齐，
+     * 不放任何「顺手加工」（如把空州省转成空串）：{@code province} 为 {@code null} 的含义是
+     * 「这条税号没有州省」，与空串是两件事，而库里的空州省正是一条合法的国家级登记。
+     *
+     * @param tax 税号
+     * @return 税号响应体
+     */
+    public OwnerTaxResponse toTaxResponse(OwnerTaxRegistration tax) {
+        return new OwnerTaxResponse(
+                Long.toString(tax.id()),
+                tax.country(),
+                tax.province(),
+                tax.taxType(),
+                tax.taxNumber(),
+                tax.isDefault());
+    }
+
+    /**
+     * 组装税号列表响应。
+     *
+     * <p>保持用例返回的顺序（国家、州省、类型升序），不在这里再排一次：顺序是仓储端口契约的一部分，
+     * 两处各排一次时「空州省排在前面还是后面」会得到两个答案，而两处都「看起来对」。
+     *
+     * @param taxes 税号列表，可为空列表
+     * @return 税号响应体列表，恒不为 {@code null}
+     */
+    public List<OwnerTaxResponse> toTaxListResponse(List<OwnerTaxRegistration> taxes) {
+        return taxes.stream()
+                .map(this::toTaxResponse)
                 .toList();
     }
 
