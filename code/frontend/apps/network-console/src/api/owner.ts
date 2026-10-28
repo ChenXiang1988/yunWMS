@@ -428,3 +428,110 @@ export function updateOwnerTax(
 export function deleteOwnerTax(ownerId: string, taxId: string): Promise<void> {
   return http.delete<void, void>(`/console/owners/${ownerId}/taxes/${taxId}`)
 }
+
+/**
+ * 开通货主主账号的请求体，字段与后端 `OwnerAccountRequest` 一一对应。
+ *
+ * 只有姓名与初始密码：登录名由系统按货主编码生成，请求体里没有它；手机号属联系人
+ * 档案，货主侧角色属权限模块，也都不在这里。多传字段后端返回 40000（不静默忽略）。
+ */
+export interface OwnerAccountPayload {
+  /** 主账号姓名（展示名），必填，最长 64 个字符；登录货主端后显示在页头，与登录名无关 */
+  displayName: string
+  /**
+   * 初始密码明文，必填，需满足后端密码策略。
+   *
+   * 明文只出现在这一次请求体里：服务端只存哈希并把账号标记为首次登录须改密，
+   * 前端提交后立即从组件状态里清掉，不写存储、不回显、不进日志。
+   */
+  initialPassword: string
+}
+
+/**
+ * 开通主账号的响应，字段与后端 `CreatedOwnerAccountResponse` 一致。
+ *
+ * 不回带密码，也不回带角色与数据范围：前者不落前端，后者由后端按货主侧角色决定。
+ */
+export interface CreatedOwnerAccount {
+  /** 新建账号的标识，字符串形式的十进制整数；后续停用、重置密码用它定位 */
+  accountId: string
+  /** 登录名，等于该货主的系统编码，形如 OWNER0001；系统生成、不可修改 */
+  loginName: string
+}
+
+/**
+ * 为货主开通主账号。
+ *
+ * 只有「合作中」的货主可以开号：其余状态返回 40900 且提示里带当前状态。同一货主
+ * 至多一个主账号，重复开号同样 40900，但提示里带该货主已有的登录名；登录名被别的
+ * 货主占用时提示是「已被其他账号占用」——两种情形处置不同，前端不判文案、只透传。
+ *
+ * 开号是一次性动作：成功后该货主不能再次开号，前端据此把入口置为不可用，
+ * 见 `views/customer/account-model.ts` 的 `canOpenOwnerAccount`。
+ */
+export function openOwnerAccount(
+  ownerId: string,
+  payload: OwnerAccountPayload
+): Promise<CreatedOwnerAccount> {
+  return http.post<CreatedOwnerAccount, CreatedOwnerAccount, OwnerAccountPayload>(
+    `/console/owners/${ownerId}/account`,
+    payload
+  )
+}
+
+/**
+ * 审计日志行，字段与后端 `AuditLogItemResponse` 一一对应。
+ *
+ * `bizId` 是对象标识：货主档案及其子表记的是**货主编码**（`OWNER0001`），不是数字标识，
+ * 用 `owner.id` 去查会一条也查不到。`beforeValue` / `afterValue` 原样返回——无变更前值
+ * （如新增）时为 null，子表类日志保存的是完整集合快照而不是差异。
+ */
+export interface AuditLogItem {
+  /** 日志标识，字符串形式的十进制整数 */
+  id: string
+  /** 审计对象类型编码，如 OWNER、OWNER_CONTACT、SKU、USER */
+  bizType: string
+  /** 对象标识，与 bizType 一起定位被审计的那条数据 */
+  bizId: string
+  /** 动作编码：CREATE / UPDATE / DELETE / AUDIT / PERMISSION_CHANGE / LOGIN / LABEL_PRINT */
+  action: string
+  /** 操作人标识，系统内部触发为 null */
+  operatorId: string | null
+  /** 操作人姓名，写入当时的快照，不随人员之后改名而变化 */
+  operatorName: string | null
+  /** 来源地址；取不到当前请求时为 null */
+  operatorIp: string | null
+  /** 来源端编码：CONSOLE 仓网端、PORTAL 货主端；系统内部触发或来源无法判定时为 null */
+  sourcePortal: string | null
+  /** 变更摘要，人读的一句话；没有摘要时为 null */
+  summary: string | null
+  /** 变更前快照，原样返回；无变更前值（如新增）时为 null */
+  beforeValue: Record<string, unknown> | null
+  /** 变更后快照，原样返回；无变更后值（如删除）时为 null */
+  afterValue: Record<string, unknown> | null
+  /** 操作时间，ISO 8601 带时区（UTC） */
+  createdAt: string
+}
+
+/** 审计查询参数，与 `GET /api/console/audit-logs` 的 query 一一对应 */
+export interface AuditLogQuery {
+  /** 对象类型编码，必填；货主详情用 OWNER */
+  bizType: string
+  /** 对象标识，必填；货主用货主编码而不是数字标识 */
+  bizId: string
+  pageNo: number
+  /** 每页条数，取值 1 至 200；越界后端返回 40000 */
+  pageSize: number
+}
+
+/**
+ * 按对象查询审计日志。
+ *
+ * 两个筛选条件都必填：少任一个就退化成全表分页，所以前端不提供「只看类型」这类调用。
+ * 响应按操作时间倒序，前端不重排。本接口只读——审计日志不提供删除与修改端点。
+ */
+export function listAuditLogs(query: AuditLogQuery): Promise<PageResult<AuditLogItem>> {
+  return http.get<PageResult<AuditLogItem>, PageResult<AuditLogItem>>('/console/audit-logs', {
+    params: query
+  })
+}
