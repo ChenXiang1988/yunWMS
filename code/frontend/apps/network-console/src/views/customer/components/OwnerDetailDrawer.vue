@@ -13,15 +13,17 @@ import { EmptyState, StatusTag } from '@yunwms/ui-web'
 import type { OwnerDetail } from '@/api/owner'
 import { PLACEHOLDER, displayText, formatIsoDateTime, ownerTypeLabel } from '../owner-model'
 import { ownerStatusText } from '../owner-status'
+import OwnerAccountTab from './OwnerAccountTab.vue'
+import OwnerAuditDrawer from './OwnerAuditDrawer.vue'
 import OwnerContactTab from './OwnerContactTab.vue'
 import OwnerTaxTab from './OwnerTaxTab.vue'
 
 /**
- * 货主详情抽屉，自己持有四个页签的容器：基本信息 / 联系人 / 税号 / 账号。
+ * 货主详情抽屉，自己持有四个页签的容器：基本信息 / 联系人 / 税号 / 账号，
+ * 以及右上角的操作日志入口（`ui-structure.md`：日志是抽屉，不占页签）。
  *
- * 页签顺序取自 `ui-structure.md` 的「货主详情」。联系人（`OwnerContactTab.vue`）与
- * 税号（`OwnerTaxTab.vue`）已接入数据；账号的数据来源尚未提供，页签里放明确占位——
- * 藏掉页签会让人以为没有这项功能，占位则说清「还没接入」。
+ * 页签顺序取自 `ui-structure.md` 的「货主详情」。联系人（`OwnerContactTab.vue`）、
+ * 税号（`OwnerTaxTab.vue`）与账号（`OwnerAccountTab.vue`）都已接入。
  *
  * 数据由页面注入（`docs/frontend.md` §4.3），这里只负责展示与抛出操作意图。
  */
@@ -56,9 +58,19 @@ const emit = defineEmits<{
 /** 当前页签：每次打开都回到基本信息，与 `ui-structure.md` 的「停在基本信息」一致 */
 const activeTab = ref('basic')
 
+/**
+ * 操作日志抽屉：与详情并列的第二层抽屉。
+ *
+ * 它只读、按货主编码查；关闭它只置自己的 `open`，不动详情的 `v-model:open`——看完日志
+ * 应当回到详情，而不是连带把详情关掉。反过来，详情一开一关都必须把它收起：日志属于
+ * 当前这次详情，留着会让下一个货主看到上一个的日志。
+ */
+const auditOpen = ref(false)
+
 watch(
   () => props.open,
   (open) => {
+    auditOpen.value = false
     if (open) {
       activeTab.value = 'basic'
     }
@@ -72,10 +84,18 @@ const ownerTypeText = computed(() =>
 function close(): void {
   emit('update:open', false)
 }
+
+function openAudit(): void {
+  auditOpen.value = true
+}
 </script>
 
 <template>
   <Drawer :open="open" title="客户详情" :width="720" :mask-closable="false" @close="close">
+    <template #extra>
+      <Button v-if="owner" size="small" @click="openAudit">操作日志</Button>
+    </template>
+
     <div v-if="loading && !owner" class="detail__loading">
       <Spin />
     </div>
@@ -137,10 +157,7 @@ function close(): void {
         </TabPane>
 
         <TabPane key="accounts" tab="账号">
-          <EmptyState description="主账号管理待接入" />
-          <p class="detail__placeholder">
-            本页签的数据来源尚未提供。接入后在此开通与停用货主的主账号、重置密码。
-          </p>
+          <OwnerAccountTab :owner-id="owner.id" :owner-code="owner.code" :status="owner.status" />
         </TabPane>
       </Tabs>
     </template>
@@ -157,6 +174,16 @@ function close(): void {
       </div>
     </template>
   </Drawer>
+
+  <!--
+    日志抽屉作为详情抽屉的同级根节点，不放进上者的内容区：两层的 z-index 相同，
+    谁在上由 DOM 顺序决定，写在后面才稳定盖在详情之上（见 `OwnerAuditDrawer.vue` 文件头）。
+  -->
+  <OwnerAuditDrawer
+    v-model:open="auditOpen"
+    :owner-code="owner?.code ?? ''"
+    :owner-name="owner?.name ?? ''"
+  />
 </template>
 
 <style scoped>
@@ -194,13 +221,6 @@ function close(): void {
 
 .detail__mono {
   font-family: var(--font-mono);
-}
-
-.detail__placeholder {
-  margin: 0;
-  text-align: center;
-  font-size: var(--text-xs);
-  color: var(--color-text-tertiary);
 }
 
 .detail__footer {
