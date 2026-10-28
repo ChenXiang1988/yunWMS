@@ -128,5 +128,102 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+
+        <plugins>
+            <!--
+                依赖准入的构建期执行点，决策见 openspec/changes/2026-10-29-enforce-dependency-guard/design.md 的 D1。
+                AGENTS.md「禁止引入 GPL/AGPL/SSPL 依赖」与 openspec/config.yaml 的同名约束此前只活在文档里：
+                往任一 pom 加一个依赖不会让构建变红，只能靠 review 发现。这里把它变成 validate 阶段的硬失败。
+
+                放在父 pom 的 <build><plugins>：父 pom packaging=pom，插件会继承到 wms-web/auth/master/app，
+                各模块不必重复声明，也就不会出现「某个模块忘了带门禁」。绑 validate 而不是 package，
+                是为了在 compile / test / verify 之前就失败——否则 ArchUnit 与 Testcontainers 会先跑一轮，
+                报错离真正的原因隔了十几个阶段。
+
+                诚实边界：bannedDependencies 按「坐标」匹配，Maven 的依赖元数据里没有许可证字段可供判定，
+                所以它挡不住一个从未被点名过的 AGPL 库。这一层由同一个 change 的准入清单兜底
+                （任何新依赖必须先登记，登记即触发 AGENTS.md 的准入三问）。
+                加了 enforcer 不等于许可证安全，别把这两件事当成一件事。
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <!--
+                    版本写死，不吃 Spring Boot parent 的 pluginManagement：规则语义随插件版本变化，
+                    跟 parent 走等于把门禁的行为交给「升级 Spring Boot 的那次提交」顺带决定，
+                    而那次提交的评审目标是框架升级，没人会看门禁。
+                -->
+                <version>3.6.3</version>
+                <executions>
+                    <execution>
+                        <id>dependency-guard</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <!--
+                                    「同一份代码在不同 JDK 上跑出不同结论」比编译失败更难查：
+                                    record 模式、虚拟线程、switch 模式匹配都在 21 才定稿，
+                                    低版本上要么编译不过、要么换了语义却照样通过。
+                                -->
+                                <requireJavaVersion>
+                                    <version>[21,)</version>
+                                </requireJavaVersion>
+                                <!--
+                                    下限取 wrapper 实测版本（.mvn/wrapper/maven-wrapper.properties 里的 3.9.9），
+                                    不是随手写的整数：profile 激活与依赖仲裁的行为随 Maven 版本变化，
+                                    钉住它才能让本机与 CI 得到同一棵依赖树。
+                                -->
+                                <requireMavenVersion>
+                                    <version>[3.9.9,)</version>
+                                </requireMavenVersion>
+                                <!--
+                                    黑名单每条只写「为什么禁」——坐标本身已经说明了禁的是什么。
+                                    searchTransitive=true：被点名的库往往不是自己加的，而是跟着某个 starter 进来；
+                                    只查直接依赖等于锁了正门、后门敞开。
+                                -->
+                                <bannedDependencies>
+                                    <searchTransitive>true</searchTransitive>
+                                    <excludes>
+                                        <!--
+                                            XXL-Job：AGPL 家族，AGENTS.md 禁止项与 config.yaml 许可约束点名。
+                                            默认零商业授权预算下，AGPL 的闭源分发义务无法接受；
+                                            本仓库当前也没有分布式调度的真实需求，不因「以后可能要」先引入。
+                                        -->
+                                        <exclude>com.xuxueli:*</exclude>
+                                        <!--
+                                            JeeWMS：AGPL，config.yaml 点名禁止的同类完整 WMS。
+                                            它的领域模型与本项目不兼容，不存在「只借鉴一个模块」的引入路径，
+                                            整体引入等于把别人的模型塞进我们的库表。
+                                        -->
+                                        <exclude>*:jee-wms*</exclude>
+                                        <exclude>*:jeewms*</exclude>
+                                        <exclude>com.jeewms:*</exclude>
+                                        <exclude>org.jeewms:*</exclude>
+                                        <!--
+                                            MySQL 驱动：GPL 双许可，商用分发需向 Oracle 采购商业许可，
+                                            与「默认零商业授权预算」直接冲突，config.yaml 点名禁止。
+                                            持久层固定 PostgreSQL，没有需要 MySQL 兼容的部署形态。
+                                        -->
+                                        <exclude>com.mysql:*</exclude>
+                                        <exclude>mysql:*</exclude>
+                                        <!--
+                                            内嵌 Redis：会在测试期下载并拉起真实的 Redis 服务端二进制，
+                                            等于把「Redis 7.4+ 不得引入」这条部署约束绕进了构建——
+                                            构建机上跑的到底是哪个服务端版本将无人负责，也无从审计。
+                                            测试需要 Redis 时连 docker-compose.dev.yml 的 Valkey 8，
+                                            或用 Testcontainers 显式声明镜像版本，而不是用内嵌实现。
+                                        -->
+                                        <exclude>*:embedded-redis*</exclude>
+                                    </excludes>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
     </build>
 </project>
