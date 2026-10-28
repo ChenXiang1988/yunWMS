@@ -1,7 +1,7 @@
 package com.yunwms.master.domain.model;
 
 /**
- * 货主域能产生的审计事件：五个写用例各一个，不再多。
+ * 货主域能产生的审计事件：每个写用例各一个，不再多。
  *
  * <p><b>为什么不复制一份 {@code AuditAction} / {@code AuditBizType}：</b>同一套词汇在两处定义，
  * 改一处就漏一处，而漏掉的那一处不会编译失败——只会让某些日志再也查不出来。本枚举因此只声明
@@ -16,6 +16,12 @@ package com.yunwms.master.domain.model;
  * <p><b>{@link #OWNER_ACCOUNT_OPENED} 的对象类型取 {@code OWNER} 而不是 {@code USER}：</b>按货主编码要能
  * 查到完整链条（建档 → 改状态 → 开号）。记成 {@code USER} 的话，从货主详情追溯时这一条会消失，
  * 而管理员恰恰是从货主页看这件事的。登录名同时写进摘要与快照。
+ *
+ * <p><b>三个联系人事件同样取 {@code OWNER}，不新增 {@code CONTACT} 对象类型：</b>与上一条同一取舍——
+ * 管理端是<b>从货主详情的联系人页签</b>看这些记录的，按货主编码要能查到完整链条
+ * （建档 → 改状态 → 改联系人 → 开号）。记成独立类型后，从货主详情追溯时这几条会消失，
+ * 而追溯的入口恰恰在那里。代价要说清楚：这三条日志的 {@code biz_id} 只有货主编码，
+ * 同一货主下的多条联系人日志只能靠前后快照的内容区分，不靠对象标识。
  */
 public enum OwnerAuditEvent {
 
@@ -32,7 +38,16 @@ public enum OwnerAuditEvent {
     OWNER_STATUS_CHANGED("OWNER", "UPDATE", "货主状态流转"),
 
     /** 开通主账号：绑在货主编码上的账号创建。 */
-    OWNER_ACCOUNT_OPENED("OWNER", "CREATE", "开通主账号");
+    OWNER_ACCOUNT_OPENED("OWNER", "CREATE", "开通主账号"),
+
+    /** 新增联系人：货主名下的子资源，对象类型沿用 {@code OWNER}，理由见类注释。 */
+    OWNER_CONTACT_CREATED("OWNER", "CREATE", "新增联系人"),
+
+    /** 修改联系人：覆盖五个可编辑字段，置主时还会连带把旧的主联系人清为非主。 */
+    OWNER_CONTACT_UPDATED("OWNER", "UPDATE", "修改联系人"),
+
+    /** 删除联系人：软删除，快照只有变更前值。 */
+    OWNER_CONTACT_DELETED("OWNER", "DELETE", "删除联系人");
 
     private final String bizType;
 

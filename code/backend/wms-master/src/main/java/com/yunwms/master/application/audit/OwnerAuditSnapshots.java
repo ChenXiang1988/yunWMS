@@ -2,6 +2,7 @@ package com.yunwms.master.application.audit;
 
 import com.yunwms.master.domain.model.NewOwner;
 import com.yunwms.master.domain.model.Owner;
+import com.yunwms.master.domain.model.OwnerContact;
 import com.yunwms.master.domain.model.OwnerProfile;
 import com.yunwms.master.domain.model.OwnerStatus;
 import com.yunwms.master.domain.model.SkuPrefix;
@@ -96,6 +97,41 @@ public final class OwnerAuditSnapshots {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("loginName", loginName);
         snapshot.put("accountId", String.valueOf(accountId));
+        return snapshot;
+    }
+
+    /**
+     * 联系人的当前快照：既是新增的变更后值，也是编辑、删除的变更前值。
+     *
+     * <p><b>白名单里包含 {@code phone} 与 {@code email}，这与本类注释里「敏感字段不进快照」的告警存在张力，
+     * 是一次明确的取舍：</b>联系人的全部意义就是「出事时找谁」，不记电话的审计等于一次
+     * 「有记录、但看不出改了什么」的留痕——事后既追不到上一版号码，也说不清这次到底动的是电话还是备注，
+     * 那条日志就只剩「有人动过」这一点信息。类注释里的告警真正针对的是「跟着实体走、无人察觉地自动进表」，
+     * 而这里是把六个键逐个列举，并把决定与代价留在此处，正好是那条告警要求的做法。
+     *
+     * <p><b>边界：</b>进入快照的是 B 端客户在商务往来中主动提供的工作联系方式，不是个人身份类数据；
+     * 号码写错可以在下一次往来中更正，而身份类字段一旦进了只追加的审计表就无法撤回。
+     * 若将来联系人上出现证件号、银行账号、影像件这类字段，仍按本类的白名单逐个评估，
+     * 不因为「电话已经记了」而顺延放行。
+     *
+     * <p>{@code isPrimary} 记 {@link Boolean} 而不是字符串：它是一个布尔事实，事后按 {@code true} 检索
+     * 「这个客户什么时候换过主联系人」是这一位唯一的用途。
+     *
+     * <p>不含联系人的标识与所属货主：标识不进白名单的理由与货主快照一致（它由 {@code bizId} 之外的
+     * 上下文承担），归属则由审计的 {@code bizId}（货主编码）给出。
+     *
+     * @param contact 已落库或即将落库的联系人
+     * @return 快照，键为 {@code name} / {@code roleType} / {@code phone} / {@code email} /
+     *         {@code isPrimary} / {@code remark}；{@code null} 值保留键
+     */
+    public static Map<String, Object> ofContact(OwnerContact contact) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("name", contact.name());
+        snapshot.put("roleType", contact.roleType());
+        snapshot.put("phone", contact.phone());
+        snapshot.put("email", contact.email());
+        snapshot.put("isPrimary", contact.isPrimary());
+        snapshot.put("remark", contact.remark());
         return snapshot;
     }
 
