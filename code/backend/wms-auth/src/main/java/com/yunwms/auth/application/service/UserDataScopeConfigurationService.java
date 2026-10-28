@@ -1,9 +1,14 @@
 package com.yunwms.auth.application.service;
 
+import com.yunwms.auth.application.audit.UserAuditSnapshots;
 import com.yunwms.auth.application.command.ConfigureUserDataScopeCommand;
+import com.yunwms.auth.domain.model.AuditAction;
+import com.yunwms.auth.domain.model.AuditBizType;
+import com.yunwms.auth.domain.model.AuditEntry;
 import com.yunwms.auth.domain.model.DataScopeType;
 import com.yunwms.auth.domain.model.SubjectType;
 import com.yunwms.auth.domain.model.UserProfile;
+import com.yunwms.auth.domain.port.AuditRecorder;
 import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.DataScopeOwnerRegistrar;
 import com.yunwms.auth.domain.port.UserAccountUpdater;
@@ -34,8 +39,12 @@ import java.util.Set;
  * <p>两处写入（{@code sys_user.data_scope_type} 与 {@code sys_data_scope_owner}）在同一个事务里：
  * 只改了类型时，库里的明细还是上一次配置留下的，那一段中间态的范围解析会读到不属于当前配置的货主。
  *
- * <p>不写审计日志（{@code sys_audit_log}）：那属于审计能力（2.8），本用例只保证
- * {@code sys_user.updated_by} 记下操作人。
+ * <p><b>留痕动作是 {@code PERMISSION_CHANGE}：</b>数据范围决定「这个人看得见哪些货主」，
+ * 记成 {@code UPDATE} 会与改展示名混在同一个动作下，事后按动作筛选权限变更时两者分不开。
+ * 快照里 {@code dataScopeType} 是白名单字段，前后两份的差异就落在它上面；
+ * 明细（指定货主标识）不在白名单内——它是一份名单，不是「这个账号是什么」的一部分。
+ *
+ * <p>审计与两处写入同一个事务：失败的配置不会留下一条「改了范围」的记录。
  */
 @Service
 public class UserDataScopeConfigurationService {
@@ -45,17 +54,20 @@ public class UserDataScopeConfigurationService {
     private final DataScopeOwnerRegistrar dataScopeOwnerRegistrar;
     private final DataScopeOwnerValidator dataScopeOwnerValidator;
     private final CurrentSession currentSession;
+    private final AuditRecorder auditRecorder;
 
     public UserDataScopeConfigurationService(UserQuery userQuery,
                                              UserAccountUpdater userAccountUpdater,
                                              DataScopeOwnerRegistrar dataScopeOwnerRegistrar,
                                              DataScopeOwnerValidator dataScopeOwnerValidator,
-                                             CurrentSession currentSession) {
+                                             CurrentSession currentSession,
+                                             AuditRecorder auditRecorder) {
         this.userQuery = userQuery;
         this.userAccountUpdater = userAccountUpdater;
         this.dataScopeOwnerRegistrar = dataScopeOwnerRegistrar;
         this.dataScopeOwnerValidator = dataScopeOwnerValidator;
         this.currentSession = currentSession;
+        this.auditRecorder = auditRecorder;
     }
 
     /**
@@ -97,5 +109,10 @@ public class UserDataScopeConfigurationService {
         // 两者的区别只存在于 sys_user.data_scope_type
         dataScopeOwnerRegistrar.replaceUserOwners(command.userId(),
                 type != null && type.usesOwnerDetails() ? ownerIds : Set.of());
+
+        String loginName = user.summary().loginName();
+        auditRecorder.record(new AuditEntry(AuditBizType.USER, loginName, AuditAction.PERMISSION_CHANGE,
+                "修改数据范围 " + loginName, UserAuditSnapshots.of(user),
+                UserAuditSnapshots.ofDataScopeChanged(user, type)));
     }
 }

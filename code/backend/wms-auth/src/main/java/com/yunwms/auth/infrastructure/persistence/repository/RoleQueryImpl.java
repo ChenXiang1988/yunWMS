@@ -65,10 +65,11 @@ public class RoleQueryImpl implements RoleQuery {
             return List.of();
         }
         return sysRoleMapper.selectList(Wrappers.<SysRoleEntity>lambdaQuery()
-                        .select(SysRoleEntity::getId, SysRoleEntity::getBuiltin)
+                        .select(SysRoleEntity::getId, SysRoleEntity::getCode, SysRoleEntity::getBuiltin)
                         .in(SysRoleEntity::getId, roleIds))
                 .stream()
-                .map(role -> new RoleIdentity(role.getId(), Boolean.TRUE.equals(role.getBuiltin())))
+                .map(role -> new RoleIdentity(role.getId(), role.getCode(),
+                        Boolean.TRUE.equals(role.getBuiltin())))
                 .toList();
     }
 

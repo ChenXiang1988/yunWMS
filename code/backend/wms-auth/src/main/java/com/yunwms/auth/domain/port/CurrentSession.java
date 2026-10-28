@@ -38,6 +38,18 @@ public interface CurrentSession {
     Optional<SubjectType> currentSubjectType();
 
     /**
+     * 取当前会话的登录用户姓名。
+     *
+     * <p>审计写入要用它填 {@code operator_name}：那是写入当时的姓名快照，不随人员之后改名变化
+     * （见 {@code sys_audit_log.operator_name} 的列注释）。放在会话端口上而不是让审计实现回查
+     * {@code sys_user}：回查会让每条审计多一次 SELECT，且账号已被逻辑删除时查不到人，
+     * 只能退回一个更不准确的占位值——而那个人当时确实登录着、确实做了这件事。
+     *
+     * @return 姓名；当前请求没有有效会话、或会话里没有该属性时为空
+     */
+    Optional<String> currentUserDisplayName();
+
+    /**
      * 取当前会话所属的货主标识。
      *
      * <p>只有货主账号会有该属性。会话里的货主标识来自登录时读取的账号行，不从请求参数取：

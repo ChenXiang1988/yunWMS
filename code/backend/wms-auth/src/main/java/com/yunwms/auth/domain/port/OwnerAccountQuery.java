@@ -1,7 +1,9 @@
 package com.yunwms.auth.domain.port;
 
+import java.util.OptionalLong;
+
 /**
- * 按货主统计账号数。
+ * 货主与账号之间的两个归属查询：某货主有几个账号、某个登录名归哪个货主。
  *
  * <p><b>为什么要开这个端口：</b>{@code sys_user} 属于本模块，「某货主名下还有几条账号记录」这个结论
  * 只有本模块能回答。此前 {@code wms-master} 的 {@code OwnerAccountCounter} 是由 {@code wms-app}
@@ -34,4 +36,30 @@ public interface OwnerAccountQuery {
      * @return 账号数量；一条都没有时返回 0
      */
     long countByOwnerId(long ownerId);
+
+    /**
+     * 按登录名反查账号归属的货主。
+     *
+     * <p><b>为什么要这个查询：</b>{@code wms-master} 要为货主开通主账号，登录名由货主系统编码生成。
+     * 「这个货主是不是已经有主账号」与「这个登录名是不是被别的货主占了」是开号前必须分开回答的两个问题，
+     * 而答案只存在 {@code sys_user} 里。把它收成端口，装配层与 master 都不需要认识那张表。
+     *
+     * <p><b>大小写不敏感：</b>唯一索引建在 {@code lower(login_name)} 上（{@code ux_sys_user_login_name}），
+     * 按原值比较既用不到索引，也查不到大小写不同的同一账号；实现必须把入参转小写再比较。
+     *
+     * <p><b>登录名被内部员工占用时返回 empty：</b>员工的 {@code owner_id} 为空，没有归属货主可答。
+     * 这不是「没人占用」——那次开号会在 {@code INSERT} 时撞上唯一索引，由建号用例翻译成 40901。
+     * 本方法不替调用方判断「这个登录名能不能用」，它只回答「归属哪个货主」。
+     *
+     * <p><b>已逻辑删除的账号不计入：</b>与 {@link #countByOwnerId} 同一口径——删除即「已不存在」。
+     * 只排除已删除账号的成本是：若某个货主的主账号被删除，该登录名在库里仍被占用（唯一索引不带
+     * {@code deleted_at} 条件），此时开号由唯一索引拦成 40901，而不是被本方法误报成「已有主账号」。
+     *
+     * <p>不做缓存：一次反查就是一次索引等值查询；缓存会让「另一个请求刚建了同名账号」在本请求里看不见，
+     * 而本方法的存在意义正是把冲突提前说清。
+     *
+     * @param loginName 登录名，调用方保证非空（登录名在 {@code sys_user} 上是 {@code NOT NULL}）
+     * @return 归属货主标识；登录名不存在、已逻辑删除或该账号不归属任何货主时为 empty
+     */
+    OptionalLong findOwnerIdByLoginName(String loginName);
 }

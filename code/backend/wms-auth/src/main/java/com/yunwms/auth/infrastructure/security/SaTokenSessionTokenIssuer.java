@@ -24,6 +24,9 @@ public class SaTokenSessionTokenIssuer implements SessionTokenIssuer {
         session.set(SessionAttributes.LOGIN_AT, origin.loginAt());
         putIfPresent(session, SessionAttributes.SOURCE_ADDRESS, origin.sourceAddress());
         putIfPresent(session, SessionAttributes.CLIENT_IDENTIFIER, origin.clientIdentifier());
+        // 姓名随会话一起固定：审计写入要的是「操作当时的姓名」，改名或删号都不该改写历史记录；
+        // 写入点只有登录一处，漏了它审计就只能记下一个不知道是谁的操作人
+        putIfPresent(session, SessionAttributes.DISPLAY_NAME, account.displayName());
         session.set(SessionAttributes.SUBJECT_TYPE, account.subjectType().name());
         if (account.ownerId() != null) {
             // 货主归属在这里固定进会话：后续按货主过滤读会话，而不是信前端传来的货主标识

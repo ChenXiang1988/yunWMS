@@ -1,7 +1,6 @@
 package com.yunwms.auth.infrastructure.persistence.repository;
 
 import com.yunwms.auth.domain.model.NewUserAccount;
-import com.yunwms.auth.domain.model.UserStatus;
 import com.yunwms.auth.domain.port.UserAccountRegistrar;
 import com.yunwms.auth.infrastructure.persistence.entity.SysUserEntity;
 import com.yunwms.auth.infrastructure.persistence.entity.SysUserRoleEntity;
@@ -66,8 +65,9 @@ public class UserAccountRegistrarImpl implements UserAccountRegistrar {
         entity.setEmail(account.email());
         entity.setWecomUserId(account.wecomUserId());
         entity.setPasswordHash(account.passwordHash());
-        entity.setMustChangePassword(Boolean.TRUE);
-        entity.setStatus(UserStatus.ACTIVE.name());
+        // 两个固定值取自聚合：审计快照同样读它们，两处各写一份迟早会各说各话
+        entity.setMustChangePassword(NewUserAccount.INITIAL_MUST_CHANGE_PASSWORD);
+        entity.setStatus(NewUserAccount.INITIAL_STATUS.name());
         entity.setCreatedBy(operatorId);
         entity.setUpdatedBy(operatorId);
         return entity;

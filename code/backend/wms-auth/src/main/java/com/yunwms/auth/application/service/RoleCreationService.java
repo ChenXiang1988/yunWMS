@@ -1,9 +1,14 @@
 package com.yunwms.auth.application.service;
 
+import com.yunwms.auth.application.audit.RoleAuditSnapshots;
 import com.yunwms.auth.application.command.CreateRoleCommand;
 import com.yunwms.auth.application.dto.CreatedRole;
+import com.yunwms.auth.domain.model.AuditAction;
+import com.yunwms.auth.domain.model.AuditBizType;
+import com.yunwms.auth.domain.model.AuditEntry;
 import com.yunwms.auth.domain.model.DataScopeType;
 import com.yunwms.auth.domain.model.NewRole;
+import com.yunwms.auth.domain.port.AuditRecorder;
 import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.RoleRegistrar;
 import com.yunwms.web.api.ErrorCode;
@@ -35,8 +40,9 @@ import java.util.Set;
  * 只写进角色没写授权或范围时，管理员看到「建成功」而角色一个权限、一个货主都看不到，
  * 与「故意建一个无权限角色」在库里无法区分。
  *
- * <p>不写审计日志（{@code sys_audit_log}）：那属于审计能力（2.8），本用例只保证
- * {@code created_by} / {@code updated_by} 记下操作人。
+ * <p><b>留痕与三张表同一个事务</b>：对象类型 {@code ROLE}，对象标识用角色编码——管理端按编码
+ * 引用角色，用主键则要先知道一个界面上不出现的数字。唯一冲突抛出时整单回滚，
+ * 那条「建了但没建成」的日志不会留下。
  */
 @Service
 public class RoleCreationService {
@@ -47,13 +53,16 @@ public class RoleCreationService {
     private final RoleRegistrar roleRegistrar;
     private final CurrentSession currentSession;
     private final DataScopeOwnerValidator dataScopeOwnerValidator;
+    private final AuditRecorder auditRecorder;
 
     public RoleCreationService(RoleRegistrar roleRegistrar,
                                CurrentSession currentSession,
-                               DataScopeOwnerValidator dataScopeOwnerValidator) {
+                               DataScopeOwnerValidator dataScopeOwnerValidator,
+                               AuditRecorder auditRecorder) {
         this.roleRegistrar = roleRegistrar;
         this.currentSession = currentSession;
         this.dataScopeOwnerValidator = dataScopeOwnerValidator;
+        this.auditRecorder = auditRecorder;
     }
 
     /**
@@ -102,11 +111,16 @@ public class RoleCreationService {
         dataScopeOwnerValidator.requireConfigurable(dataScopeType, ownerIds);
 
         NewRole role = new NewRole(code, name, stripToNull(command.remark()), menuIds, dataScopeType, ownerIds);
+        long roleId;
         try {
-            return new CreatedRole(roleRegistrar.register(role, operatorId), code);
+            roleId = roleRegistrar.register(role, operatorId);
         } catch (DataIntegrityViolationException e) {
+            // 冲突时一行都没留下，也不留审计：这次建档没有发生
             throw RoleConstraintTranslator.translate(e);
         }
+        auditRecorder.record(new AuditEntry(AuditBizType.ROLE, code, AuditAction.CREATE,
+                "新建角色 " + code, null, RoleAuditSnapshots.ofCreated(role)));
+        return new CreatedRole(roleId, code);
     }
 
     /**

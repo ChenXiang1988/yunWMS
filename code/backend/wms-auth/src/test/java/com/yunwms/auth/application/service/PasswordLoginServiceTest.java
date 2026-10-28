@@ -2,11 +2,15 @@ package com.yunwms.auth.application.service;
 
 import com.yunwms.auth.application.command.PasswordLoginCommand;
 import com.yunwms.auth.application.dto.AuthenticatedSubject;
+import com.yunwms.auth.domain.model.AuditAction;
+import com.yunwms.auth.domain.model.AuditBizType;
+import com.yunwms.auth.domain.model.AuditEntry;
 import com.yunwms.auth.domain.model.FailedAttemptState;
 import com.yunwms.auth.domain.model.SessionOrigin;
 import com.yunwms.auth.domain.model.SubjectType;
 import com.yunwms.auth.domain.model.UserAccount;
 import com.yunwms.auth.domain.model.UserStatus;
+import com.yunwms.auth.domain.port.AuditRecorder;
 import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.PasswordHasher;
 import com.yunwms.auth.domain.port.SessionTokenIssuer;
@@ -24,9 +28,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -72,6 +79,7 @@ class PasswordLoginServiceTest {
     private PasswordHasher passwordHasher;
     private SessionTokenIssuer sessionTokenIssuer;
     private CurrentSession currentSession;
+    private AuditRecorder auditRecorder;
     private PasswordLoginService passwordLoginService;
 
     @BeforeEach
@@ -81,11 +89,12 @@ class PasswordLoginServiceTest {
         passwordHasher = mock(PasswordHasher.class);
         sessionTokenIssuer = mock(SessionTokenIssuer.class);
         currentSession = mock(CurrentSession.class);
+        auditRecorder = mock(AuditRecorder.class);
         // 失败计数用真实实现包住同一个仓储 mock：计数参数由 FailedAttemptRecorder 统一装配，
         // 换成 mock 就只能断言「调了记录器」，看不到真正传给库的阈值与窗口
         passwordLoginService = new PasswordLoginService(
                 userAccountRepository, userRoleQuery, passwordHasher, sessionTokenIssuer, currentSession,
-                new FailedAttemptRecorder(userAccountRepository));
+                new FailedAttemptRecorder(userAccountRepository), auditRecorder);
     }
 
     @Test
@@ -351,6 +360,149 @@ class PasswordLoginServiceTest {
 
         assertThat(subject.mustChangePassword()).isFalse();
         verify(currentSession, never()).markMustChangePassword();
+    }
+
+    @Test
+    @DisplayName("登录成功：签发之后写一条 LOGIN 审计，对象标识是登录名，快照含角色与主体类型")
+    void shouldRecordAuditAfterTokenIssued() {
+        given(userAccountRepository.findByLoginName(LOGIN_NAME)).willReturn(Optional.of(account(UserStatus.ACTIVE, null)));
+        given(passwordHasher.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(true);
+        given(userRoleQuery.findActiveRoleCodesByUserId(USER_ID)).willReturn(List.of("CS_STAFF"));
+        given(sessionTokenIssuer.issue(any(UserAccount.class), any(SessionOrigin.class))).willReturn(TOKEN);
+
+        passwordLoginService.login(command(LOGIN_NAME, RAW_PASSWORD));
+
+        AuditEntry entry = capturedEntry();
+        // 登录的主体是账号，不是「登录」这件事本身：对象类型取 USER、动作取 LOGIN
+        assertThat(entry.bizType()).isEqualTo(AuditBizType.USER);
+        assertThat(entry.action()).isEqualTo(AuditAction.LOGIN);
+        // 标识用登录名而不是主键：管理员按登录名检索得到，用 id 则要先知道 id
+        assertThat(entry.bizId()).isEqualTo(LOGIN_NAME);
+        assertThat(entry.summary()).isEqualTo("登录成功 " + LOGIN_NAME);
+        assertThat(entry.beforeValue()).isNull();
+        assertThat(entry.afterValue())
+                .containsEntry("loginName", LOGIN_NAME)
+                .containsEntry("subjectType", "STAFF")
+                .containsEntry("roles", List.of("CS_STAFF"))
+                .containsEntry("mustChangePassword", false);
+        assertNoCredentials(entry);
+        // 审计必须在签发之后：来源端判不出时要靠会话里的主体类型回退，而会话在签发时才建立
+        InOrder inOrder = inOrder(sessionTokenIssuer, auditRecorder);
+        inOrder.verify(sessionTokenIssuer).issue(any(UserAccount.class), any(SessionOrigin.class));
+        inOrder.verify(auditRecorder).record(any(AuditEntry.class));
+    }
+
+    @Test
+    @DisplayName("账号不存在：写一条失败审计，标识是去空格后的登录名，前后快照为空")
+    void shouldRecordAuditWhenLoginNameDoesNotExist() {
+        given(userAccountRepository.findByLoginName("someone-else")).willReturn(Optional.empty());
+
+        failureOf(command("  someone-else  ", RAW_PASSWORD));
+
+        AuditEntry entry = capturedEntry();
+        assertThat(entry.bizType()).isEqualTo(AuditBizType.USER);
+        assertThat(entry.action()).isEqualTo(AuditAction.LOGIN);
+        // 账号不存在时没有账号标识可用，「有人试过这个名字」本身就是要留下的事实
+        assertThat(entry.bizId()).isEqualTo("someone-else");
+        // 摘要与对外文案不同：审计要能区分真实原因，否则永远查不出是试了不存在的名字还是密码打错
+        assertThat(entry.summary()).isEqualTo("登录失败：账号不存在（来源端未知）");
+        // 失败没有变更前后状态，落 SQL NULL 而不是空对象
+        assertThat(entry.beforeValue()).isNull();
+        assertThat(entry.afterValue()).isNull();
+    }
+
+    @Test
+    @DisplayName("密码错误：写一条失败审计，摘要记真实原因，不带密码")
+    void shouldRecordAuditWhenPasswordIsWrong() {
+        given(userAccountRepository.findByLoginName(LOGIN_NAME)).willReturn(Optional.of(account(UserStatus.ACTIVE, null)));
+        given(passwordHasher.matches(anyString(), anyString())).willReturn(false);
+        given(userAccountRepository.recordFailedAttempt(eq(USER_ID), anyInt(), any(Instant.class), any(Instant.class), any(Instant.class)))
+                .willReturn(new FailedAttemptState(1, null));
+
+        failureOf(command(LOGIN_NAME, WRONG_PASSWORD));
+
+        AuditEntry entry = capturedEntry();
+        assertThat(entry.bizId()).isEqualTo(LOGIN_NAME);
+        assertThat(entry.summary()).isEqualTo("登录失败：密码错误（来源端未知）");
+        assertThat(entry.summary()).doesNotContain(WRONG_PASSWORD, RAW_PASSWORD);
+        assertThat(entry.beforeValue()).isNull();
+        assertThat(entry.afterValue()).isNull();
+    }
+
+    @Test
+    @DisplayName("账号已停用：写一条失败审计，摘要记真实原因")
+    void shouldRecordAuditWhenAccountIsDisabled() {
+        given(userAccountRepository.findByLoginName(LOGIN_NAME)).willReturn(Optional.of(account(UserStatus.DISABLED, null)));
+        given(passwordHasher.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(true);
+
+        failureOf(command(LOGIN_NAME, RAW_PASSWORD));
+
+        AuditEntry entry = capturedEntry();
+        assertThat(entry.bizId()).isEqualTo(LOGIN_NAME);
+        assertThat(entry.summary()).isEqualTo("登录失败：账号已停用（来源端未知）");
+        assertThat(entry.beforeValue()).isNull();
+        assertThat(entry.afterValue()).isNull();
+    }
+
+    @Test
+    @DisplayName("账号锁定中：写一条失败审计，摘要记真实原因")
+    void shouldRecordAuditWhenAccountIsLocked() {
+        given(userAccountRepository.findByLoginName(LOGIN_NAME))
+                .willReturn(Optional.of(account(UserStatus.ACTIVE, Instant.now().plus(10, ChronoUnit.MINUTES))));
+        given(passwordHasher.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(true);
+
+        failureOf(command(LOGIN_NAME, RAW_PASSWORD));
+
+        AuditEntry entry = capturedEntry();
+        assertThat(entry.bizId()).isEqualTo(LOGIN_NAME);
+        assertThat(entry.summary()).isEqualTo("登录失败：账号锁定中（来源端未知）");
+        assertThat(entry.beforeValue()).isNull();
+        assertThat(entry.afterValue()).isNull();
+    }
+
+    @Test
+    @DisplayName("签发失败：不写成功审计，异常照常抛出")
+    void shouldNotRecordSuccessAuditWhenTokenIssuanceFails() {
+        given(userAccountRepository.findByLoginName(LOGIN_NAME)).willReturn(Optional.of(account(UserStatus.ACTIVE, null)));
+        given(passwordHasher.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(true);
+        given(userRoleQuery.findActiveRoleCodesByUserId(USER_ID)).willReturn(List.of());
+        given(sessionTokenIssuer.issue(any(UserAccount.class), any(SessionOrigin.class)))
+                .willThrow(new IllegalStateException("登录成功但取不到令牌值"));
+
+        assertThatThrownBy(() -> passwordLoginService.login(command(LOGIN_NAME, RAW_PASSWORD)))
+                .isInstanceOf(IllegalStateException.class);
+
+        // 令牌没发出去，就没有「登录成功」这条事实可记：记下来等于把一次失败的登录写成成功
+        verify(auditRecorder, never()).record(any(AuditEntry.class));
+    }
+
+    /** 取回本次唯一的一条审计；断言期间调用次数恰好一次，多写或少写都会在这里失败。 */
+    private AuditEntry capturedEntry() {
+        ArgumentCaptor<AuditEntry> captor = ArgumentCaptor.forClass(AuditEntry.class);
+        verify(auditRecorder).record(captor.capture());
+        return captor.getValue();
+    }
+
+    /**
+     * 断言一条审计里没有凭据类信息。
+     *
+     * <p>判据是值而不是字段名：登录成功的快照刻意带着 {@code mustChangePassword} 这个状态位，
+     * 按字段名含 {@code password} 扫描会把它误判成凭据。真正不能出现的是明文、哈希，以及
+     * 任何指向哈希的字段（{@code *Hash}）。
+     *
+     * @param entry 一条审计
+     */
+    private static void assertNoCredentials(AuditEntry entry) {
+        assertThat(entry.summary()).doesNotContain(RAW_PASSWORD, PASSWORD_HASH);
+        assertThat(entry.afterValue()).isNotNull();
+        assertThat(entry.afterValue().keySet())
+                .as("快照字段名不得指向密码哈希")
+                .noneMatch(key -> key.toLowerCase(Locale.ROOT).contains("hash"));
+        for (Map.Entry<String, Object> field : entry.afterValue().entrySet()) {
+            assertThat(String.valueOf(field.getValue()))
+                    .as("快照字段 %s 不得出现密码明文或哈希", field.getKey())
+                    .doesNotContain(RAW_PASSWORD, PASSWORD_HASH);
+        }
     }
 
     private UserAccount account(UserStatus status, Instant lockedUntil) {

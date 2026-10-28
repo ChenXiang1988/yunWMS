@@ -1,6 +1,12 @@
 package com.yunwms.auth.application.service;
 
+import com.yunwms.auth.application.audit.UserAuditSnapshots;
 import com.yunwms.auth.application.command.UpdateUserCommand;
+import com.yunwms.auth.domain.model.AuditAction;
+import com.yunwms.auth.domain.model.AuditBizType;
+import com.yunwms.auth.domain.model.AuditEntry;
+import com.yunwms.auth.domain.model.UserProfile;
+import com.yunwms.auth.domain.port.AuditRecorder;
 import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.UserAccountUpdater;
 import com.yunwms.auth.domain.port.UserQuery;
@@ -10,6 +16,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.Objects;
 
 /**
  * 编辑用户基本信息的用例：覆盖展示名、邮箱与企业微信 userid。
@@ -24,10 +31,16 @@ import java.time.Instant;
  * 这里捕获后翻译成中文提示。
  *
  * <p>不开事务：只有一条 UPDATE。捕获约束冲突后转成业务异常再抛出，本来就没有「前一半写入需要撤销」
- * 的状态；加一个空事务只会让人以为这里还有别的东西需要原子提交。
+ * 的状态；加一个空事务只会让人以为这里还有别的东西需要原子提交。审计写入因此自建事务并随后立即提交：
+ * 业务写成功而审计写失败时异常照常透出（可重试），不会变成一次没有留痕的成功。
  *
- * <p>不写审计日志（{@code sys_audit_log}）：那属于审计能力（2.8），本用例只保证 {@code updated_by}
- * 与 {@code updated_at} 记下操作人与时刻。
+ * <p><b>字段一个都没变时不写审计：</b>提交了但没改动，记一条只会稀释信号——事后翻日志时，
+ * 「谁把它改了」与「谁点了一次保存」看起来一模一样。判定用已落库的详情对象逐字段比较，
+ * 不比较快照 {@code Map}：后者把「值为 null」与「键缺失」的区别也卷进了判定。
+ * 库照常写（{@code updated_at} 是事实），只是不留痕。
+ *
+ * <p><b>存在性判定与变更前快照取自同一次读。</b>原先只判「这一行在不在」，现在还要它改前的值：
+ * 分两次读会让快照里的值来自另一个时间点，写出来的日志前后不属于同一次提交。
  */
 @Service
 public class UserUpdateService {
@@ -35,13 +48,16 @@ public class UserUpdateService {
     private final UserQuery userQuery;
     private final UserAccountUpdater userAccountUpdater;
     private final CurrentSession currentSession;
+    private final AuditRecorder auditRecorder;
 
     public UserUpdateService(UserQuery userQuery,
                              UserAccountUpdater userAccountUpdater,
-                             CurrentSession currentSession) {
+                             CurrentSession currentSession,
+                             AuditRecorder auditRecorder) {
         this.userQuery = userQuery;
         this.userAccountUpdater = userAccountUpdater;
         this.currentSession = currentSession;
+        this.auditRecorder = auditRecorder;
     }
 
     /**
@@ -58,9 +74,8 @@ public class UserUpdateService {
                 .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED));
 
         long targetUserId = command.userId();
-        if (!userQuery.existsById(targetUserId)) {
-            throw BizException.notFound("用户不存在");
-        }
+        UserProfile current = userQuery.findById(targetUserId)
+                .orElseThrow(() -> BizException.notFound("用户不存在"));
 
         String displayName = stripToNull(command.displayName());
         if (displayName == null) {
@@ -68,14 +83,28 @@ public class UserUpdateService {
             // 请求体上的 @NotBlank 是同一口径的前置拦截，这里兜住非 HTTP 入口
             throw BizException.badRequest("展示名不能为空");
         }
+        // 清洗一次、两处使用：落库的值与快照里的值必须是同一份，否则日志会与库里的实际状态对不上
+        String email = stripToNull(command.email());
+        String wecomUserId = stripToNull(command.wecomUserId());
 
         try {
-            userAccountUpdater.updateProfile(targetUserId, displayName,
-                    stripToNull(command.email()), stripToNull(command.wecomUserId()),
+            userAccountUpdater.updateProfile(targetUserId, displayName, email, wecomUserId,
                     operatorId, Instant.now());
         } catch (DataIntegrityViolationException e) {
             throw translateConstraintViolation(e);
         }
+
+        boolean unchanged = displayName.equals(current.summary().displayName())
+                && Objects.equals(email, current.email())
+                && Objects.equals(wecomUserId, current.wecomUserId());
+        if (unchanged) {
+            // 库照常写（updated_at 是事实），但不留痕：空提交没有语义，记一条只会稀释信号
+            return;
+        }
+        String loginName = current.summary().loginName();
+        auditRecorder.record(new AuditEntry(AuditBizType.USER, loginName, AuditAction.UPDATE,
+                "修改用户 " + loginName, UserAuditSnapshots.of(current),
+                UserAuditSnapshots.ofUpdated(current, displayName, email, wecomUserId)));
     }
 
     /**

@@ -100,8 +100,8 @@
       "note": "系统参数（V020）：当前无模块读写，归属未确认前不得访问"
     },
     "sys_audit_log": {
-      "owner": "unassigned",
-      "note": "审计日志（V021）：横跨 auth 与 master 两个域，审计能力尚未落地，不归任何单个模块"
+      "owner": "wms-auth",
+      "note": "审计日志（V021、V038）：写入与查询能力（AuditRecorder / AuditQuery）都在 wms-auth。别的模块要留痕时依赖 wms-auth 暴露的端口，不自己写这张表——审计只追加这条保证只能有一个写入实现"
     }
   },
   "exceptions": []

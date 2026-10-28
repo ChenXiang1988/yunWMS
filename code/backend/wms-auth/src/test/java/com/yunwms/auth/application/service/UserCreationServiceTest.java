@@ -1,10 +1,15 @@
 package com.yunwms.auth.application.service;
 
+import com.yunwms.auth.application.audit.AuditSnapshotKeys;
 import com.yunwms.auth.application.command.CreateUserCommand;
 import com.yunwms.auth.application.dto.CreatedUser;
+import com.yunwms.auth.domain.model.AuditAction;
+import com.yunwms.auth.domain.model.AuditBizType;
+import com.yunwms.auth.domain.model.AuditEntry;
 import com.yunwms.auth.domain.model.NewUserAccount;
 import com.yunwms.auth.domain.model.PasswordRuleViolation;
 import com.yunwms.auth.domain.model.SubjectType;
+import com.yunwms.auth.domain.port.AuditRecorder;
 import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.PasswordHasher;
 import com.yunwms.auth.domain.port.UserAccountRegistrar;
@@ -55,6 +60,7 @@ class UserCreationServiceTest {
     private UserAccountRegistrar userAccountRegistrar;
     private PasswordHasher passwordHasher;
     private CurrentSession currentSession;
+    private AuditRecorder auditRecorder;
     private UserCreationService userCreationService;
 
     @BeforeEach
@@ -62,7 +68,9 @@ class UserCreationServiceTest {
         userAccountRegistrar = mock(UserAccountRegistrar.class);
         passwordHasher = mock(PasswordHasher.class);
         currentSession = mock(CurrentSession.class);
-        userCreationService = new UserCreationService(userAccountRegistrar, passwordHasher, currentSession);
+        auditRecorder = mock(AuditRecorder.class);
+        userCreationService = new UserCreationService(
+                userAccountRegistrar, passwordHasher, currentSession, auditRecorder);
         given(currentSession.currentUserId()).willReturn(OptionalLong.of(OPERATOR_ID));
     }
 
@@ -259,6 +267,45 @@ class UserCreationServiceTest {
                 .isSameAs(unexpected);
     }
 
+    @Test
+    @DisplayName("留痕：建号成功写一条 USER/CREATE，对象标识与摘要都用登录名，快照里没有密码")
+    void shouldRecordCreationAudit() {
+        given(passwordHasher.hash(INITIAL_PASSWORD)).willReturn(PASSWORD_HASH);
+        given(userAccountRegistrar.register(any(NewUserAccount.class), anyList(), anyLong()))
+                .willReturn(NEW_USER_ID);
+
+        userCreationService.create(staffCommand("z@example.com"));
+
+        AuditEntry entry = captureSingleAudit();
+        assertThat(entry.bizType()).isEqualTo(AuditBizType.USER);
+        assertThat(entry.action()).isEqualTo(AuditAction.CREATE);
+        // 审计要被「按登录名追溯」查得到：用主键则要先知道一个界面上不出现的数字
+        assertThat(entry.bizId()).isEqualTo(LOGIN_NAME);
+        assertThat(entry.summary()).isEqualTo("新建用户 " + LOGIN_NAME);
+        assertThat(entry.beforeValue()).isNull();
+        // 键集全等：多一个键（比如 passwordHash）立即失败
+        assertThat(entry.afterValue()).containsOnlyKeys(AuditSnapshotKeys.USER);
+        assertThat(entry.afterValue())
+                .containsEntry("loginName", LOGIN_NAME)
+                .containsEntry("subjectType", "STAFF")
+                .containsEntry("status", "ACTIVE")
+                .containsEntry("mustChangePassword", true);
+        // 落到库里的哈希、以及明文，一个都不该出现在快照的值里
+        assertThat(entry.afterValue().values()).doesNotContain(PASSWORD_HASH, INITIAL_PASSWORD);
+    }
+
+    @Test
+    @DisplayName("留痕：登录名冲突被拒绝时零次调用——这次建号没有发生")
+    void shouldNotRecordAuditWhenLoginNameTaken() {
+        given(passwordHasher.hash(INITIAL_PASSWORD)).willReturn(PASSWORD_HASH);
+        given(userAccountRegistrar.register(any(NewUserAccount.class), anyList(), anyLong()))
+                .willThrow(constraintViolation("ux_sys_user_login_name"));
+
+        failureOf(staffCommand("z@example.com"));
+
+        verifyNoInteractions(auditRecorder);
+    }
+
     /** 一个内部员工的建号入参，只有邮箱按用例需要变化。 */
     private static CreateUserCommand staffCommand(String email) {
         return staffCommandWithPassword(INITIAL_PASSWORD, email);
@@ -283,6 +330,17 @@ class UserCreationServiceTest {
     private static DataIntegrityViolationException constraintViolation(String constraintName) {
         return new DataIntegrityViolationException("建号写入违反约束",
                 new SQLException("ERROR: 违反约束 \"" + constraintName + "\""));
+    }
+
+    /**
+     * 取回本次唯一一条审计内容。
+     *
+     * @return 提交给审计端口的日志内容
+     */
+    private AuditEntry captureSingleAudit() {
+        ArgumentCaptor<AuditEntry> captor = ArgumentCaptor.forClass(AuditEntry.class);
+        verify(auditRecorder).record(captor.capture());
+        return captor.getValue();
     }
 
     /** 断言建号被拒绝并取回异常；意外成功时直接让测试失败，避免它被当成「没抛异常」的空白通过。 */

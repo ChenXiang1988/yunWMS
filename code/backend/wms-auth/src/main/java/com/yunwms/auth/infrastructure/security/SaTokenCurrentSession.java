@@ -1,6 +1,7 @@
 package com.yunwms.auth.infrastructure.security;
 
 import cn.dev33.satoken.exception.NotLoginException;
+import cn.dev33.satoken.exception.SaTokenContextException;
 import cn.dev33.satoken.session.SaSession;
 import cn.dev33.satoken.stp.StpUtil;
 import com.yunwms.auth.domain.model.SubjectType;
@@ -27,17 +28,20 @@ public class SaTokenCurrentSession implements CurrentSession {
     /**
      * 取当前账号会话。
      *
-     * <p>未登录时返回 {@code null} 而不是抛异常：本类的全部读取方法对匿名请求都只有
-     * 「没有值」这一种回答，让每个调用方各自 try-catch 会把同一条判定写四遍。
+     * <p>未登录或不在请求线程里时返回 {@code null} 而不是抛异常：本类的全部读取方法对「没有会话」
+     * 都只有这一种回答，让每个调用方各自 try-catch 会把同一条判定写四遍。
      *
      * @return 账号会话；当前请求没有登录时为空
      */
     private static SaSession currentSessionOrNull() {
         try {
             return StpUtil.getSession();
-        } catch (NotLoginException e) {
-            // 未登录是调用方要判的普通情况（例如令牌已失效），不当作异常向上抛：
-            // 由用例翻译成 40100，而不是让 Sa-Token 的异常类型漏出端口
+        } catch (NotLoginException | SaTokenContextException e) {
+            // 两种异常都是调用方要判的普通情况，不当作异常向上抛：
+            //   - 未登录（例如令牌已失效）：由用例翻译成 40100，而不是让 Sa-Token 的异常类型漏出端口；
+            //   - 没有 Sa-Token 上下文：这个线程不在请求里（定时任务、回调、消息消费者），
+            //     按端口契约就是「没有有效会话」。不接住它，系统内部触发的审计写入会直接失败，
+            //     而「取不到人也要记下这一条」正是审计要保证的事。
             return null;
         }
     }
@@ -46,9 +50,8 @@ public class SaTokenCurrentSession implements CurrentSession {
     public OptionalLong currentUserId() {
         try {
             return OptionalLong.of(StpUtil.getLoginIdAsLong());
-        } catch (NotLoginException e) {
-            // 未登录是调用方要判的普通情况（例如令牌已失效），不当作异常向上抛：
-            // 由用例翻译成 40100，而不是让 Sa-Token 的异常类型漏出端口
+        } catch (NotLoginException | SaTokenContextException e) {
+            // 与 currentSessionOrNull 同一口径：未登录、或线程不在请求里，都只回答「没有」
             return OptionalLong.empty();
         }
     }
@@ -66,6 +69,21 @@ public class SaTokenCurrentSession implements CurrentSession {
         }
         // 未知编码直接抛：会话里的主体类型决定数据范围是否强制隔离，静默回落会让货主账号按员工口径解析
         return Optional.of(SubjectType.fromCode(code));
+    }
+
+    @Override
+    public Optional<String> currentUserDisplayName() {
+        SaSession session = currentSessionOrNull();
+        if (session == null) {
+            return Optional.empty();
+        }
+        Object value = session.get(SessionAttributes.DISPLAY_NAME);
+        if (!(value instanceof String displayName) || displayName.isBlank()) {
+            // 缺属性按「没有」处理，与 SUBJECT_TYPE 同一口径：旧版本签发的会话不带该属性，
+            // 猜一个默认姓名会把一条真人做的操作记错人
+            return Optional.empty();
+        }
+        return Optional.of(displayName);
     }
 
     @Override

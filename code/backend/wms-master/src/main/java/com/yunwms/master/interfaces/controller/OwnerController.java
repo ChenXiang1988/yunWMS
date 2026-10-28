@@ -3,14 +3,17 @@ package com.yunwms.master.interfaces.controller;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.yunwms.master.application.command.ChangeOwnerStatusCommand;
 import com.yunwms.master.application.command.CreateOwnerCommand;
+import com.yunwms.master.application.command.ProvisionOwnerAccountCommand;
 import com.yunwms.master.application.command.UpdateOwnerCommand;
 import com.yunwms.master.application.query.OwnerImpactQueryService;
 import com.yunwms.master.application.query.OwnerQueryService;
+import com.yunwms.master.application.service.OwnerAccountProvisionService;
 import com.yunwms.master.application.service.OwnerCreationService;
 import com.yunwms.master.application.service.OwnerDeletionService;
 import com.yunwms.master.application.service.OwnerStatusChangeService;
 import com.yunwms.master.application.service.OwnerUpdateService;
 import com.yunwms.master.interfaces.controller.assembler.OwnerResponseAssembler;
+import com.yunwms.master.interfaces.controller.request.OwnerAccountProvisionRequest;
 import com.yunwms.master.interfaces.controller.request.OwnerCreateRequest;
 import com.yunwms.master.interfaces.controller.request.OwnerStatusChangeRequest;
 import com.yunwms.master.interfaces.controller.request.OwnerUpdateRequest;
@@ -18,6 +21,7 @@ import com.yunwms.master.interfaces.controller.response.CreatedOwnerResponse;
 import com.yunwms.master.interfaces.controller.response.OwnerDetailResponse;
 import com.yunwms.master.interfaces.controller.response.OwnerListItemResponse;
 import com.yunwms.master.interfaces.controller.response.OwnerTerminationImpactResponse;
+import com.yunwms.master.interfaces.controller.response.ProvisionedOwnerAccountResponse;
 import com.yunwms.web.api.ApiResult;
 import com.yunwms.web.api.PageResult;
 import io.swagger.v3.oas.annotations.Operation;
@@ -35,35 +39,39 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 管理端的货主档案入口：建档、列表、详情、编辑、状态流转、终止影响清单与删除草稿。
+ * 管理端的货主档案入口：建档、列表、详情、编辑、状态流转、终止影响清单、删除草稿与开通主账号。
  *
  * <p>路径前缀 {@code /api/console} 表示仓网端：货主端（{@code /api/portal}）只能看自己的档案，
  * 以上全部操作都在仓网端完成。
  *
- * <p>状态流转与删除属 3.2；联系人属 3.5，税号属 3.6，主账号属 3.3——都不在这里预留空方法：
+ * <p>状态流转与删除属 3.2，主账号开通属 3.3；联系人属 3.5，税号属 3.6——后两者不在这里预留空方法：
  * 一个返回 501 的占位实现，比没有这个接口更难解释。
  *
- * <p>权限点四个：建档 {@code system:owner:create}，编辑与状态流转共用 {@code system:owner:update}，
+ * <p>权限点五个：建档 {@code system:owner:create}，编辑与状态流转共用 {@code system:owner:update}，
  * 列表、详情与终止影响清单共用 {@code system:owner:list}，删除单独一个
- * {@code system:owner:delete}。不合并的三处理由：
+ * {@code system:owner:delete}，开通主账号单独一个 {@code system:owner:account}。不合并的四处理由：
  * <ul>
  *   <li>建档的副作用（取号、占用 SKU 前缀）与编辑不同，两者分开；</li>
  *   <li>状态流转落回编辑那一个点：规格把「草稿提交」与「字段修改」写在同一组能力里，
  *       且 {@code V033} 已在此点下注明它是流转的落点；影响清单跟着列表走，因为看得到列表的人
  *       本来就能从列表发起终止；</li>
  *   <li>删除单独成点：删掉一条主数据与改个名称的风险等级不同，合并会让「能改电话」等于「能删客户」
- *       （见 {@code V036}）。</li>
+ *       （见 {@code V036}）；</li>
+ *   <li>开号单独成点：它创建一条能登录货主端的账号并设定初始密码，而货主档案上一个字段都不变，
+ *       合并进 {@code update} 会让「能改结算主体」等于「能给自己熟悉的货主开一个能进系统的账号」
+ *       （见 {@code V037}）。</li>
  * </ul>
- * 前三个点由 {@code V033} 定义，删除由 {@code V036} 定义，注解由 {@code SaTokenAnnotationConfig}
- * 注册的拦截器消费。
+ * 前三个点由 {@code V033} 定义，删除由 {@code V036} 定义，开号由 {@code V037} 定义，注解由
+ * {@code SaTokenAnnotationConfig} 注册的拦截器消费。
  *
  * <p>本类只做协议转换：把请求体搬成命令对象，把查询参数交给用例，把用例结果搬成响应体。
  * 校验顺序、唯一冲突翻译、分页范围、流转判定与「哪些字段不可改」都在用例与领域层，
  * 改一个 HTTP 入口不会改变这些行为。
  */
-@Tag(name = "货主档案", description = "仓网端的货主（客户）建档、列表、详情、编辑、状态流转与删除。建档由系统生成客户编码并占用 SKU 前缀；"
+@Tag(name = "货主档案", description = "仓网端的货主（客户）建档、列表、详情、编辑、状态流转、删除与主账号开通。建档由系统生成客户编码并占用 SKU 前缀；"
         + "编辑不能改编码、SKU 前缀与状态；状态流转按五态流转表判定，终止前要求确认影响清单；"
-        + "只有草稿可以删除，删除为软删除。全部接口都要求对应权限点，只登录但没有权限点的账号会拿到 403。")
+        + "只有草稿可以删除，删除为软删除；主账号只能为合作中的货主单独开通，登录名取货主系统编码。"
+        + "全部接口都要求对应权限点，只登录但没有权限点的账号会拿到 403。")
 @RestController
 @RequestMapping("/api/console/owners")
 public class OwnerController {
@@ -74,6 +82,7 @@ public class OwnerController {
     private final OwnerStatusChangeService ownerStatusChangeService;
     private final OwnerImpactQueryService ownerImpactQueryService;
     private final OwnerDeletionService ownerDeletionService;
+    private final OwnerAccountProvisionService ownerAccountProvisionService;
     private final OwnerResponseAssembler ownerResponseAssembler;
 
     public OwnerController(OwnerCreationService ownerCreationService,
@@ -82,6 +91,7 @@ public class OwnerController {
                            OwnerStatusChangeService ownerStatusChangeService,
                            OwnerImpactQueryService ownerImpactQueryService,
                            OwnerDeletionService ownerDeletionService,
+                           OwnerAccountProvisionService ownerAccountProvisionService,
                            OwnerResponseAssembler ownerResponseAssembler) {
         this.ownerCreationService = ownerCreationService;
         this.ownerQueryService = ownerQueryService;
@@ -89,6 +99,7 @@ public class OwnerController {
         this.ownerStatusChangeService = ownerStatusChangeService;
         this.ownerImpactQueryService = ownerImpactQueryService;
         this.ownerDeletionService = ownerDeletionService;
+        this.ownerAccountProvisionService = ownerAccountProvisionService;
         this.ownerResponseAssembler = ownerResponseAssembler;
     }
 
@@ -342,5 +353,43 @@ public class OwnerController {
             @PathVariable long id) {
         ownerDeletionService.delete(id);
         return ApiResult.ok();
+    }
+
+    /**
+     * 为货主开通主账号。
+     *
+     * <p><b>独立端点，不挂在建档上：</b>规格要求开通 MUST NOT 发生在建档过程中，未开号的货主 MUST
+     * 允许稍后补开。因此建号不是建档的副作用，而是一次单独的、可重复发起（失败后重试）的操作。
+     *
+     * <p><b>登录名不由调用方给：</b>它取货主的系统编码（形如 {@code OWNER0001}），请求体里没有这个
+     * 字段，多传会被 {@code FAIL_ON_UNKNOWN_PROPERTIES} 拒绝。手机号同理不在请求里——它属联系人档案。
+     *
+     * @param id      货主标识
+     * @param request 开通请求体
+     * @return 新账号的标识与登录名；货主不存在（40400）、姓名或密码不合规（40000）、
+     *         货主不是合作中或已有主账号或登录名被占用（40900）、登录名被内部员工占用（40901）
+     *         通过业务错误码返回
+     */
+    @Operation(summary = "为货主开通主账号",
+            description = "由仓网端操作人为处于「合作中」的货主建立一个货主主账号：登录名由系统按货主系统编码"
+                    + "生成（如 OWNER0001），界面只读；初始密码由操作人设定，账号被标记为首次登录需修改，"
+                    + "首次登录后除改密外调用任何业务接口返回 40104。"
+                    + "只有合作中（ACTIVE）的货主可以开号：草稿、潜在、暂停、终止一律 40900，提示里带当前状态。"
+                    + "同一货主最多一个主账号：重复开号返回 40900，提示里带该货主已有的登录名；登录名被别的"
+                    + "货主占用时同样 40900，但提示是「已被其他账号占用」——两种情形的处置不同，文案因此不同。"
+                    + "请求体只有姓名与初始密码：没有 loginName（系统生成）、没有 phone（属联系人档案，3.5）、"
+                    + "没有 roleIds（货主侧角色属 3.4/4.4），多传字段返回 40000。"
+                    + "本接口不建联系人、不动货主档案字段、不改货主状态，也不产生子账号。")
+    @SaCheckPermission("system:owner:account")
+    @PostMapping("/{id}/account")
+    public ApiResult<ProvisionedOwnerAccountResponse> openAccount(
+            @Parameter(description = "货主标识，取自列表响应里的 id")
+            @PathVariable long id,
+            @Valid @RequestBody OwnerAccountProvisionRequest request) {
+        return ApiResult.ok(ownerResponseAssembler.toProvisionedAccountResponse(
+                ownerAccountProvisionService.provision(new ProvisionOwnerAccountCommand(
+                        id,
+                        request.displayName(),
+                        request.initialPassword()))));
     }
 }

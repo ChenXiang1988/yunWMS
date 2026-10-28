@@ -1,7 +1,13 @@
 package com.yunwms.auth.application.service;
 
+import com.yunwms.auth.application.audit.UserAuditSnapshots;
 import com.yunwms.auth.application.command.AssignRolesCommand;
+import com.yunwms.auth.domain.model.AuditAction;
+import com.yunwms.auth.domain.model.AuditBizType;
+import com.yunwms.auth.domain.model.AuditEntry;
 import com.yunwms.auth.domain.model.RoleIdentity;
+import com.yunwms.auth.domain.model.UserProfile;
+import com.yunwms.auth.domain.port.AuditRecorder;
 import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.RoleQuery;
 import com.yunwms.auth.domain.port.UserQuery;
@@ -38,8 +44,17 @@ import java.util.Set;
  * 会各自基于同一份旧快照算出「该删哪些」，后提交的那次把前一次的增量覆盖掉。
  * 而「替换成这一批」是不带前置状态的意图，谁最后提交，结果就是谁提交的那一批。
  *
- * <p>不写审计日志（{@code sys_audit_log}）：那属于审计能力（2.8），本用例只保证
- * {@code sys_user.updated_by} 记下操作人。
+ * <p><b>留痕动作是 {@code PERMISSION_CHANGE} 而不是 {@code UPDATE}：</b>这是本批唯一会改变
+ * 「谁能做什么」的入口，按 {@code UPDATE} 记会与「改个展示名」落在同一个动作下，事后按动作筛选
+ * 权限变更时两者分不开。摘要写「分配角色 {登录名}」，对象标识用登录名（管理端按登录名追溯）。
+ *
+ * <p><b>两份快照记的是「改成了哪些角色」</b>，用 {@link UserAuditSnapshots#ofRoleAssignment} 这份
+ * 专用形状（只含 {@code roleCodes}）：{@code before} 是下面那次详情查询已经读回来的角色编码，
+ * {@code after} 是本次提交并校验通过的那一批。账号快照在这里不适用——它的白名单里没有角色集合，
+ * 两侧都套用会得到两份逐字相同的值，日志便答不出这条权限变更到底改了什么。
+ *
+ * <p><b>改前改后完全一致时也照常留痕</b>：分配动作本身就是一次显式的权限确认，
+ * 「这些角色被确认过」是可追溯的事实，而两份快照相等恰好是「这次确认没有改变结果」的证据。
  */
 @Service
 public class UserRoleAssignmentService {
@@ -48,15 +63,18 @@ public class UserRoleAssignmentService {
     private final RoleQuery roleQuery;
     private final UserRoleRegistrar userRoleRegistrar;
     private final CurrentSession currentSession;
+    private final AuditRecorder auditRecorder;
 
     public UserRoleAssignmentService(UserQuery userQuery,
                                      RoleQuery roleQuery,
                                      UserRoleRegistrar userRoleRegistrar,
-                                     CurrentSession currentSession) {
+                                     CurrentSession currentSession,
+                                     AuditRecorder auditRecorder) {
         this.userQuery = userQuery;
         this.roleQuery = roleQuery;
         this.userRoleRegistrar = userRoleRegistrar;
         this.currentSession = currentSession;
+        this.auditRecorder = auditRecorder;
     }
 
     /**
@@ -75,10 +93,11 @@ public class UserRoleAssignmentService {
                 .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED));
 
         long targetUserId = command.userId();
-        if (!userQuery.existsById(targetUserId)) {
-            // 不存在的账号直接按 404 处理：否则写入会被外键拦下，变成与「入参写错」无关的 500
-            throw BizException.notFound("用户不存在");
-        }
+        // 不存在的账号直接按 404 处理：否则写入会被外键拦下，变成与「入参写错」无关的 500。
+        // 读详情而不是只判存在性：审计的对象标识要用登录名，变更前的角色编码也来自这次查询
+        // （它已经把该账号的授权行一起读出来），所以审计不必再查一次
+        UserProfile current = userQuery.findById(targetUserId)
+                .orElseThrow(() -> BizException.notFound("用户不存在"));
 
         // 角色分配是集合语义：同一标识传两次不该变成主键冲突，也不该让「存在性」判定多数出一个
         Set<Long> roleIds = command.roleIds() == null
@@ -99,6 +118,14 @@ public class UserRoleAssignmentService {
         } catch (DataIntegrityViolationException e) {
             throw translateConstraintViolation(e);
         }
+
+        String loginName = current.summary().loginName();
+        // 本方法有事务，审计随之一起提交或回滚：失败的分配不会留下一条「改了权限」的记录。
+        // 两侧的角色编码都有现成来源，不为审计额外发查询：改前来自详情查询，改后来自刚校验过的那批角色身份
+        auditRecorder.record(new AuditEntry(AuditBizType.USER, loginName, AuditAction.PERMISSION_CHANGE,
+                "分配角色 " + loginName,
+                UserAuditSnapshots.ofRoleAssignment(current.summary().roleCodes()),
+                UserAuditSnapshots.ofRoleAssignment(identities.stream().map(RoleIdentity::code).toList())));
     }
 
     /**

@@ -1,11 +1,16 @@
 package com.yunwms.auth.application.service;
 
+import com.yunwms.auth.application.audit.AuditSnapshotKeys;
 import com.yunwms.auth.application.command.ConfigureUserDataScopeCommand;
+import com.yunwms.auth.domain.model.AuditAction;
+import com.yunwms.auth.domain.model.AuditBizType;
+import com.yunwms.auth.domain.model.AuditEntry;
 import com.yunwms.auth.domain.model.DataScopeType;
 import com.yunwms.auth.domain.model.SubjectType;
 import com.yunwms.auth.domain.model.UserProfile;
 import com.yunwms.auth.domain.model.UserStatus;
 import com.yunwms.auth.domain.model.UserSummary;
+import com.yunwms.auth.domain.port.AuditRecorder;
 import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.DataScopeOwnerRegistrar;
 import com.yunwms.auth.domain.port.UserAccountUpdater;
@@ -15,6 +20,7 @@ import com.yunwms.web.exception.BizException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.time.Instant;
 import java.util.List;
@@ -48,6 +54,7 @@ class UserDataScopeConfigurationServiceTest {
     private DataScopeOwnerRegistrar dataScopeOwnerRegistrar;
     private DataScopeOwnerValidator dataScopeOwnerValidator;
     private CurrentSession currentSession;
+    private AuditRecorder auditRecorder;
     private UserDataScopeConfigurationService service;
 
     @BeforeEach
@@ -57,8 +64,9 @@ class UserDataScopeConfigurationServiceTest {
         dataScopeOwnerRegistrar = mock(DataScopeOwnerRegistrar.class);
         dataScopeOwnerValidator = mock(DataScopeOwnerValidator.class);
         currentSession = mock(CurrentSession.class);
+        auditRecorder = mock(AuditRecorder.class);
         service = new UserDataScopeConfigurationService(userQuery, userAccountUpdater,
-                dataScopeOwnerRegistrar, dataScopeOwnerValidator, currentSession);
+                dataScopeOwnerRegistrar, dataScopeOwnerValidator, currentSession, auditRecorder);
 
         given(currentSession.currentUserId()).willReturn(OptionalLong.of(OPERATOR_ID));
         given(userQuery.findById(USER_ID)).willReturn(Optional.of(profile(SubjectType.STAFF)));
@@ -74,7 +82,7 @@ class UserDataScopeConfigurationServiceTest {
 
         assertThat(failure.errorCode()).isEqualTo(ErrorCode.BAD_REQUEST);
         assertThat(failure.getMessage()).isEqualTo("货主账号的数据范围由所属货主固定，不能配置用户级覆盖");
-        verifyNoInteractions(userAccountUpdater, dataScopeOwnerRegistrar);
+        verifyNoInteractions(userAccountUpdater, dataScopeOwnerRegistrar, auditRecorder);
     }
 
     @Test
@@ -87,7 +95,7 @@ class UserDataScopeConfigurationServiceTest {
 
         assertThat(failure.errorCode()).isEqualTo(ErrorCode.NOT_FOUND);
         assertThat(failure.getMessage()).isEqualTo("用户不存在");
-        verifyNoInteractions(userAccountUpdater, dataScopeOwnerRegistrar);
+        verifyNoInteractions(userAccountUpdater, dataScopeOwnerRegistrar, auditRecorder);
     }
 
     @Test
@@ -108,7 +116,7 @@ class UserDataScopeConfigurationServiceTest {
 
         assertThat(failure.errorCode()).isEqualTo(ErrorCode.BAD_REQUEST);
         assertThat(failure.getMessage()).isEqualTo("清除数据范围覆盖时不能提交货主明细");
-        verifyNoInteractions(userAccountUpdater, dataScopeOwnerRegistrar);
+        verifyNoInteractions(userAccountUpdater, dataScopeOwnerRegistrar, auditRecorder);
     }
 
     @Test
@@ -149,7 +157,45 @@ class UserDataScopeConfigurationServiceTest {
 
         assertThat(failure.errorCode()).isEqualTo(ErrorCode.UNAUTHORIZED);
         verify(userQuery, never()).findById(USER_ID);
-        verifyNoInteractions(userAccountUpdater, dataScopeOwnerRegistrar);
+        verifyNoInteractions(userAccountUpdater, dataScopeOwnerRegistrar, auditRecorder);
+    }
+
+    @Test
+    @DisplayName("留痕：动作是 PERMISSION_CHANGE，两份快照只差 dataScopeType")
+    void shouldRecordPermissionChangeAudit() {
+        service.configure(new ConfigureUserDataScopeCommand(USER_ID, DataScopeType.ASSIGNED, List.of()));
+
+        AuditEntry entry = captureSingleAudit();
+        assertThat(entry.bizType()).isEqualTo(AuditBizType.USER);
+        assertThat(entry.action()).isEqualTo(AuditAction.PERMISSION_CHANGE);
+        assertThat(entry.bizId()).isEqualTo("zhangsan");
+        assertThat(entry.summary()).isEqualTo("修改数据范围 zhangsan");
+        assertThat(entry.beforeValue()).containsOnlyKeys(AuditSnapshotKeys.USER);
+        assertThat(entry.afterValue()).containsOnlyKeys(AuditSnapshotKeys.USER);
+        // 库里的账号没有用户级覆盖（null = 继承角色默认），本次写的是 ASSIGNED
+        assertThat(entry.beforeValue()).containsEntry("dataScopeType", null);
+        assertThat(entry.afterValue()).containsEntry("dataScopeType", "ASSIGNED");
+    }
+
+    @Test
+    @DisplayName("留痕：清除覆盖时 dataScopeType 写 null，而不是某个默认类型")
+    void shouldRecordClearedScopeAsNull() {
+        service.configure(new ConfigureUserDataScopeCommand(USER_ID, null, List.of()));
+
+        assertThat(captureSingleAudit().afterValue())
+                .containsEntry("dataScopeType", null)
+                .containsEntry("status", "ACTIVE");
+    }
+
+    /**
+     * 取回本次唯一一条审计内容。
+     *
+     * @return 提交给审计端口的日志内容
+     */
+    private AuditEntry captureSingleAudit() {
+        ArgumentCaptor<AuditEntry> captor = ArgumentCaptor.forClass(AuditEntry.class);
+        verify(auditRecorder).record(captor.capture());
+        return captor.getValue();
     }
 
     private static UserProfile profile(SubjectType subjectType) {
@@ -157,7 +203,7 @@ class UserDataScopeConfigurationServiceTest {
         return new UserProfile(
                 new UserSummary(USER_ID, "zhangsan", "张三", subjectType, ownerId, null,
                         UserStatus.ACTIVE, List.of(), null),
-                "zhangsan@example.com", null, null, List.of(),
+                "zhangsan@example.com", null, false, null, List.of(),
                 Instant.parse("2026-01-04T08:30:00Z"), List.of());
     }
 

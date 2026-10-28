@@ -1,11 +1,19 @@
 package com.yunwms.auth.application.service;
 
+import com.yunwms.auth.application.audit.RoleAuditSnapshots;
 import com.yunwms.auth.application.command.ChangeRoleStatusCommand;
 import com.yunwms.auth.application.command.ConfigureRoleDataScopeCommand;
 import com.yunwms.auth.application.command.UpdateRoleCommand;
+import com.yunwms.auth.domain.model.AuditAction;
+import com.yunwms.auth.domain.model.AuditBizType;
+import com.yunwms.auth.domain.model.AuditEntry;
+import com.yunwms.auth.domain.model.DataScopeType;
+import com.yunwms.auth.domain.model.RoleStatus;
 import com.yunwms.auth.domain.model.RoleSummary;
+import com.yunwms.auth.domain.port.AuditRecorder;
 import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.DataScopeOwnerRegistrar;
+import com.yunwms.auth.domain.port.DataScopeQuery;
 import com.yunwms.auth.domain.port.RoleQuery;
 import com.yunwms.auth.domain.port.RoleUpdater;
 import com.yunwms.web.api.ErrorCode;
@@ -15,6 +23,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -32,8 +42,13 @@ import java.util.Set;
  * {@code data_scope_type}、{@code status} 三个创建期固定值显式落库；本类只碰管理员真正能改的字段，
  * 混在一起会让「编辑顺手把数据范围写回 CUSTOM」这种缺陷有地方可写。
  *
- * <p>不写审计日志（{@code sys_audit_log}）：那属于审计能力（2.8），本类只保证
- * {@code updated_by} / {@code updated_at} 记下操作人与时刻。
+ * <p><b>四个用例各留一条痕，对象类型都是 {@code ROLE}、对象标识都是角色编码。</b>启停的摘要写明方向
+ * （「停用角色」还是「启用角色」），配置数据范围的动作是 {@code PERMISSION_CHANGE} 而不是
+ * {@code UPDATE}——那是本类唯一改变「谁看得见哪些货主」的入口。快照形状见 {@link RoleAuditSnapshots}。
+ *
+ * <p><b>快照要读授权与范围，因此每个用例多两次查询</b>（{@code findMenuIds} 与
+ * {@code findRoleSetting}）。这不是顺手加的：{@code menuIds} 与 {@code dataScopeType} 是白名单
+ * 字段，缺了它们快照就答不出「删掉的那个角色当时有哪些权限」，而删除之后这些信息在库里查不到了。
  */
 @Service
 public class RoleModificationService {
@@ -43,17 +58,23 @@ public class RoleModificationService {
     private final DataScopeOwnerRegistrar dataScopeOwnerRegistrar;
     private final DataScopeOwnerValidator dataScopeOwnerValidator;
     private final CurrentSession currentSession;
+    private final DataScopeQuery dataScopeQuery;
+    private final AuditRecorder auditRecorder;
 
     public RoleModificationService(RoleQuery roleQuery,
                                    RoleUpdater roleUpdater,
                                    DataScopeOwnerRegistrar dataScopeOwnerRegistrar,
                                    DataScopeOwnerValidator dataScopeOwnerValidator,
-                                   CurrentSession currentSession) {
+                                   CurrentSession currentSession,
+                                   DataScopeQuery dataScopeQuery,
+                                   AuditRecorder auditRecorder) {
         this.roleQuery = roleQuery;
         this.roleUpdater = roleUpdater;
         this.dataScopeOwnerRegistrar = dataScopeOwnerRegistrar;
         this.dataScopeOwnerValidator = dataScopeOwnerValidator;
         this.currentSession = currentSession;
+        this.dataScopeQuery = dataScopeQuery;
+        this.auditRecorder = auditRecorder;
     }
 
     /**
@@ -80,11 +101,22 @@ public class RoleModificationService {
         Set<Long> ownerIds = command.ownerIds() == null ? Set.of() : Set.copyOf(command.ownerIds());
         dataScopeOwnerValidator.requireConfigurable(command.dataScopeType(), ownerIds);
 
+        // 变更前的范围与授权要在写之前读：写完之后 findRoleSetting 拿到的已经是新类型
+        DataScopeType currentType = requireDataScopeType(role.id());
+        List<Long> menuIds = roleQuery.findMenuIds(role.id());
+
         roleUpdater.updateDataScopeType(role.id(), command.dataScopeType(), operatorId, Instant.now());
         // 非 CUSTOM 时传空集合：ALL 与 ASSIGNED 是规则而不是名单，留着旧明细会让「这条明细算不算数」
         // 变成只有读过解析逻辑才能回答的问题
         dataScopeOwnerRegistrar.replaceRoleOwners(role.id(),
                 command.dataScopeType().usesOwnerDetails() ? ownerIds : Set.of());
+
+        // 与启停不同，这里不跳过「类型没变」的提交：范围用例还整批替换明细，而明细不在快照白名单内，
+        // 快照看起来没变不代表库里没变——统一留痕，不猜哪次提交没有副作用
+        auditRecorder.record(new AuditEntry(AuditBizType.ROLE, role.code(), AuditAction.PERMISSION_CHANGE,
+                "修改角色数据范围 " + role.code(),
+                RoleAuditSnapshots.of(role, currentType, menuIds),
+                RoleAuditSnapshots.of(role, command.dataScopeType(), menuIds)));
     }
 
     /**
@@ -116,12 +148,29 @@ public class RoleModificationService {
         // 空集合是合法状态（清空该角色的全部授权）；请求体层已拒绝「省略 menuIds」，
         // 这里把 null 按空集合处理，与建角色对 menuIds 的口径一致
         Set<Long> menuIds = command.menuIds() == null ? Set.of() : Set.copyOf(command.menuIds());
+        String remark = stripToNull(command.remark());
+        // 变更前的授权要在写之前读：写完之后 findMenuIds 拿到的已经是本次提交的那一批
+        List<Long> currentMenuIds = roleQuery.findMenuIds(role.id());
+        DataScopeType dataScopeType = requireDataScopeType(role.id());
+
         try {
-            roleUpdater.updateWithMenus(role.id(), name, stripToNull(command.remark()), menuIds,
-                    operatorId, Instant.now());
+            roleUpdater.updateWithMenus(role.id(), name, remark, menuIds, operatorId, Instant.now());
         } catch (DataIntegrityViolationException e) {
             throw RoleConstraintTranslator.translate(e);
         }
+
+        // 三个可编辑字段一个都没变：库照常写（updated_at 是事实），但不留痕——空提交没有语义。
+        // 比较用已落库的值而不是快照 Map：后者把「值为 null」与「键缺失」的区别也卷进了判定
+        boolean unchanged = name.equals(role.name())
+                && Objects.equals(remark, role.remark())
+                && menuIds.equals(Set.copyOf(currentMenuIds));
+        if (unchanged) {
+            return;
+        }
+        auditRecorder.record(new AuditEntry(AuditBizType.ROLE, role.code(), AuditAction.UPDATE,
+                "修改角色 " + role.code(),
+                RoleAuditSnapshots.of(role, dataScopeType, currentMenuIds),
+                RoleAuditSnapshots.ofUpdated(role, dataScopeType, name, remark, menuIds)));
     }
 
     /**
@@ -141,9 +190,19 @@ public class RoleModificationService {
         long operatorId = requireOperatorId();
         RoleSummary role = requireModifiableRole(command.roleId(), "启停");
         if (role.status() == command.status()) {
+            // 幂等重放：不写库，也不留痕——它没有让任何状态发生位移
             return;
         }
+        DataScopeType dataScopeType = requireDataScopeType(role.id());
+        List<Long> menuIds = roleQuery.findMenuIds(role.id());
+
         roleUpdater.updateStatus(role.id(), command.status(), operatorId, Instant.now());
+
+        // 写明方向：看日志的人需要知道这次是收紧还是放宽，而「修改状态」两种都不是
+        String summary = (command.status() == RoleStatus.DISABLED ? "停用角色 " : "启用角色 ") + role.code();
+        auditRecorder.record(new AuditEntry(AuditBizType.ROLE, role.code(), AuditAction.UPDATE, summary,
+                RoleAuditSnapshots.of(role, dataScopeType, menuIds),
+                RoleAuditSnapshots.ofStatusChanged(role, dataScopeType, command.status(), menuIds)));
     }
 
     /**
@@ -168,7 +227,15 @@ public class RoleModificationService {
             // 带上人数：只说「角色被占用」时，管理员还得自己去找是谁在用
             throw BizException.conflict("该角色仍被 " + role.userCount() + " 个用户使用，请先解除分配");
         }
+        // 授权与范围要在这里读：软删除之后这一行在界面上就查不到了，它们随快照一起成为唯一的记录
+        DataScopeType dataScopeType = requireDataScopeType(role.id());
+        List<Long> menuIds = roleQuery.findMenuIds(role.id());
+
         roleUpdater.softDelete(role.id(), operatorId, Instant.now());
+
+        // after 为 null：删除没有「变更后」的快照
+        auditRecorder.record(new AuditEntry(AuditBizType.ROLE, role.code(), AuditAction.DELETE,
+                "删除角色 " + role.code(), RoleAuditSnapshots.of(role, dataScopeType, menuIds), null));
     }
 
     /**
@@ -190,6 +257,23 @@ public class RoleModificationService {
             throw BizException.conflict("内置角色不可" + action);
         }
         return role;
+    }
+
+    /**
+     * 取角色当前的数据范围类型，供审计快照使用。
+     *
+     * <p>读不到时抛 {@link IllegalStateException} 而不是编一个默认值：角色行刚刚读到过，
+     * 而 {@code sys_role.data_scope_type} 是 {@code NOT NULL}，此刻为空只能是这一行在读与写之间
+     * 被删除（或数据被绕过约束写坏）。快照里填 {@code CUSTOM} 之类的猜测会让日志出现一句与库无关的话。
+     *
+     * @param roleId 角色标识
+     * @return 数据范围类型
+     * @throws IllegalStateException 角色存在但读不到数据范围配置
+     */
+    private DataScopeType requireDataScopeType(long roleId) {
+        return dataScopeQuery.findRoleSetting(roleId)
+                .orElseThrow(() -> new IllegalStateException("角色存在但读不到数据范围配置，角色标识=" + roleId))
+                .type();
     }
 
     /**

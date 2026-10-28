@@ -63,17 +63,6 @@ public interface UserQuery {
     Optional<UserProfile> findById(long userId);
 
     /**
-     * 判断账号是否存在（已逻辑删除的按不存在）。
-     *
-     * <p>单独成方法而不是让调用方 {@code findById().isPresent()}：写入前的存在性判定只关心
-     * 「这一行在不在」，用详情查询去回答会顺带取回角色与货主名称，而那些数据在那一刻没人看。
-     *
-     * @param userId 用户标识
-     * @return 存在返回 {@code true}
-     */
-    boolean existsById(long userId);
-
-    /**
      * 判断该账号是否为系统里<b>唯一</b>的可用超级管理员。
      *
      * <p>给「停用用户」的保护用：停用最后一个可用超管之后，界面上再也没有能配置权限的账号，

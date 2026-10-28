@@ -5,8 +5,10 @@ import com.yunwms.master.application.dto.TerminationImpact;
 import com.yunwms.master.application.query.OwnerImpactQueryService;
 import com.yunwms.master.domain.model.Owner;
 import com.yunwms.master.domain.model.OwnerAddress;
+import com.yunwms.master.domain.model.OwnerAuditEvent;
 import com.yunwms.master.domain.model.OwnerStatus;
 import com.yunwms.master.domain.model.SkuPrefix;
+import com.yunwms.master.domain.port.AuditTrail;
 import com.yunwms.master.domain.port.CurrentOperator;
 import com.yunwms.master.domain.port.OwnerRepository;
 import com.yunwms.web.api.ErrorCode;
@@ -14,8 +16,10 @@ import com.yunwms.web.exception.BizException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -34,12 +38,14 @@ import static org.mockito.Mockito.verifyNoInteractions;
 /**
  * 货主状态流转用例的单测：端口替换为 mock，不起 Spring、不连库。
  *
- * <p>要钉住的是这条链路的四件事：
+ * <p>要钉住的是这条链路的五件事：
  * <ul>
  *   <li>失败顺序——会话、存在性、目标状态、流转判定、确认，顺序反了会把一次 404 报成一次状态错误；</li>
  *   <li>流转判定交给 {@link OwnerStatus}，用例层不自己写状态组合（这里只验证它确实被调用到）；</li>
  *   <li>终止未确认必须被拒，且提示里带真实的商品数与账号数——数字来自影响清单，不是写死的；</li>
- *   <li>同状态提交幂等成功，包含 {@code TERMINATED → TERMINATED}：它不查影响清单、不要求确认。</li>
+ *   <li>同状态提交幂等成功，包含 {@code TERMINATED → TERMINATED}：它不查影响清单、不要求确认；</li>
+ *   <li>流转留痕：写成的那一次留下前后状态不同的快照，被拒绝的那一次一条都不留——
+ *       「谁把这个客户停了」在审计里必须查得到，而一次没发生的流转不该出现在时间线上。</li>
  * </ul>
  */
 @DisplayName("货主状态流转")
@@ -54,6 +60,7 @@ class OwnerStatusChangeServiceTest {
     private OwnerRepository ownerRepository;
     private OwnerImpactQueryService ownerImpactQueryService;
     private CurrentOperator currentOperator;
+    private AuditTrail auditTrail;
     private OwnerStatusChangeService service;
 
     @BeforeEach
@@ -61,7 +68,9 @@ class OwnerStatusChangeServiceTest {
         ownerRepository = mock(OwnerRepository.class);
         ownerImpactQueryService = mock(OwnerImpactQueryService.class);
         currentOperator = mock(CurrentOperator.class);
-        service = new OwnerStatusChangeService(ownerRepository, ownerImpactQueryService, currentOperator);
+        auditTrail = mock(AuditTrail.class);
+        service = new OwnerStatusChangeService(
+                ownerRepository, ownerImpactQueryService, currentOperator, auditTrail);
         given(currentOperator.currentUserId()).willReturn(OptionalLong.of(OPERATOR_ID));
     }
 
@@ -218,6 +227,41 @@ class OwnerStatusChangeServiceTest {
         verifyNoInteractions(ownerImpactQueryService);
         verify(ownerRepository, never()).update(anyLong(), any(), anyLong());
         verify(ownerRepository, never()).softDelete(anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("审计：流转写一条 OWNER_STATUS_CHANGED，before.status 与 after.status 不同，其余字段原样")
+    void shouldRecordStatusChangeWithDifferentStatuses() {
+        given(ownerRepository.findByIdForUpdate(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.ACTIVE)));
+
+        service.change(command(OwnerStatus.SUSPENDED, false));
+
+        ArgumentCaptor<Map<String, Object>> before = ArgumentCaptor.captor();
+        ArgumentCaptor<Map<String, Object>> after = ArgumentCaptor.captor();
+        verify(auditTrail).record(
+                eq(OwnerAuditEvent.OWNER_STATUS_CHANGED), eq("OWNER0005"), before.capture(), after.capture());
+
+        assertThat(before.getValue()).containsEntry("status", "ACTIVE");
+        assertThat(after.getValue()).containsEntry("status", "SUSPENDED");
+        assertThat(after.getValue().get("status"))
+                .as("流转的记录必须能看出从哪个状态来、到哪个状态去")
+                .isNotEqualTo(before.getValue().get("status"));
+        // 流转只改状态：档案字段必须原样，否则日志会暗示这次调用还改了别的
+        assertThat(after.getValue())
+                .containsEntry("code", before.getValue().get("code"))
+                .containsEntry("name", before.getValue().get("name"))
+                .containsEntry("skuPrefix", before.getValue().get("skuPrefix"));
+    }
+
+    @Test
+    @DisplayName("审计：被拒绝的流转不写审计（没发生的事不留痕）")
+    void shouldNotRecordWhenTransitionIsRejected() {
+        given(ownerRepository.findByIdForUpdate(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.ACTIVE)));
+
+        assertThatThrownBy(() -> service.change(command(OwnerStatus.DRAFT, true)))
+                .isInstanceOf(BizException.class);
+
+        verifyNoInteractions(auditTrail);
     }
 
     /**
