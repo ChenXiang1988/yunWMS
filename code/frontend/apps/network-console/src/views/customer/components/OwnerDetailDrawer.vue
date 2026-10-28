@@ -1,22 +1,26 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   Button,
   Descriptions,
   DescriptionsItem,
   Drawer,
-  Spin
+  Spin,
+  TabPane,
+  Tabs
 } from 'ant-design-vue'
 import { EmptyState, StatusTag } from '@yunwms/ui-web'
 import type { OwnerDetail } from '@/api/owner'
 import { PLACEHOLDER, displayText, formatIsoDateTime, ownerTypeLabel } from '../owner-model'
 import { ownerStatusText } from '../owner-status'
+import OwnerContactTab from './OwnerContactTab.vue'
 
 /**
- * 货主详情抽屉。
+ * 货主详情抽屉，自己持有四个页签的容器：基本信息 / 联系人 / 税号 / 账号。
  *
- * 只展示「基本信息」与「注册地址」：联系人、税号、主账号后端尚未提供数据来源，
- * 本页不造占位页签——没有数据的页签只会让人以为功能坏了。
+ * 页签顺序取自 `ui-structure.md` 的「货主详情」。联系人页签已接入数据
+ * （`OwnerContactTab.vue`）；税号与账号的数据来源尚未提供，页签里放明确占位——
+ * 藏掉页签会让人以为没有这项功能，占位则说清「还没接入」。
  *
  * 数据由页面注入（`docs/frontend.md` §4.3），这里只负责展示与抛出操作意图。
  */
@@ -48,6 +52,18 @@ const emit = defineEmits<{
   delete: []
 }>()
 
+/** 当前页签：每次打开都回到基本信息，与 `ui-structure.md` 的「停在基本信息」一致 */
+const activeTab = ref('basic')
+
+watch(
+  () => props.open,
+  (open) => {
+    if (open) {
+      activeTab.value = 'basic'
+    }
+  }
+)
+
 const ownerTypeText = computed(() =>
   props.owner ? ownerTypeLabel(props.owner.ownerType, props.ownerTypeLabels) : PLACEHOLDER
 )
@@ -58,7 +74,7 @@ function close(): void {
 </script>
 
 <template>
-  <Drawer :open="open" title="客户详情" :width="560" :mask-closable="false" @close="close">
+  <Drawer :open="open" title="客户详情" :width="720" :mask-closable="false" @close="close">
     <div v-if="loading && !owner" class="detail__loading">
       <Spin />
     </div>
@@ -74,37 +90,61 @@ function close(): void {
         </p>
       </header>
 
-      <Descriptions :column="1" bordered size="small" class="detail__group">
-        <DescriptionsItem label="系统编码">
-          <span class="detail__mono">{{ owner.code }}</span>
-        </DescriptionsItem>
-        <DescriptionsItem label="客户名称">{{ owner.name }}</DescriptionsItem>
-        <DescriptionsItem label="英文名称">{{ displayText(owner.nameEn) }}</DescriptionsItem>
-        <DescriptionsItem label="货主简称">{{ displayText(owner.shortName) }}</DescriptionsItem>
-        <DescriptionsItem label="外部码">{{ displayText(owner.externalCode) }}</DescriptionsItem>
-        <DescriptionsItem label="SKU 前缀">
-          <span class="detail__mono">{{ owner.skuPrefix }}</span>
-        </DescriptionsItem>
-        <DescriptionsItem label="客户类型">{{ ownerTypeText }}</DescriptionsItem>
-        <DescriptionsItem label="结算主体">{{ owner.settlementEntity }}</DescriptionsItem>
-        <DescriptionsItem label="状态">
-          <StatusTag :status="owner.status" :text="ownerStatusText(owner.status)" />
-        </DescriptionsItem>
-      </Descriptions>
+      <Tabs v-model:activeKey="activeTab" size="small">
+        <TabPane key="basic" tab="基本信息">
+          <Descriptions :column="1" bordered size="small" class="detail__group">
+            <DescriptionsItem label="系统编码">
+              <span class="detail__mono">{{ owner.code }}</span>
+            </DescriptionsItem>
+            <DescriptionsItem label="客户名称">{{ owner.name }}</DescriptionsItem>
+            <DescriptionsItem label="英文名称">{{ displayText(owner.nameEn) }}</DescriptionsItem>
+            <DescriptionsItem label="货主简称">{{ displayText(owner.shortName) }}</DescriptionsItem>
+            <DescriptionsItem label="外部码">{{ displayText(owner.externalCode) }}</DescriptionsItem>
+            <DescriptionsItem label="SKU 前缀">
+              <span class="detail__mono">{{ owner.skuPrefix }}</span>
+            </DescriptionsItem>
+            <DescriptionsItem label="客户类型">{{ ownerTypeText }}</DescriptionsItem>
+            <DescriptionsItem label="结算主体">{{ owner.settlementEntity }}</DescriptionsItem>
+            <DescriptionsItem label="状态">
+              <StatusTag :status="owner.status" :text="ownerStatusText(owner.status)" />
+            </DescriptionsItem>
+          </Descriptions>
 
-      <Descriptions :column="1" bordered size="small" class="detail__group">
-        <DescriptionsItem label="国家 / 地区">{{ owner.country }}</DescriptionsItem>
-        <DescriptionsItem label="州省">{{ displayText(owner.province) }}</DescriptionsItem>
-        <DescriptionsItem label="城市">{{ owner.city }}</DescriptionsItem>
-        <DescriptionsItem label="区县">{{ displayText(owner.district) }}</DescriptionsItem>
-        <DescriptionsItem label="邮政编码">{{ displayText(owner.postalCode) }}</DescriptionsItem>
-        <DescriptionsItem label="详细地址">{{ owner.addressLine }}</DescriptionsItem>
-      </Descriptions>
+          <Descriptions :column="1" bordered size="small" class="detail__group">
+            <DescriptionsItem label="国家 / 地区">{{ owner.country }}</DescriptionsItem>
+            <DescriptionsItem label="州省">{{ displayText(owner.province) }}</DescriptionsItem>
+            <DescriptionsItem label="城市">{{ owner.city }}</DescriptionsItem>
+            <DescriptionsItem label="区县">{{ displayText(owner.district) }}</DescriptionsItem>
+            <DescriptionsItem label="邮政编码">{{ displayText(owner.postalCode) }}</DescriptionsItem>
+            <DescriptionsItem label="详细地址">{{ owner.addressLine }}</DescriptionsItem>
+          </Descriptions>
 
-      <Descriptions :column="1" bordered size="small" class="detail__group">
-        <DescriptionsItem label="备注">{{ displayText(owner.remark) }}</DescriptionsItem>
-        <DescriptionsItem label="创建时间">{{ formatIsoDateTime(owner.createdAt) }}</DescriptionsItem>
-      </Descriptions>
+          <Descriptions :column="1" bordered size="small" class="detail__group">
+            <DescriptionsItem label="备注">{{ displayText(owner.remark) }}</DescriptionsItem>
+            <DescriptionsItem label="创建时间">
+              {{ formatIsoDateTime(owner.createdAt) }}
+            </DescriptionsItem>
+          </Descriptions>
+        </TabPane>
+
+        <TabPane key="contacts" tab="联系人">
+          <OwnerContactTab :owner-id="owner.id" />
+        </TabPane>
+
+        <TabPane key="taxes" tab="税号">
+          <EmptyState description="税号维护待接入" />
+          <p class="detail__placeholder">
+            本页签的数据来源尚未提供。接入后在此维护多国多州的税号登记与默认标记。
+          </p>
+        </TabPane>
+
+        <TabPane key="accounts" tab="账号">
+          <EmptyState description="主账号管理待接入" />
+          <p class="detail__placeholder">
+            本页签的数据来源尚未提供。接入后在此开通与停用货主的主账号、重置密码。
+          </p>
+        </TabPane>
+      </Tabs>
     </template>
 
     <EmptyState v-else description="未取到货主信息" />
@@ -156,6 +196,13 @@ function close(): void {
 
 .detail__mono {
   font-family: var(--font-mono);
+}
+
+.detail__placeholder {
+  margin: 0;
+  text-align: center;
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
 }
 
 .detail__footer {
