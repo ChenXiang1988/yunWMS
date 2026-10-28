@@ -5,6 +5,7 @@ import com.yunwms.master.domain.model.Owner;
 import com.yunwms.master.domain.model.OwnerContact;
 import com.yunwms.master.domain.model.OwnerProfile;
 import com.yunwms.master.domain.model.OwnerStatus;
+import com.yunwms.master.domain.model.OwnerTaxRegistration;
 import com.yunwms.master.domain.model.SkuPrefix;
 
 import java.util.LinkedHashMap;
@@ -132,6 +133,39 @@ public final class OwnerAuditSnapshots {
         snapshot.put("email", contact.email());
         snapshot.put("isPrimary", contact.isPrimary());
         snapshot.put("remark", contact.remark());
+        return snapshot;
+    }
+
+    /**
+     * 税号的当前快照：既是新增的变更后值，也是编辑、删除的变更前值（编辑时另有一份变更后值）。
+     *
+     * <p><b>{@code taxNumber} 进白名单是一次明确的取舍，与本类注释里「敏感字段不进快照」的告警存在张力：</b>
+     * 税号就是这次变更的对象本身，不记它，一条「维护税号」的日志只剩「有人动过」这一点信息——
+     * 既看不出改前是哪个号，也分不清这次改的是号码还是州省。边界在于它是企业在登记机关取得的
+     * 登记编号，不是个人身份类数据；审计表本身是内部治理用途、只对管理端开放。若将来这张表上出现
+     * 证件影像、银行账号这类字段，仍按本类的白名单逐个评估，不因为「税号已经记了」而顺延放行。
+     *
+     * <p>{@code isDefault} 记 {@link Boolean} 而不是字符串：事后按 {@code true} 检索
+     * 「这个货主什么时候换过默认税号」是这一位唯一的用途。
+     *
+     * <p>键集固定为五项，{@code null} 值保留键：{@code "province": null} 表示「当时的登记没有州省」
+     * （国家级税号本就不对应州省），与「这个字段当时还不存在」在事后追溯里含义不同
+     * （与 {@link #ofContact} 同口径）。
+     *
+     * <p>不含税号标识与所属货主：标识每次删旧增新都会变，记下来回溯不到任何东西；
+     * 归属由审计的 {@code bizId}（货主编码）给出，与 {@link #ofContact} 同一处理。
+     *
+     * @param tax 已落库或即将落库的税号
+     * @return 快照，键为 {@code country} / {@code province} / {@code taxType} / {@code taxNumber} /
+     *         {@code isDefault}；{@code null} 值保留键
+     */
+    public static Map<String, Object> ofTax(OwnerTaxRegistration tax) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("country", tax.country());
+        snapshot.put("province", tax.province());
+        snapshot.put("taxType", tax.taxType());
+        snapshot.put("taxNumber", tax.taxNumber());
+        snapshot.put("isDefault", tax.isDefault());
         return snapshot;
     }
 
