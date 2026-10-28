@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+    放在 mapper/master/ 而不是 mapper/ 根下：MyBatis-Plus 的默认扫描位置是 classpath*:/mapper/**/*.xml，
+    按模块分目录可以在多个模块都加 XML 之后仍然一眼看出归属。
+
+    本文件只有三条写语句：读侧（列表、按标识读、计数、按角色判存在）都是单表等值查询，
+    走 BaseMapper + Lambda Wrapper，见 OwnerContactMapper 的类注释。
+-->
+<mapper namespace="com.yunwms.master.infrastructure.persistence.mapper.OwnerContactMapper">
+
+    <!--
+        编辑联系人的可编辑列。
+
+        为什么不用 updateById：它按「非空字段才进 SET」的策略生成语句，而「清空邮箱」「清空备注」
+        恰恰是一次合法的编辑——null 会被整列略过，旧值留在库里、接口回了成功，用户以为改了。
+        这里把六列全部写死，null 就是写 NULL，全量替换的语义只有写死才能保证。
+
+        SET 里没有 owner_id：归属创建后不可改（端口只收 OwnerContactDraft，它连 ownerId 都没有）。
+        写死在这里，比依赖「调用方记得别传」可靠——即使上层把归属放进了模型，这条语句也改不到它。
+
+        SET 里没有 created_at / created_by / deleted_at：
+        创建痕迹只由 insert 写入；删除标记只能由下面那条 softDelete 写。
+        让编辑有机会改 deleted_at，等于给了「把已删除的联系人悄悄改活」的路径。
+
+        updated_at 用库内 now()，与 insert 走列默认值同源，应用侧不取第二次时钟；
+        updated_by 由调用方给出，为空说明调用方没取到操作人，属于不该发生的情况。
+
+        is_primary 取参数而不写死：设为主联系人与取消主标记共用这一条语句，
+        调用方先 clearPrimary 腾出名额再写，主联系人的唯一性仍由 ux_owner_contact_primary 保证。
+
+        手写 SQL 必须自己带 deleted_at IS NULL：MyBatis-Plus 的逻辑删除只作用于它生成的语句。
+        已软删除的联系人因此不会被改活，那次编辑会命中零行——调用方不据行数判成功（见 Mapper 注释）。
+    -->
+    <update id="updateContact">
+        UPDATE owner_contact
+        SET name = #{name},
+            role_type = #{roleType},
+            phone = #{phone},
+            email = #{email},
+            is_primary = #{isPrimary},
+            remark = #{remark},
+            updated_at = now(),
+            updated_by = #{updatedBy}
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+    </update>
+
+    <!--
+        软删除：置 deleted_at，并留下「谁删的」。
+
+        不写 is_primary：删掉一条主联系人之后，该货主的名额自然空出来（部分唯一索引带
+        deleted_at IS NULL），不需要先把它改成非主；反过来，把标记一起改掉会让
+        「这次删的是不是主联系人」在数据层面看不出来。
+
+        WHERE 上的 deleted_at IS NULL 同时是「不重复删除」的判据：第二次删除命中零行，
+        调用方据此回 404，而不是回一个看不出来发生过的成功。这也是端口要求本方法返回布尔值的原因
+        ——它是唯一需要向调用方如实交代「这一行在我读到之后已经不在了」的写入（docs/coding.md
+        「持久化与副作用」要求非插入写入校验实际结果）。
+
+        手写 SQL 必须自己带 deleted_at IS NULL：逻辑删除配置只作用于 MyBatis-Plus 生成的语句。
+    -->
+    <update id="softDelete">
+        UPDATE owner_contact
+        SET deleted_at = now(),
+            updated_at = now(),
+            updated_by = #{updatedBy}
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+    </update>
+
+    <!--
+        清掉货主当前的主联系人标记。
+
+        没有主联系人时本语句命中零行：那是本方法的正常输入（第一个主联系人也得先清一次再写，
+        否则用例里要分叉成「有旧主」与「没有旧主」两条路径），不是失败，调用方也不看影响行数。
+        AND is_primary 让「本来就没有主」与「已经清过」都落成同一件事：命中零行，什么都不发生。
+
+        不加 LIMIT 1：命中行数由 ux_owner_contact_primary（owner_id 上、WHERE is_primary AND
+        deleted_at IS NULL 的部分唯一索引）保证至多一行；加 LIMIT 反而会让「索引被绕过约束写坏」
+        这件事以「只清了一条」的形态被掩盖。
+
+        手写 SQL 必须自己带 deleted_at IS NULL：逻辑删除配置只作用于 MyBatis-Plus 生成的语句。
+        漏掉它，已软删除的行也会被这条语句碰到——它本来就不该再被任何写语句命中。
+    -->
+    <update id="clearPrimary">
+        UPDATE owner_contact
+        SET is_primary = false,
+            updated_at = now(),
+            updated_by = #{updatedBy}
+        WHERE owner_id = #{ownerId}
+          AND is_primary
+          AND deleted_at IS NULL
+    </update>
+
+</mapper>
