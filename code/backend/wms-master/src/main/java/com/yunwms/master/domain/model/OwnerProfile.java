@@ -50,4 +50,51 @@ public record OwnerProfile(
             throw new IllegalArgumentException("注册地址不能为空");
         }
     }
+
+    /**
+     * 取已落库货主当前的可编辑属性。
+     *
+     * <p><b>为什么由本类型提供这个投影：</b>「哪些字段算可编辑属性」的唯一真源就是本记录的字段表，
+     * 而投影要服务的正是「这次编辑是否真的改了东西」——比的是领域对象的等值，不是两个
+     * {@code Map} 的字符串表示。把投影写在调用方，两处各列一遍字段名，加字段时漏掉一处不会报错，
+     * 表现成「改了但审计说没改」；写在这里则新增字段时两处构造器同时编译失败，漏不掉。
+     *
+     * <p>不做任何归一化：库里读到的值与用户提交的值必须按原样比较，否则「用户补了一个空格」这种
+     * 真实改动会被判成没变。
+     *
+     * @param owner 已落库的货主
+     * @return 该货主当前的可编辑属性
+     */
+    public static OwnerProfile of(Owner owner) {
+        return new OwnerProfile(
+                owner.name(),
+                owner.shortName(),
+                owner.nameEn(),
+                owner.externalCode(),
+                owner.ownerType(),
+                owner.settlementEntity(),
+                owner.address(),
+                owner.remark());
+    }
+
+    /**
+     * 取待落库新货主的可编辑属性，用于建档时的审计快照。
+     *
+     * <p>与 {@link #of(Owner)} 成对存在：建档那一刻还没有已落库的聚合，快照只能从写入模型投影。
+     * 两个重载共用本记录的字段表，键集因此与已落库货主的快照一致——建档与后续编辑的日志可以直接对比。
+     *
+     * @param owner 待落库的新货主
+     * @return 本次建档的可编辑属性
+     */
+    public static OwnerProfile of(NewOwner owner) {
+        return new OwnerProfile(
+                owner.name(),
+                owner.shortName(),
+                owner.nameEn(),
+                owner.externalCode(),
+                owner.ownerType(),
+                owner.settlementEntity(),
+                owner.address(),
+                owner.remark());
+    }
 }
