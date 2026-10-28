@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yunwms.auth.domain.model.AuditAction;
 import com.yunwms.auth.domain.model.AuditBizType;
 import com.yunwms.auth.domain.model.AuditEntry;
+import com.yunwms.auth.domain.model.SubjectType;
 import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.infrastructure.persistence.entity.SysAuditLogEntity;
 import com.yunwms.auth.infrastructure.persistence.mapper.SysAuditLogMapper;
@@ -25,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 /**
@@ -109,7 +111,7 @@ class AuditRecorderImplTest {
     }
 
     @Test
-    @DisplayName("写入：两端共用的路径（如登录）来源端为空，不自造一个端")
+    @DisplayName("写入：共用路径且会话里没有主体类型时来源端为空，不凭空造一个端")
     void shouldLeavePortalEmptyForSharedPath() {
         given(currentSession.currentUserId()).willReturn(OptionalLong.of(OPERATOR_ID));
         given(currentSession.currentUserDisplayName()).willReturn(Optional.of(OPERATOR_NAME));
@@ -117,7 +119,62 @@ class AuditRecorderImplTest {
 
         recorder.record(entry(AuditBizType.USER, "7", AuditAction.LOGIN));
 
+        // 登录失败就是这种形态：路径判不出端，又没有会话可回退。空值在语义上是「没认出来」，
+        // 由调用方在摘要里说明，而不是按某个默认值猜一个端写进审计
         assertThat(capturedRow().getSourcePortal()).isNull();
+    }
+
+    @Test
+    @DisplayName("写入：共用路径判不出来源端时回退到会话主体类型，员工记 CONSOLE")
+    void shouldFallBackToStaffSubjectTypeForSharedPath() {
+        given(currentSession.currentUserId()).willReturn(OptionalLong.of(OPERATOR_ID));
+        given(currentSession.currentUserDisplayName()).willReturn(Optional.of(OPERATOR_NAME));
+        given(currentSession.currentSubjectType()).willReturn(Optional.of(SubjectType.STAFF));
+        // 登录成功就是这种形态：两端共用一个 URL，会话由本次请求刚刚建立
+        bindRequest("/api/auth/login", "");
+
+        recorder.record(entry(AuditBizType.USER, "admin", AuditAction.LOGIN));
+
+        assertThat(capturedRow().getSourcePortal()).isEqualTo("CONSOLE");
+    }
+
+    @Test
+    @DisplayName("写入：共用路径下货主账号登录的来源端是 PORTAL")
+    void shouldFallBackToOwnerSubjectTypeForSharedPath() {
+        given(currentSession.currentUserId()).willReturn(OptionalLong.of(OPERATOR_ID));
+        given(currentSession.currentUserDisplayName()).willReturn(Optional.of(OPERATOR_NAME));
+        given(currentSession.currentSubjectType()).willReturn(Optional.of(SubjectType.OWNER));
+        bindRequest("/api/auth/login", "");
+
+        recorder.record(entry(AuditBizType.USER, "OWNER0001", AuditAction.LOGIN));
+
+        assertThat(capturedRow().getSourcePortal()).isEqualTo("PORTAL");
+    }
+
+    @Test
+    @DisplayName("写入：路径能判定端时以路径为准，不被会话的主体类型覆盖")
+    void shouldPreferPathOverSubjectType() {
+        given(currentSession.currentUserId()).willReturn(OptionalLong.of(OPERATOR_ID));
+        given(currentSession.currentUserDisplayName()).willReturn(Optional.of(OPERATOR_NAME));
+        // 会话是货主账号、请求却走仓网端接口：来源端要记 CONSOLE，路径是事实，主体类型只是能力
+        given(currentSession.currentSubjectType()).willReturn(Optional.of(SubjectType.OWNER));
+        bindRequest("/api/console/owners", "");
+
+        recorder.record(entry(AuditBizType.OWNER, "OWNER0001", AuditAction.UPDATE));
+
+        assertThat(capturedRow().getSourcePortal()).isEqualTo("CONSOLE");
+    }
+
+    @Test
+    @DisplayName("写入：没有请求上下文时不问会话，来源端留空")
+    void shouldNotDerivePortalWithoutRequest() {
+        // 定时任务、回调线程：不是「这次请求从哪个端来」的问题，而是根本没有端
+        given(currentSession.currentSubjectType()).willReturn(Optional.of(SubjectType.STAFF));
+
+        recorder.record(entry(AuditBizType.SKU, "SKU0001", AuditAction.UPDATE));
+
+        assertThat(capturedRow().getSourcePortal()).isNull();
+        verify(currentSession, never()).currentSubjectType();
     }
 
     @Test

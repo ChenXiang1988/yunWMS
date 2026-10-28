@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yunwms.auth.domain.model.AuditEntry;
 import com.yunwms.auth.domain.model.SourcePortal;
+import com.yunwms.auth.domain.model.SubjectType;
 import com.yunwms.auth.domain.port.AuditRecorder;
 import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.infrastructure.persistence.entity.SysAuditLogEntity;
@@ -28,10 +29,18 @@ import java.util.OptionalLong;
  * 回调）没有请求上下文，但那次操作照样要留痕，否则「谁在什么时候改了这条数据」的链条上会出现
  * 一个无声的缺口。
  *
- * <p><b>来源端按请求路径前缀判定，不按操作人的主体类型推导。</b>主体类型回答的是「这个账号能进哪个端」，
- * 与「这次请求从哪个端发出」不是同一件事；推导在跨端访问放开的那天会静默出错，而写进审计的错误
- * 结论事后无法与真实记录区分（见 {@code V038} 的注释）。路径既不是 {@code /api/console} 也不是
- * {@code /api/portal} 的请求（例如两端共用的 {@code /api/auth}）来源端留空：那一条事实确实不存在。
+ * <p><b>来源端先按请求路径前缀判定，判不出来时才回退到当前会话的主体类型。</b>路径能判定时它就是唯一依据：
+ * 主体类型回答的是「这个账号能进哪个端」，与「这次请求从哪个端发出」不是同一件事；推导在跨端访问放开的那天
+ * 会静默出错，而写进审计的错误结论事后无法与真实记录区分（见 {@code V038} 的注释）。
+ *
+ * <p><b>回退只在路径不含任何端信息时生效，不会覆盖路径给出的结论。</b>两端共用 {@code /api/auth/login}
+ * 一个 URL，而登录这条事实又必须写出端（规格「审计日志」要求每条日志含来源端）。此时会话正由本次请求
+ * 刚建立，会话里的主体类型是唯一可用的依据：{@code STAFF} 只可能从仓网端登录，{@code OWNER} 只可能从
+ * 货主端登录。登录失败没有会话，回退同样取不到，来源端如实留空，由调用方在摘要里说明。
+ *
+ * <p><b>回退只读会话，不读客户端自称的端。</b>{@code Referer}、{@code Origin} 与客户端传来的端标识
+ * 都能被请求方随意填写，把它们写进审计等于让被审计者自己填来源。宁可留空并说明，也不要一个
+ * 无法与真实记录区分的结论。
  *
  * <p><b>写入加入调用方的事务</b>（{@code REQUIRED}）：审计与业务变更要么一起成功、要么一起回滚。
  * 单独提交会得到「业务改了但没留痕」或「留了痕但业务没改」两种残局。
@@ -91,7 +100,7 @@ public class AuditRecorderImpl implements AuditRecorder {
         row.setOperatorId(operatorId);
         row.setOperatorName(resolveOperatorName(operatorId));
         row.setOperatorIp(request == null ? null : request.getRemoteAddr());
-        SourcePortal sourcePortal = sourcePortalOf(request);
+        SourcePortal sourcePortal = resolveSourcePortal(request);
         row.setSourcePortal(sourcePortal == null ? null : sourcePortal.name());
         row.setSummary(entry.summary());
         row.setBeforeValue(toJson(entry.beforeValue(), entry, "变更前快照"));
@@ -113,19 +122,33 @@ public class AuditRecorderImpl implements AuditRecorder {
     }
 
     /**
+     * 判定这条日志的来源端：路径前缀优先，判不出来时回退到会话的主体类型。
+     *
+     * <p>没有请求上下文时直接返回空，连会话都不问：定时任务、回调所在的线程没有「端」这个概念，
+     * 那个线程上也拿不到 Sa-Token 上下文，问了只会得到一条与本次操作无关的推断。
+     *
+     * @param request 当前请求；为 {@code null} 时表示没有请求上下文
+     * @return 来源端；无请求上下文、路径不含端信息且会话里没有主体类型时为 {@code null}
+     */
+    private SourcePortal resolveSourcePortal(HttpServletRequest request) {
+        if (request == null) {
+            return null;
+        }
+        SourcePortal fromPath = sourcePortalOfPath(request);
+        return fromPath != null ? fromPath : sourcePortalOfSession();
+    }
+
+    /**
      * 按请求路径前缀判定来源端。
      *
      * <p>先减掉 context path 再比对：应用被部署在子路径下时，{@code getRequestURI()} 会带上它
      * （{@code /wms/api/console/...}），不减掉的话每一条日志的来源端都会静默变成空值——
      * 而空值在语义上是「这次操作没有端的概念」，与「没认出来」混在一起无法分辨。
      *
-     * @param request 当前请求；为 {@code null} 时表示没有请求上下文
-     * @return 来源端；无请求上下文或路径不属于两端时为 {@code null}
+     * @param request 当前请求，调用方保证非空
+     * @return 来源端；路径不属于两端时为 {@code null}
      */
-    private static SourcePortal sourcePortalOf(HttpServletRequest request) {
-        if (request == null) {
-            return null;
-        }
+    private static SourcePortal sourcePortalOfPath(HttpServletRequest request) {
         String contextPath = request.getContextPath();
         String path = contextPath == null || contextPath.isEmpty()
                 ? request.getRequestURI()
@@ -137,6 +160,26 @@ public class AuditRecorderImpl implements AuditRecorder {
             return SourcePortal.PORTAL;
         }
         return null;
+    }
+
+    /**
+     * 路径判不出来时的回退：按当前会话的主体类型推断端。
+     *
+     * <p>映射用 switch 表达式穷举，不写 {@code default}：将来若出现第三种主体类型，这里会编译失败，
+     * 逼人明确它从哪个端登录，而不是悄悄落到某个默认值上——一条推断错的来源端写进审计后，
+     * 事后无法与真实记录区分。
+     *
+     * @return 来源端；当前请求没有有效会话、或会话里没有主体类型时为 {@code null}
+     */
+    private SourcePortal sourcePortalOfSession() {
+        Optional<SubjectType> subjectType = currentSession.currentSubjectType();
+        if (subjectType.isEmpty()) {
+            return null;
+        }
+        return switch (subjectType.get()) {
+            case STAFF -> SourcePortal.CONSOLE;
+            case OWNER -> SourcePortal.PORTAL;
+        };
     }
 
     /**
