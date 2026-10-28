@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * 货主税务登记的增删改查用例：可见性判定、类型与国家匹配、税号格式、默认切换与审计留痕都在这里。
+ * 货主税务登记的增删改查用例：可见性判定、类型与国家匹配、州省规则、税号格式、默认切换与审计留痕都在这里。
  *
  * <p><b>数据范围只有一条规则：税号的可见性等于其货主的可见性。</b>税号是货主的子资源，有自己的权限点
  * （{@code system:owner:tax:edit}，见 {@code V042}），但没有独立的可见范围。因此四条用例都先过
@@ -30,18 +30,32 @@ import java.util.regex.Pattern;
  * 不通过时这次读取的结果直接丢弃。这两个入口的顺序固定为「先按税号标识取归属，再判货主可见」，
  * 与 {@code OwnerContactService} 逐条相同：按存在性放行等于让范围外的货主被改。
  *
- * <p><b>校验顺序固定为「取操作人 → 货主可见 → 类型与国家匹配 → 税号格式 → 默认切换 → 落库 → 留痕」：</b>
- * 操作人先取，他既是 {@code created_by}/{@code updated_by} 的来源，也是清旧默认那条语句要写的操作人；
- * 货主可见先于字段规则，因为「这个陌生的类型不对」这句话只有在货主确实可见时才对调用方有意义；
- * 依赖字典与类型语义的两条规则排在默认切换之前，因为它们是纯内存判断加一次字典查询，
- * 不合法时不该先动到同国另一行的默认标记。
+ * <p><b>校验顺序固定为「取操作人 → 货主可见 → 类型与国家匹配 → 州省规则 → 税号格式 → 默认切换 →
+ * 落库 → 留痕」：</b>操作人先取，他既是 {@code created_by}/{@code updated_by} 的来源，也是清旧默认那条
+ * 语句要写的操作人；货主可见先于字段规则，因为「这个陌生的类型不对」这句话只有在货主确实可见时
+ * 才对调用方有意义；依赖字典与类型语义的几条规则排在默认切换之前，因为它们是纯内存判断加至多两次
+ * 字典查询，不合法时不该先动到同国另一行的默认标记。
  *
  * <p><b>编辑（{@link #update}）判的是库里那一行的国家与类型，不是入参里的：</b>这两列是行的身份
  * （{@link OwnerTaxRepository#update} 的 SET 列表里没有它们），改它们等于换一条登记，应删旧登新。
- * 两条规则照旧执行，只是取值来源不同——「类型是否适用该国家」判的是这一行当前的组合，
- * 「格式是否合法」判的是本次提交的号码配这一行的类型。因此一次编辑在字典项停用之后会被拒（40000），
+ * 这几条规则照旧执行，只是取值来源不同——「类型是否适用该国家」「州省是否属于该国」判的是这一行当前的
+ * 组合，「州销售税号有没有州省」与「格式是否合法」判的是本次提交的值配这一行的类型。
+ * 因此一次编辑在字典项停用之后会被拒（40000），
  * 与 {@code OwnerContactService} 对停用角色的处理同口径：停用意味着不再被新数据引用，
  * 而换掉一个号码也是新数据。代价要说清楚：这类记录此后只能删除或改回启用项，不能就地改号码。
+ *
+ * <p><b>州省的两条规则单独成一步，因为它们判的是「这次提交的组合本身成不成立」：</b>州销售税号
+ * （{@code US_STATE_SALES}）必须有州省，州省一旦非空就必须属于所选国家。前者只对这一个类型生效，
+ * 不由 {@link OwnerTaxDraft} 无条件要求：国家级税号（统一社会信用代码、跨国的 VAT）本就没有州省，
+ * 而「哪种类型要求填州省」随 {@code TAX_ID_TYPE} 字典的语义而变，模型只判列的形态。这条规则也不能省：
+ * {@code ux_owner_tax_unique} 用 {@code COALESCE(province, '')} 把空州省归一后判重，不填州省的
+ * 州销售税号会让「加州一条、德州一条」被判成重复登记，而「不收某个州的销售税」这个意思本来就无法表达。
+ * 后者与货主注册地址同一口径（{@code OwnerDictionaryValidator}）：层级的权威在字典项的 {@code ext.parent}，
+ * 由 {@link DictLookup#isProvinceOfCountry} 回答，不让调用方记住「省码以国家码开头」这类巧合。
+ * 两条都把整串空白当作未填，与 {@link OwnerTaxDraft} 的归一口径一致：否则「只填了空格」会在这一层被放行、
+ * 到模型层归一成 {@code null} 落库，最后一条没有州省的州销售税号照样进库。顺序在「类型与国家匹配」之后，
+ * 因为类型不适用该国家时，「换个类型或换个国家」比「州省不对」更接近真正的错处；在「税号格式」之前，
+ * 因为号码写错只改几位，而国家与州省配错要换的是整个选择。
  *
  * <p><b>中国统一社会信用代码的 18 位规则只在本类落一次：</b>按类型分支判（{@code CN_USCC} 才套正则），
  * 而不是无条件校验——其余类型的长度与字符集随各国税制而变，没有统一形态可判。规则不放进
@@ -89,6 +103,14 @@ public class OwnerTaxService {
     private static final String CN_USCC_TAX_TYPE = "CN_USCC";
 
     /**
+     * 美国州销售税号的字典项取值，与 {@code V042} 种下的 {@code US_STATE_SALES} 逐字一致。
+     *
+     * <p>写成常量而不是散在判断里：它是「州省必须填」这条规则的唯一判据。拼错时规则会对一种不存在的
+     * 类型生效——校验代码看起来仍然「有人写了」，而真正的州销售税号一条也拦不住。
+     */
+    private static final String US_STATE_SALES_TAX_TYPE = "US_STATE_SALES";
+
+    /**
      * 统一社会信用代码的形态：18 位大写字母或数字。
      *
      * <p>按规格「校验 18 位字母数字格式」取大写字母：统一社会信用代码本身的字符集不含小写字母，
@@ -107,7 +129,7 @@ public class OwnerTaxService {
     /**
      * @param ownerTaxRepository 税号仓储端口
      * @param ownerRepository    货主仓储端口；只用于可见性判定与取审计用的货主编码
-     * @param dictLookup         字典窄端口，判 {@code taxType} 是否适用该国家
+     * @param dictLookup         字典窄端口，判 {@code taxType} 是否适用该国家、州省是否属于该国家
      * @param currentOperator    当前操作人端口
      * @param auditTrail         审计留痕端口，由 {@code wms-app} 接到审计能力上
      */
@@ -151,9 +173,9 @@ public class OwnerTaxService {
      * @param command 新增入参；其中的 {@code isDefault} 决定是否切换该国家的默认税号
      * @return 新税号，标识为数据库生成值
      * @throws BizException 当前会话无效（40100）；货主不存在、已逻辑删除或不在当前数据范围内（40400）；
-     *                      税号类型为空白或与所填国家不匹配、{@code CN_USCC} 不是 18 位大写字母或数字
-     *                      （40000）；同一货主在同一国家、同一州省下已有同类型税号，或并发下另一笔请求
-     *                      先设了该国家的默认税号（40900）
+     *                      税号类型为空白或与所填国家不匹配、州销售税号未填州省、州省不属于所填国家、
+     *                      {@code CN_USCC} 不是 18 位大写字母或数字（40000）；同一货主在同一国家、
+     *                      同一州省下已有同类型税号，或并发下另一笔请求先设了该国家的默认税号（40900）
      * @throws IllegalArgumentException 国家形态不合法、税号类型或税号为空、任一字段超出列宽，
      *                                  说明入口没有校验就调了本方法（见 {@link OwnerTaxDraft}）
      */
@@ -162,6 +184,8 @@ public class OwnerTaxService {
         long operatorId = currentOperatorId();
         Owner owner = requireVisibleOwner(command.ownerId());
         requireTaxTypeApplicableToCountry(command.taxType(), command.country());
+        requireProvinceForStateSalesTax(command.taxType(), command.province());
+        requireProvinceOfCountry(command.province(), command.country());
         requireTaxNumberFormat(command.taxType(), command.taxNumber());
 
         OwnerTaxDraft draft = new OwnerTaxDraft(command.country(), command.province(),
@@ -190,14 +214,16 @@ public class OwnerTaxService {
      *
      * <p>归属、国家与类型以库里那一行为准：{@code command} 里同名的三个字段不参与判定，
      * 写语句的 SET 列表里也没有它们，因此不存在「一次编辑把税号搬到另一个货主名下或另一个类型名下」
-     * 的路径。
+     * 的路径。州省的两条规则照此取值：只有州省取本次提交的值（它是可编辑列），
+     * 「该类型是否要求州省」与「州省是否属于该国」判的仍是这一行的类型与国家。
      *
      * @param taxId   税号标识
      * @param command 编辑入参
      * @return 更新后的税号
      * @throws BizException 当前会话无效（40100）；税号不存在或已逻辑删除（40400）；
      *                      该税号的货主不在当前数据范围内（40400）；
-     *                      该行的类型已不适用于其国家（字典项停用或适用国家被改）、{@code CN_USCC}
+     *                      该行的类型已不适用于其国家（字典项停用或适用国家被改）、该行是州销售税号
+     *                      而本次未填州省、州省不属于该行的国家、{@code CN_USCC}
      *                      不是 18 位大写字母或数字（40000）；同一货主在同一国家、同一州省下已有同类型
      *                      税号，或并发下另一笔请求先设了该国家的默认税号（40900）
      * @throws IllegalArgumentException 州省或号码为空、任一字段超出列宽，说明入口没有校验就调了本方法
@@ -209,6 +235,8 @@ public class OwnerTaxService {
         // 归属只认库里那一行：先取到 ownerId 才判得了可见性，判定不通过时这次读取的结果直接丢弃
         Owner owner = requireVisibleOwner(existing.ownerId());
         requireTaxTypeApplicableToCountry(existing.taxType(), existing.country());
+        requireProvinceForStateSalesTax(existing.taxType(), command.province());
+        requireProvinceOfCountry(command.province(), existing.country());
         requireTaxNumberFormat(existing.taxType(), command.taxNumber());
 
         // 国家与类型取 existing：它们不落库，传进去只参与校验（见 OwnerTaxDraft）
@@ -327,6 +355,59 @@ public class OwnerTaxService {
             // 带字典类型名，他才知道去哪里看「这种税号到底适用哪些国家」
             throw BizException.badRequest("税号类型 " + taxType + " 与所填国家 " + country
                     + " 不匹配，请从字典 " + TAX_TYPE_DICT + " 的适用清单中选择");
+        }
+    }
+
+    /**
+     * 校验州销售税号填了州省。
+     *
+     * <p>只管 {@code US_STATE_SALES} 一个类型：州销售税号是按州登记的，没有州就不成立；其余类型
+     * （统一社会信用代码、EIN、跨国的 VAT）可以是国家级登记，州省留给调用方按需选择。判据是类型取值
+     * 本身，而不是字典里某个「要求州省」的属性——字典只声明适用国家，不声明必填字段，
+     * 凭空读一个不存在的键只会让这条规则看起来配置化了、实际永远不生效。
+     *
+     * <p>空白与未填同口径：{@link OwnerTaxDraft} 会把整串空白归一为 {@code null}，这里若放过空白，
+     * 「只填了空格」的州销售税号就会以「没有州省」的形态落库，而 {@code ux_owner_tax_unique} 又把空州省
+     * 归一后判重，两条不同州的销售税号会被判成重复登记。
+     *
+     * @param taxType  税号类型，新增时来自入参，编辑时来自库里那一行
+     * @param province 本次提交的州省
+     * @throws BizException 类型为 {@code US_STATE_SALES} 而州省为空或整串空白（40000）
+     */
+    private static void requireProvinceForStateSalesTax(String taxType, String province) {
+        if (US_STATE_SALES_TAX_TYPE.equals(taxType) && (province == null || province.isBlank())) {
+            throw BizException.badRequest("州销售税号必须选择州省");
+        }
+    }
+
+    /**
+     * 校验州省属于所选国家。
+     *
+     * <p>州省为空时直接通过：它本就不是必填列，国家级税号没有州省。而
+     * {@link DictLookup#isProvinceOfCountry} 的契约要求两个参数非空白（空参数属于编程错误，不是业务
+     * 输入问题），因此「有没有填」必须先在这里判过——省掉这一判，一次「没填州省」就会变成
+     * {@code IllegalArgumentException}，也就是一个 50000。空白同样视为未填，理由与
+     * {@link #requireProvinceForStateSalesTax} 相同。
+     *
+     * <p>取值原样送字典比对，不裁两侧空格：与 {@link #requireTaxTypeApplicableToCountry} 同一取向——
+     * 裁一次会让「用来判定的值」与「落库的值」不是同一个串，{@code " US-CA "} 被悄悄当成
+     * {@code US-CA} 通过，库里留下的却是原值。
+     *
+     * <p>失败提示同时提到「不属于」与「启用项」：端口对「州省不存在」「该项已停用」「该项属于别的国家」
+     * 三种情况一律回 {@code false}，提示若只说「不属于」，操作人会去改国家，而真正的原因可能是
+     * 那条字典项被停用了。
+     *
+     * @param province 本次提交的州省，可为 {@code null} 或整串空白
+     * @param country  国家，新增时来自入参，编辑时来自库里那一行
+     * @throws BizException 州省不属于该国家，或已不在字典 {@code PROVINCE} 的启用项中（40000）
+     */
+    private void requireProvinceOfCountry(String province, String country) {
+        if (province == null || province.isBlank()) {
+            return;
+        }
+        if (!dictLookup.isProvinceOfCountry(province, country)) {
+            throw BizException.badRequest("州省 " + province + " 不属于所选国家 " + country
+                    + "，或已不在字典 PROVINCE 的启用项中，请重新选择");
         }
     }
 
