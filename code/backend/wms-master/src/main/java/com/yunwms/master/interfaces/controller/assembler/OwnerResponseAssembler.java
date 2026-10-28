@@ -3,12 +3,14 @@ package com.yunwms.master.interfaces.controller.assembler;
 import com.yunwms.master.application.dto.CreatedOwner;
 import com.yunwms.master.application.dto.OwnerDetail;
 import com.yunwms.master.application.dto.OwnerPage;
+import com.yunwms.master.application.dto.ProvisionedOwnerAccount;
 import com.yunwms.master.application.dto.TerminationImpact;
 import com.yunwms.master.domain.model.OwnerAddress;
 import com.yunwms.master.interfaces.controller.response.CreatedOwnerResponse;
 import com.yunwms.master.interfaces.controller.response.OwnerDetailResponse;
 import com.yunwms.master.interfaces.controller.response.OwnerListItemResponse;
 import com.yunwms.master.interfaces.controller.response.OwnerTerminationImpactResponse;
+import com.yunwms.master.interfaces.controller.response.ProvisionedOwnerAccountResponse;
 import com.yunwms.web.api.PageResult;
 import org.springframework.stereotype.Component;
 
@@ -92,6 +94,19 @@ public class OwnerResponseAssembler {
      */
     public OwnerTerminationImpactResponse toTerminationImpactResponse(TerminationImpact impact) {
         return new OwnerTerminationImpactResponse(impact.skuCount(), impact.accountCount());
+    }
+
+    /**
+     * 组装开通主账号响应。
+     *
+     * <p>只把标识转成字符串，不做其他加工：登录名就是货主编码，任何「美化」（补前缀、转大写）
+     * 都会让响应里的值与账号表里真正的登录名不一致，而管理员是要拿它去登录框里核对的。
+     *
+     * @param account 开通结果
+     * @return 开通响应体
+     */
+    public ProvisionedOwnerAccountResponse toProvisionedAccountResponse(ProvisionedOwnerAccount account) {
+        return new ProvisionedOwnerAccountResponse(Long.toString(account.accountId()), account.loginName());
     }
 
     private static OwnerListItemResponse toListItem(OwnerPage.Summary summary) {
