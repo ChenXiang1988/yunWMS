@@ -1,0 +1,181 @@
+{
+  "_comment": [
+    "已准入依赖清单：本文件是「哪些依赖被允许、为什么」的唯一真源，由 check_dependencies.py 在构建期核对。",
+    "新增任何依赖都必须先在这里登记，登记即需回答 AGENTS.md 的依赖准入三问：许可证、最近维护时间、可否被现有依赖替代。",
+    "license 字段的取值来源（2026-10-29 实测）：Maven 依赖优先取 pom 的 licenses 段，取不到的取 GitHub/LICENSE 或 jar 内 META-INF/LICENSE.txt，来源写在对应 note 里；npm 依赖取 registry.npmjs.org 的 license 字段。",
+    "核实不到的写 UNVERIFIED，脚本会告警但不阻断——宁可暴露不确定性，也不要填一个看起来精确的假值。",
+    "不另建 Markdown 版清单：两份清单必然漂移，而漂移的方向总是「一处更新了另一处没更新」。可读说明就在本文件的 note 里。"
+  ],
+  "backend": [
+    {
+      "coordinate": "org.springframework.boot:spring-boot-starter-web",
+      "version": "3.4.1",
+      "license": "Apache-2.0",
+      "note": "Web 入口与内嵌容器，Spring Boot 官方 starter，与 parent 同版本。无替代必要。"
+    },
+    {
+      "coordinate": "org.springframework.boot:spring-boot-starter-validation",
+      "version": "3.4.1",
+      "license": "Apache-2.0",
+      "note": "入口声明式校验。docs/coding.md 要求校验用声明式约束表达，依赖它比手写判空可靠。"
+    },
+    {
+      "coordinate": "org.springframework.boot:spring-boot-starter-actuator",
+      "version": "3.4.1",
+      "license": "Apache-2.0",
+      "note": "健康检查与运维端点，官方 starter。"
+    },
+    {
+      "coordinate": "org.springframework.boot:spring-boot-starter-data-redis",
+      "version": "3.4.1",
+      "license": "Apache-2.0",
+      "note": "仅为 Redis 协议客户端（Lettuce）。服务端跑的是 Valkey 8（docker-compose.dev.yml 的 valkey/valkey:8-alpine），本项不构成 Redis 服务端引入，与 config.yaml「Redis 7.4+ 禁止」不冲突。"
+    },
+    {
+      "coordinate": "org.springframework.boot:spring-boot-starter-test",
+      "version": "3.4.1",
+      "license": "Apache-2.0",
+      "note": "测试基座（JUnit 5、AssertJ、Mockito），官方 starter，无替代必要。"
+    },
+    {
+      "coordinate": "org.springframework.security:spring-security-crypto",
+      "version": "6.4.2",
+      "license": "Apache-2.0",
+      "note": "只用它的 BCrypt 实现，不引入整套 Spring Security：本项目权限由 Sa-Token 承载，两套安全框架并存会让鉴权入口出现第二真源。"
+    },
+    {
+      "coordinate": "com.baomidou:mybatis-plus-spring-boot3-starter",
+      "version": "3.5.9",
+      "license": "Apache-2.0",
+      "note": "持久层。选它而非裸 MyBatis 是因为分页与条件构造能省掉大量样板，代价是可控的 SQL 可见性下降；已定「复杂 SQL 走 XML」。"
+    },
+    {
+      "coordinate": "com.baomidou:mybatis-plus-jsqlparser",
+      "version": "3.5.9",
+      "license": "Apache-2.0",
+      "note": "数据权限插件所在的构件（3.5.9 起从 extension 拆出）。版本必须跟 mybatis-plus 走：错开版本不会编译失败，只会在运行期把 SQL 改错。它传递引入 JSqlParser（LGPL/Apache 双许可，按 Apache-2.0 使用），全仓 SQL 改写只走这一个解析器。"
+    },
+    {
+      "coordinate": "cn.dev33:sa-token-spring-boot3-starter",
+      "version": "1.46.0",
+      "license": "Apache-2.0",
+      "note": "会话、权限点与数据范围的鉴权链路。pom 无 licenses 段，许可证取自项目 LICENSE 文件。替代方案 Spring Security 需自建会话与权限点模型，成本更高。"
+    },
+    {
+      "coordinate": "io.swagger.core.v3:swagger-annotations-jakarta",
+      "version": "2.2.25",
+      "license": "Apache-2.0",
+      "note": "OpenAPI 注解。版本跟 springdoc 2.7.0 实测的传递版本，不单独挑——注解与 swagger-core 的模型类由同一套 jar 发布，错开会让文档结构偏离注解语义且不报错。pom 无 licenses 段，取自 swagger-core 仓库 LICENSE。"
+    },
+    {
+      "coordinate": "org.springdoc:springdoc-openapi-starter-webmvc-ui",
+      "version": "2.7.0",
+      "license": "Apache-2.0",
+      "note": "生成 /v3/api-docs 与 Swagger UI，接口台账工具依赖它。pom 无 licenses 段，取自项目 LICENSE 文件。"
+    },
+    {
+      "coordinate": "org.postgresql:postgresql",
+      "version": "42.7.4",
+      "license": "BSD-2-Clause",
+      "note": "PostgreSQL JDBC 驱动，官方维护。严禁换成 MySQL 驱动——MySQL 是 GPL 双许可，AGENTS.md 点名禁止，已由 enforcer 拦截。"
+    },
+    {
+      "coordinate": "org.flywaydb:flyway-core",
+      "version": "10.20.1",
+      "license": "Apache-2.0",
+      "note": "数据库迁移。pom 无 licenses 段，许可证取自 flyway-core-10.20.1.jar 内 META-INF/LICENSE.txt（Copyright Red Gate，Apache-2.0），2026-10-29 拆包实测。版本由 Spring Boot 3.4.1 管理，不单独钉。"
+    },
+    {
+      "coordinate": "org.flywaydb:flyway-database-postgresql",
+      "version": "10.20.1",
+      "license": "Apache-2.0",
+      "note": "PG 方言支持，10.x 起从 flyway-core 拆出。版本与 flyway-core 必须一致，理由同上。"
+    },
+    {
+      "coordinate": "com.tngtech.archunit:archunit-junit5",
+      "version": "1.5.1",
+      "license": "Apache-2.0",
+      "note": "架构门禁（层依赖、模块边界、包归属）。这是 docs/coding-project.md 里「由 ArchUnit 拦截」那几条的实际执行者。"
+    },
+    {
+      "coordinate": "org.testcontainers:postgresql",
+      "version": "1.20.4",
+      "license": "MIT",
+      "note": "集成测试连真实 PostgreSQL。不用 H2：两者在表达式索引、部分唯一索引、ON CONFLICT 上语义不同，内存库跑通不能证明 PG 上跑得通。"
+    },
+    {
+      "coordinate": "org.testcontainers:junit-jupiter",
+      "version": "1.20.4",
+      "license": "MIT",
+      "note": "Testcontainers 的 JUnit 5 集成，与上一项同版本。"
+    }
+  ],
+  "frontend": [
+    {
+      "name": "ant-design-vue",
+      "version": "^4.2.6",
+      "license": "MIT",
+      "note": "Web 端唯一 UI 组件库，由 check-ui-boundaries.mjs 强制单库。换库属整应用替换，需独立 change。"
+    },
+    {
+      "name": "@ant-design/icons-vue",
+      "version": "^7.0.1",
+      "license": "MIT",
+      "note": "图标，与组件库同源，不算第二套 UI 库。"
+    },
+    {
+      "name": "vue",
+      "version": "^3.5.13",
+      "license": "MIT",
+      "note": "框架本体，config.yaml 定栈。"
+    },
+    {
+      "name": "vue-router",
+      "version": "^4.5.0",
+      "license": "MIT",
+      "note": "路由。菜单跳转统一在菜单事件里 router.push()，禁止用 router-link 或 a 包裹菜单项。"
+    },
+    {
+      "name": "vue-i18n",
+      "version": "^11.4.16",
+      "license": "MIT",
+      "note": "文案国际化。多端只共享类型、请求层与令牌，文案按端各自维护。"
+    },
+    {
+      "name": "axios",
+      "version": "^1.7.9",
+      "license": "MIT",
+      "note": "packages/request 的 HTTP 封装底层。提示能力由注入适配器提供，故该包不需要依赖 UI 库。"
+    },
+    {
+      "name": "vite",
+      "version": "^6.0.7",
+      "license": "MIT",
+      "note": "构建工具，官方脚手架默认。"
+    },
+    {
+      "name": "@vitejs/plugin-vue",
+      "version": "^5.2.1",
+      "license": "MIT",
+      "note": "Vue SFC 编译插件，与 vite 配套。"
+    },
+    {
+      "name": "sass",
+      "version": "^1.83.0",
+      "license": "MIT",
+      "note": "样式预处理。业务样式只允许引用设计令牌，色值字面量由 check-ui 拦截。"
+    },
+    {
+      "name": "vue-tsc",
+      "version": "^2.2.0",
+      "license": "MIT",
+      "note": "类型检查（typecheck 脚本），CI 必跑。"
+    },
+    {
+      "name": "typescript",
+      "version": "~5.7.2",
+      "license": "Apache-2.0",
+      "note": "workspace 根的开发依赖，统一版本避免各包类型结论不一致。"
+    }
+  ]
+}
