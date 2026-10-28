@@ -2,8 +2,10 @@ package com.yunwms.master.application.service;
 
 import com.yunwms.master.domain.model.Owner;
 import com.yunwms.master.domain.model.OwnerAddress;
+import com.yunwms.master.domain.model.OwnerAuditEvent;
 import com.yunwms.master.domain.model.OwnerStatus;
 import com.yunwms.master.domain.model.SkuPrefix;
+import com.yunwms.master.domain.port.AuditTrail;
 import com.yunwms.master.domain.port.CurrentOperator;
 import com.yunwms.master.domain.port.OwnerRepository;
 import com.yunwms.web.api.ErrorCode;
@@ -11,8 +13,10 @@ import com.yunwms.web.exception.BizException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -30,13 +34,15 @@ import static org.mockito.Mockito.verifyNoInteractions;
 /**
  * 货主删除用例的单测：端口替换为 mock，不起 Spring、不连库。
  *
- * <p>要钉住三件事：
+ * <p>要钉住四件事：
  * <ul>
  *   <li>只有草稿能删，其余四个状态一律拒绝，且提示里带出当前状态——只说「不可删除」时
  *       用户只会反复点同一个按钮；</li>
  *   <li>删除是软删除：走 {@code softDelete}，不碰 {@code updateStatus}（删除一个草稿之后它仍是草稿，
  *       只是看不见了）；</li>
- *   <li>读到之后这一行被并发删掉时如实回 404，而不是回一个看不出来发生过的成功。</li>
+ *   <li>读到之后这一行被并发删掉时如实回 404，而不是回一个看不出来发生过的成功；</li>
+ *   <li>审计只在删除真的写成后留一条，且只带变更前快照——删除之后那一行在界面上再也查不到了，
+ *       这条日志是唯一的痕迹。</li>
  * </ul>
  */
 @DisplayName("货主删除")
@@ -50,13 +56,15 @@ class OwnerDeletionServiceTest {
 
     private OwnerRepository ownerRepository;
     private CurrentOperator currentOperator;
+    private AuditTrail auditTrail;
     private OwnerDeletionService service;
 
     @BeforeEach
     void setUp() {
         ownerRepository = mock(OwnerRepository.class);
         currentOperator = mock(CurrentOperator.class);
-        service = new OwnerDeletionService(ownerRepository, currentOperator);
+        auditTrail = mock(AuditTrail.class);
+        service = new OwnerDeletionService(ownerRepository, currentOperator, auditTrail);
         given(currentOperator.currentUserId()).willReturn(OptionalLong.of(OPERATOR_ID));
     }
 
@@ -128,6 +136,38 @@ class OwnerDeletionServiceTest {
         assertThatThrownBy(() -> service.delete(OWNER_ID))
                 .isInstanceOfSatisfying(BizException.class,
                         e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("审计：删除草稿写一条 OWNER_DELETED，before 有完整快照、after 为 null")
+    void shouldRecordDeletionWithBeforeSnapshotOnly() {
+        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.DRAFT)));
+        given(ownerRepository.softDelete(OWNER_ID, OPERATOR_ID)).willReturn(true);
+
+        service.delete(OWNER_ID);
+
+        ArgumentCaptor<Map<String, Object>> before = ArgumentCaptor.captor();
+        ArgumentCaptor<Map<String, Object>> after = ArgumentCaptor.captor();
+        verify(auditTrail).record(
+                eq(OwnerAuditEvent.OWNER_DELETED), eq("OWNER0005"), before.capture(), after.capture());
+
+        // 软删除之后这一行在界面上就查不到了：这条快照是唯一还能说明「被删的是什么」的东西
+        assertThat(before.getValue())
+                .containsEntry("code", "OWNER0005")
+                .containsEntry("name", "深圳某某贸易")
+                .containsEntry("status", "DRAFT");
+        assertThat(after.getValue()).as("删除没有变更后值：落 SQL NULL，而不是空对象").isNull();
+    }
+
+    @Test
+    @DisplayName("审计：读到之后被并发删除时既不写库也不写审计（没发生的事不留痕）")
+    void shouldNotRecordWhenRowDisappearedBeforeDeletion() {
+        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.of(owner(OwnerStatus.DRAFT)));
+        given(ownerRepository.softDelete(OWNER_ID, OPERATOR_ID)).willReturn(false);
+
+        assertThatThrownBy(() -> service.delete(OWNER_ID)).isInstanceOf(BizException.class);
+
+        verifyNoInteractions(auditTrail);
     }
 
     /**

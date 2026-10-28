@@ -3,8 +3,10 @@ package com.yunwms.master.application.service;
 import com.yunwms.master.application.command.CreateOwnerCommand;
 import com.yunwms.master.application.dto.CreatedOwner;
 import com.yunwms.master.domain.model.NewOwner;
+import com.yunwms.master.domain.model.OwnerAuditEvent;
 import com.yunwms.master.domain.model.OwnerStatus;
 import com.yunwms.master.domain.model.SkuPrefix;
+import com.yunwms.master.domain.port.AuditTrail;
 import com.yunwms.master.domain.port.CurrentOperator;
 import com.yunwms.master.domain.port.DictLookup;
 import com.yunwms.master.domain.port.OwnerCodeGenerator;
@@ -14,6 +16,7 @@ import com.yunwms.web.exception.BizException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.List;
@@ -36,7 +39,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 /**
  * 货主建档用例的单测：四个端口全部替换为 mock，不起 Spring、不连库。
  *
- * <p>要钉住的是三件事：
+ * <p>要钉住的是四件事：
  * <ul>
  *   <li><b>校验顺序</b>——会话无效、初始状态不可用于建档时，不该取号、不该查字典、不该落库。
  *       顺序错了不会报错，只会表现成「一次本来该被拒绝的请求消耗了一个号」或
@@ -45,6 +48,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
  *       三个唯一约束各自翻译成 40904 / 40905 / 40906；</li>
  *   <li><b>不自动替换被排除字符</b>——前缀含 {@code O}/{@code 0}/{@code 1}/{@code I} 时，
  *       提示里回显用户提交的原文，且不出现被替换后的那个字符。</li>
+ *   <li><b>审计跟着写入走</b>——落库成功才写一条，失败路径一条都不写；对象标识用系统编码，
+ *       新增没有变更前值。快照的键集由 {@code OwnerAuditSnapshots} 的用例负责，这里只钉住这两点。</li>
  * </ul>
  */
 @DisplayName("货主建档")
@@ -57,6 +62,7 @@ class OwnerCreationServiceTest {
     private OwnerCodeGenerator ownerCodeGenerator;
     private DictLookup dictLookup;
     private CurrentOperator currentOperator;
+    private AuditTrail auditTrail;
     private OwnerCreationService service;
 
     @BeforeEach
@@ -65,7 +71,9 @@ class OwnerCreationServiceTest {
         ownerCodeGenerator = mock(OwnerCodeGenerator.class);
         dictLookup = mock(DictLookup.class);
         currentOperator = mock(CurrentOperator.class);
-        service = new OwnerCreationService(ownerRepository, ownerCodeGenerator, dictLookup, currentOperator);
+        auditTrail = mock(AuditTrail.class);
+        service = new OwnerCreationService(
+                ownerRepository, ownerCodeGenerator, dictLookup, currentOperator, auditTrail);
         given(currentOperator.currentUserId()).willReturn(OptionalLong.of(OPERATOR_ID));
     }
 
@@ -323,6 +331,49 @@ class OwnerCreationServiceTest {
         assertThatThrownBy(() -> service.create(command(OwnerStatus.ACTIVE)))
                 .as("违反了一条本用例没预期到的约束，说明假设被打破，应当在 50000 上暴露")
                 .isSameAs(unknown);
+    }
+
+    @Test
+    @DisplayName("审计：建档成功写一条 OWNER_CREATED，before 为 null，after 是含系统编码的完整快照")
+    void shouldRecordCreationWithFullAfterSnapshot() {
+        stubValidMainlandDictionary();
+        given(ownerCodeGenerator.next()).willReturn("OWNER0001");
+        given(ownerRepository.insert(any(NewOwner.class), anyString(), any(OwnerStatus.class), anyLong()))
+                .willReturn(5L);
+
+        service.create(command(OwnerStatus.ACTIVE));
+
+        ArgumentCaptor<Map<String, Object>> before = ArgumentCaptor.captor();
+        ArgumentCaptor<Map<String, Object>> after = ArgumentCaptor.captor();
+        verify(auditTrail).record(
+                eq(OwnerAuditEvent.OWNER_CREATED), eq("OWNER0001"), before.capture(), after.capture());
+
+        // 新增没有「变更前」：落 SQL NULL，而不是一个空对象——空对象会被读成「变更前一切皆空」
+        assertThat(before.getValue()).isNull();
+        assertThat(after.getValue())
+                .containsEntry("code", "OWNER0001")
+                .containsEntry("name", "深圳某某贸易")
+                .containsEntry("skuPrefix", "AMZ2")
+                .containsEntry("status", "ACTIVE")
+                .containsEntry("country", "CN")
+                .containsEntry("postalCode", "518000")
+                // 空串在入参归一化时落成 null：快照保留键并写 null，「当时没有备注」是这条记录的一部分
+                .containsEntry("remark", null);
+    }
+
+    @Test
+    @DisplayName("审计：编码撞唯一索引导致建档失败时不写审计")
+    void shouldNotRecordWhenCreationFails() {
+        stubValidMainlandDictionary();
+        given(ownerCodeGenerator.next()).willReturn("OWNER0001");
+        given(ownerRepository.insert(any(NewOwner.class), anyString(), any(OwnerStatus.class), anyLong()))
+                .willThrow(constraintViolation("ux_owner_code"));
+
+        assertThatThrownBy(() -> service.create(command(OwnerStatus.ACTIVE)))
+                .isInstanceOf(BizException.class);
+
+        // 没发生的事不该留痕：审计写在 INSERT 成功之后，失败路径一次都不该调到
+        verifyNoInteractions(auditTrail);
     }
 
     /**

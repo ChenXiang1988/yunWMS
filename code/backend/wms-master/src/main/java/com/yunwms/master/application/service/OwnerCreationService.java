@@ -1,11 +1,14 @@
 package com.yunwms.master.application.service;
 
+import com.yunwms.master.application.audit.OwnerAuditSnapshots;
 import com.yunwms.master.application.command.CreateOwnerCommand;
 import com.yunwms.master.application.dto.CreatedOwner;
 import com.yunwms.master.domain.model.NewOwner;
 import com.yunwms.master.domain.model.OwnerAddress;
+import com.yunwms.master.domain.model.OwnerAuditEvent;
 import com.yunwms.master.domain.model.OwnerStatus;
 import com.yunwms.master.domain.model.SkuPrefix;
+import com.yunwms.master.domain.port.AuditTrail;
 import com.yunwms.master.domain.port.CurrentOperator;
 import com.yunwms.master.domain.port.DictLookup;
 import com.yunwms.master.domain.port.OwnerCodeGenerator;
@@ -38,11 +41,15 @@ import org.springframework.stereotype.Service;
  * 客户名称可重复，本用例不为它加任何判重。
  *
  * <p><b>不开事务：</b>只有一条 {@code INSERT}。取号走的是独立提交（{@link OwnerCodeGenerator} 的契约），
- * 外层加一个事务既不会让取号跟着回滚，也不会让「号已用掉但货主没建成」变得可挽回；
- * 多一个空事务只会让人以为这里还有别的东西需要原子提交。
+ * 外层加一个事务既不会让取号跟着回滚，也不会让「号已用掉但货主没建成」变得可挽回。
+ * 还有一条更硬的理由：撞上前缀唯一索引之后要靠一次反查补出占用方编码，而 PostgreSQL 在同一事务里
+ * 撞死一条语句后会把整个事务置为 aborted，后续查询一律失败——一旦给本方法加上 {@code @Transactional}，
+ * 40905 的提示会稳定退化成「current transaction is aborted」（见 {@code OwnerConstraintTranslator}）。
  *
- * <p>不写审计日志（{@code sys_audit_log}）：那属于审计能力（2.8），本用例只保证
- * {@code created_by} / {@code updated_by} 记下操作人。
+ * <p><b>审计在 {@code INSERT} 成功之后写</b>（{@link AuditTrail}）：业务失败时不写，没发生的事不留痕。
+ * 也因为本方法没有事务，审计走的是它自己的事务——「货主已建成但没有留痕」是这条链路上唯一可能的残局，
+ * 触发条件是数据库不可用，而那时下一次请求同样会失败，不会长期无声。要把它彻底消掉，得先把占用方反查
+ * 移到事务外，那是另一件事。
  */
 @Service
 public class OwnerCreationService {
@@ -51,6 +58,7 @@ public class OwnerCreationService {
     private final OwnerCodeGenerator ownerCodeGenerator;
     private final OwnerDictionaryValidator ownerDictionaryValidator;
     private final CurrentOperator currentOperator;
+    private final AuditTrail auditTrail;
 
     /**
      * @param ownerRepository         货主仓储端口
@@ -58,15 +66,18 @@ public class OwnerCreationService {
      * @param dictLookup              字典窄端口；领域服务是无状态的纯规则，随用例持有即可，
      *                                不必让它成为容器组件（那会让一个不依赖 Spring 的类被注解绑住）
      * @param currentOperator         当前操作人端口
+     * @param auditTrail              审计留痕端口，由 {@code wms-app} 接到审计能力上
      */
     public OwnerCreationService(OwnerRepository ownerRepository,
                                 OwnerCodeGenerator ownerCodeGenerator,
                                 DictLookup dictLookup,
-                                CurrentOperator currentOperator) {
+                                CurrentOperator currentOperator,
+                                AuditTrail auditTrail) {
         this.ownerRepository = ownerRepository;
         this.ownerCodeGenerator = ownerCodeGenerator;
         this.ownerDictionaryValidator = new OwnerDictionaryValidator(dictLookup);
         this.currentOperator = currentOperator;
+        this.auditTrail = auditTrail;
     }
 
     /**
@@ -99,15 +110,21 @@ public class OwnerCreationService {
         }
 
         String code = ownerCodeGenerator.next();
+        long id;
         try {
-            long id = ownerRepository.insert(owner, code, initialStatus, operatorId);
-            return new CreatedOwner(id, code);
+            id = ownerRepository.insert(owner, code, initialStatus, operatorId);
         } catch (DataIntegrityViolationException e) {
             // 占用方反查交给端口：只有前缀冲突时它才会被调用（见 OwnerConstraintTranslator），
             // 编码撞号与外部码重复不会因此多跑一次库
             throw OwnerConstraintTranslator.translateInsert(
                     e, owner.skuPrefix().value(), ownerRepository::findCodeBySkuPrefix);
         }
+
+        // 审计写在 try 之外：那个 catch 只解释货主 INSERT 撞上的约束，把审计的库异常也算进去，
+        // 会让一次「审计表写不进去」被报成「SKU 前缀或外部码被占用」
+        auditTrail.record(OwnerAuditEvent.OWNER_CREATED, code, null,
+                OwnerAuditSnapshots.of(owner, code, initialStatus));
+        return new CreatedOwner(id, code);
     }
 
     /**

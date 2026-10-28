@@ -3,9 +3,11 @@ package com.yunwms.master.application.service;
 import com.yunwms.master.application.command.UpdateOwnerCommand;
 import com.yunwms.master.domain.model.Owner;
 import com.yunwms.master.domain.model.OwnerAddress;
+import com.yunwms.master.domain.model.OwnerAuditEvent;
 import com.yunwms.master.domain.model.OwnerProfile;
 import com.yunwms.master.domain.model.OwnerStatus;
 import com.yunwms.master.domain.model.SkuPrefix;
+import com.yunwms.master.domain.port.AuditTrail;
 import com.yunwms.master.domain.port.CurrentOperator;
 import com.yunwms.master.domain.port.DictLookup;
 import com.yunwms.master.domain.port.OwnerRepository;
@@ -18,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -44,6 +47,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
  *       因此本类不需要（也无法）在写语句前删掉它们；</li>
  *   <li>外部码冲突翻译成 40906；编码与前缀的唯一索引在这条链路上不可能命中，
  *       真命中了属于假设被打破，必须原样上抛。</li>
+ *   <li>信噪比：改了就留痕，一个字都没改就不留——空提交与真改动在日志里必须能分开。</li>
  * </ul>
  */
 @DisplayName("货主编辑")
@@ -58,6 +62,7 @@ class OwnerUpdateServiceTest {
     private OwnerRepository ownerRepository;
     private DictLookup dictLookup;
     private CurrentOperator currentOperator;
+    private AuditTrail auditTrail;
     private OwnerUpdateService service;
 
     @BeforeEach
@@ -65,7 +70,8 @@ class OwnerUpdateServiceTest {
         ownerRepository = mock(OwnerRepository.class);
         dictLookup = mock(DictLookup.class);
         currentOperator = mock(CurrentOperator.class);
-        service = new OwnerUpdateService(ownerRepository, dictLookup, currentOperator);
+        auditTrail = mock(AuditTrail.class);
+        service = new OwnerUpdateService(ownerRepository, dictLookup, currentOperator, auditTrail);
         given(currentOperator.currentUserId()).willReturn(OptionalLong.of(OPERATOR_ID));
     }
 
@@ -186,6 +192,46 @@ class OwnerUpdateServiceTest {
         assertThat(profile.shortName()).isNull();
     }
 
+    @Test
+    @DisplayName("审计：编辑写一条 OWNER_UPDATED，before / after 都是完整快照且状态一致")
+    void shouldRecordUpdateWithBothSnapshots() {
+        stubValidMainlandDictionary();
+        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.of(existingOwner()));
+
+        service.update(command());
+
+        ArgumentCaptor<Map<String, Object>> before = ArgumentCaptor.captor();
+        ArgumentCaptor<Map<String, Object>> after = ArgumentCaptor.captor();
+        verify(auditTrail).record(
+                eq(OwnerAuditEvent.OWNER_UPDATED), eq("OWNER0005"), before.capture(), after.capture());
+
+        // before 取自 findById 的结果：再查一次只可能读到别人刚改的值，前后就不属于同一次提交了
+        assertThat(before.getValue())
+                .containsEntry("name", "深圳某某贸易")
+                .containsEntry("externalCode", "EXT-001")
+                .containsEntry("status", "DRAFT");
+        assertThat(after.getValue())
+                .containsEntry("name", "深圳某某贸易（改名）")
+                .containsEntry("externalCode", "EXT-002")
+                .containsEntry("status", "DRAFT");
+        assertThat(after.getValue().get("status"))
+                .as("编辑不改状态：前后必须一致，否则读日志的人会以为发生了一次流转")
+                .isEqualTo(before.getValue().get("status"));
+    }
+
+    @Test
+    @DisplayName("审计：提交的字段与库里完全一致时不写审计（业务照常写库）")
+    void shouldNotRecordWhenNothingChanged() {
+        stubValidMainlandDictionary();
+        given(ownerRepository.findById(OWNER_ID)).willReturn(Optional.of(existingOwner()));
+
+        service.update(unchangedCommand());
+
+        // 空提交仍然是一次保存：updated_at 照常前进，但不留审计——记一条「没改动」只会稀释信号
+        verify(ownerRepository).update(eq(OWNER_ID), any(OwnerProfile.class), eq(OPERATOR_ID));
+        verifyNoInteractions(auditTrail);
+    }
+
     /**
      * 打桩一个字典全部命中的环境。
      */
@@ -235,6 +281,32 @@ class OwnerUpdateServiceTest {
                 "",
                 null,
                 "EXT-002",
+                "BRAND",
+                "深圳某某贸易有限公司",
+                "CN",
+                "CN-SH",
+                "深圳",
+                "南山区",
+                "518000",
+                "科技园路 1 号",
+                "");
+    }
+
+    /**
+     * 一条「与库里现有记录完全一致」的编辑入参：每个字段都与 {@link #existingOwner()} 相同。
+     *
+     * <p>备注用空串提交：入参归一化会把空串落成 {@code null}，而库里正是 {@code null}——
+     * 这正是要验的情形，「没填」与「没填」不该被当成一次改动。
+     *
+     * @return 编辑入参
+     */
+    private static UpdateOwnerCommand unchangedCommand() {
+        return new UpdateOwnerCommand(
+                OWNER_ID,
+                "深圳某某贸易",
+                "某某贸易",
+                null,
+                "EXT-001",
                 "BRAND",
                 "深圳某某贸易有限公司",
                 "CN",

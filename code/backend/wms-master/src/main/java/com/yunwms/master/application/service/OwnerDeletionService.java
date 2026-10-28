@@ -1,12 +1,16 @@
 package com.yunwms.master.application.service;
 
+import com.yunwms.master.application.audit.OwnerAuditSnapshots;
 import com.yunwms.master.domain.model.Owner;
+import com.yunwms.master.domain.model.OwnerAuditEvent;
 import com.yunwms.master.domain.model.OwnerStatus;
+import com.yunwms.master.domain.port.AuditTrail;
 import com.yunwms.master.domain.port.CurrentOperator;
 import com.yunwms.master.domain.port.OwnerRepository;
 import com.yunwms.web.api.ErrorCode;
 import com.yunwms.web.exception.BizException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 删除货主的用例：只允许删草稿，执行软删除。
@@ -31,21 +35,27 @@ import org.springframework.stereotype.Service;
  * 与详情接口同口径），第二次删除因此与查详情得到同一个 40400。这仍是幂等的——重试不会产生第二次
  * 写入、不会报 500，也不会把一条已删记录重新写活；只是「它现在已经不存在了」这件事必须如实回答。
  *
- * <p>不开事务：只有一条 {@code UPDATE}。
+ * <p><b>开事务：</b>一条 {@code UPDATE} 加一条审计。单看删除本身不需要事务，但审计必须与它同生共死——
+ * 只有 {@code AuditTrail} 的实现加入本方法的事务，「记录说删了、行还在」与「行没了、没有记录」
+ * 才都不会出现。删除是审计**唯一**能证明「这条记录曾经存在过」的场景，留痕与写入因此不能被拆开提交。
  */
 @Service
 public class OwnerDeletionService {
 
     private final OwnerRepository ownerRepository;
     private final CurrentOperator currentOperator;
+    private final AuditTrail auditTrail;
 
     /**
      * @param ownerRepository 货主仓储端口
      * @param currentOperator 当前操作人端口
+     * @param auditTrail      审计留痕端口，由 {@code wms-app} 接到审计能力上
      */
-    public OwnerDeletionService(OwnerRepository ownerRepository, CurrentOperator currentOperator) {
+    public OwnerDeletionService(OwnerRepository ownerRepository, CurrentOperator currentOperator,
+                                AuditTrail auditTrail) {
         this.ownerRepository = ownerRepository;
         this.currentOperator = currentOperator;
+        this.auditTrail = auditTrail;
     }
 
     /**
@@ -55,6 +65,7 @@ public class OwnerDeletionService {
      * @throws BizException 当前会话无效（40100）；货主不存在或已被删除（40400）；
      *                      当前状态不是草稿（40900，提示里带当前状态）
      */
+    @Transactional
     public void delete(long ownerId) {
         long operatorId = currentOperator.currentUserId()
                 // 与建档、编辑同一理由：deleted_at 之外还要留下「谁删的」，取不到操作人就不能继续
@@ -74,5 +85,9 @@ public class OwnerDeletionService {
             // 而不是回成功——回成功会掩盖「两次删除之间隔了一段时间」这件事
             throw BizException.notFound("货主不存在");
         }
+
+        // 删除之后这一行在界面上就查不到了，这条日志是唯一还能说明「它曾经存在、被谁删的」的东西。
+        // after 为 null：删除没有「变更后」的快照
+        auditTrail.record(OwnerAuditEvent.OWNER_DELETED, existing.code(), OwnerAuditSnapshots.of(existing), null);
     }
 }
