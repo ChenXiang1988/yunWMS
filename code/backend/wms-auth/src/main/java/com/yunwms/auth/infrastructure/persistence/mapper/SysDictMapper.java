@@ -1,5 +1,6 @@
 package com.yunwms.auth.infrastructure.persistence.mapper;
 
+import com.baomidou.mybatisplus.annotation.InterceptorIgnore;
 import com.yunwms.auth.infrastructure.persistence.entity.DictItemRow;
 import com.yunwms.auth.infrastructure.persistence.entity.DictTypeRow;
 import org.apache.ibatis.annotations.Param;
@@ -85,6 +86,27 @@ public interface SysDictMapper {
      * 带 {@code id} 属性的对象，而本批没有为写入建实体；{@code RETURNING} 让主键随语句本身返回，
      * 参数因此可以只有标量（与 {@code SysCodeRuleMapper#advance} 同一手法）。
      *
+     * <p><b>必须跳过数据权限拦截器：</b>本语句用 {@code <select>} 承载 {@code INSERT}，MyBatis 因此
+     * 走 {@code Executor.query}，被注册在 {@code SqlSessionFactory} 上的数据权限插件会拿它去做 SQL 解析；
+     * 而 {@code JsqlParserSupport.processInsert} 分支在插件未覆写时直接抛
+     * {@code UnsupportedOperationException}——语句根本到不了数据库，接口表现为 50000。字典项的写入与
+     * 货主数据范围无关，本就不该被这条插件解析；插件侧 {@code DataPermissionInterceptor.beforeQuery}
+     * 的第一句就是 {@code InterceptorIgnoreHelper.willIgnoreDataPermission(ms.getId())}，因此这里跳过解析
+     * 只作用于本语句，其它语句的数据权限覆盖面不受影响。
+     *
+     * <p><b>为什么不改造成 {@code <insert useGeneratedKeys>}：</b>{@code <insert>} 走
+     * {@code executeUpdate}，PostgreSQL 驱动不会把 {@code RETURNING} 的行作为结果集交出来，要拿回主键
+     * 就得先为写入引入一个带 {@code id} 属性的实体，代价大于收益。也<b>不</b>改成「让拦截器只解析
+     * SELECT」：那会改变全仓所有语句的数据权限覆盖面，属于另一次需要单独评估的改动，不该由一条字典项
+     * 语句的缺陷来推动。
+     *
+     * <p><b>「用 {@code <select>} 包 DML」这条方案的风险（留给后来者）：</b>它能成立，依赖的是
+     * 「拦截器恰好承认这类语句」这个实现细节，不是 JDBC 语义。{@code SysCodeRuleMapper#advance} 的
+     * {@code UPDATE ... RETURNING} 同样用 {@code <select>} 承接却没出问题，只因
+     * {@code JsqlParserSupport} 只在 {@code processInsert} 分支抛异常，UPDATE 路径恰好能过——这不是
+     * 「可以忽略」的巧合。将来若用 {@code <select>} 包 {@code MERGE}、{@code DELETE ... RETURNING} 等
+     * 其它 DML，必须重新确认拦截器是否有对应分支（必要时同样加注解），否则同一个 50000 会换条语句复现。
+     *
      * <p>{@code status}、{@code created_at}、{@code updated_at}、{@code deleted_at} 不出现在列清单里：
      * 分别由列默认值（{@code 'ACTIVE'}、{@code now()}）与「未删除」的初始状态负责，应用侧不预设，
      * 也就不存在「新增即停用」或「新增即带删除标记」的写法。
@@ -98,6 +120,7 @@ public interface SysDictMapper {
      * @param operatorId 操作人标识，写入 {@code created_by} 与 {@code updated_by}
      * @return 数据库生成的字典项标识；语句没有返回行时为 {@code null}，由仓储据此判失败
      */
+    @InterceptorIgnore(dataPermission = "1")
     Long insertItem(@Param("dictType") String dictType,
                     @Param("value") String value,
                     @Param("label") String label,
