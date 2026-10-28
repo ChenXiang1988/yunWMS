@@ -14,12 +14,13 @@ import type { OwnerDetail } from '@/api/owner'
 import { PLACEHOLDER, displayText, formatIsoDateTime, ownerTypeLabel } from '../owner-model'
 import { ownerStatusText } from '../owner-status'
 import OwnerContactTab from './OwnerContactTab.vue'
+import OwnerTaxTab from './OwnerTaxTab.vue'
 
 /**
  * 货主详情抽屉，自己持有四个页签的容器：基本信息 / 联系人 / 税号 / 账号。
  *
- * 页签顺序取自 `ui-structure.md` 的「货主详情」。联系人页签已接入数据
- * （`OwnerContactTab.vue`）；税号与账号的数据来源尚未提供，页签里放明确占位——
+ * 页签顺序取自 `ui-structure.md` 的「货主详情」。联系人（`OwnerContactTab.vue`）与
+ * 税号（`OwnerTaxTab.vue`）已接入数据；账号的数据来源尚未提供，页签里放明确占位——
  * 藏掉页签会让人以为没有这项功能，占位则说清「还没接入」。
  *
  * 数据由页面注入（`docs/frontend.md` §4.3），这里只负责展示与抛出操作意图。
@@ -132,10 +133,7 @@ function close(): void {
         </TabPane>
 
         <TabPane key="taxes" tab="税号">
-          <EmptyState description="税号维护待接入" />
-          <p class="detail__placeholder">
-            本页签的数据来源尚未提供。接入后在此维护多国多州的税号登记与默认标记。
-          </p>
+          <OwnerTaxTab :owner-id="owner.id" />
         </TabPane>
 
         <TabPane key="accounts" tab="账号">
