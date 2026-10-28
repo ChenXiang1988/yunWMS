@@ -1,8 +1,13 @@
 package com.yunwms.auth.application.service;
 
 import com.yunwms.auth.application.command.ResetUserPasswordCommand;
+import com.yunwms.auth.domain.model.AuditAction;
+import com.yunwms.auth.domain.model.AuditBizType;
+import com.yunwms.auth.domain.model.AuditEntry;
 import com.yunwms.auth.domain.model.PasswordPolicy;
 import com.yunwms.auth.domain.model.PasswordRuleViolation;
+import com.yunwms.auth.domain.model.UserProfile;
+import com.yunwms.auth.domain.port.AuditRecorder;
 import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.PasswordHasher;
 import com.yunwms.auth.domain.port.SessionInvalidator;
@@ -35,6 +40,11 @@ import java.util.List;
  *
  * <p>不开事务：只有一条 UPDATE，会话失效与会话标记都不是事务资源。顺序上先落库再失效：
  * 反过来时，失效成功而密码没写进去，用户被踢下线、密码却还是旧的，只能由管理员再点一次。
+ *
+ * <p><b>留痕，但不留凭据。</b>审计动作是 {@code UPDATE}，摘要「重置密码 {登录名}」，
+ * 而 {@code before} 与 {@code after} 都是 {@code null}：旧哈希与新哈希都不能进审计表
+ * （只追加、不可修改，写进去就撤不回来），明文、长度、首字符这类能缩小搜索空间的信息同样不写。
+ * 「改了什么」在这里只能是一句话，这是刻意的——能记的是「谁在什么时候重置了谁的密码」。
  */
 @Service
 public class UserPasswordResetService {
@@ -47,17 +57,20 @@ public class UserPasswordResetService {
     private final PasswordHasher passwordHasher;
     private final SessionInvalidator sessionInvalidator;
     private final CurrentSession currentSession;
+    private final AuditRecorder auditRecorder;
 
     public UserPasswordResetService(UserQuery userQuery,
                                     UserAccountUpdater userAccountUpdater,
                                     PasswordHasher passwordHasher,
                                     SessionInvalidator sessionInvalidator,
-                                    CurrentSession currentSession) {
+                                    CurrentSession currentSession,
+                                    AuditRecorder auditRecorder) {
         this.userQuery = userQuery;
         this.userAccountUpdater = userAccountUpdater;
         this.passwordHasher = passwordHasher;
         this.sessionInvalidator = sessionInvalidator;
         this.currentSession = currentSession;
+        this.auditRecorder = auditRecorder;
     }
 
     /**
@@ -78,9 +91,10 @@ public class UserPasswordResetService {
             throw BizException.conflict("不能重置自己的密码，请通过「修改密码」并提供当前密码");
         }
 
-        if (!userQuery.existsById(targetUserId)) {
-            throw BizException.notFound("用户不存在");
-        }
+        // 读详情只为拿登录名：审计按登录名追溯，而主键是一串在界面上不出现的数字。
+        // 顺带回答「账号在不在」，因此不再单发一次存在性查询
+        UserProfile current = userQuery.findById(targetUserId)
+                .orElseThrow(() -> BizException.notFound("用户不存在"));
 
         List<PasswordRuleViolation> violations = PASSWORD_POLICY.check(command.newPassword());
         if (!violations.isEmpty()) {
@@ -91,5 +105,10 @@ public class UserPasswordResetService {
         // 明文到此为止：跨层传递的只有哈希，日志与异常里都不会出现临时口令
         userAccountUpdater.resetPassword(targetUserId, passwordHasher.hash(command.newPassword()), now, operatorId);
         sessionInvalidator.invalidateAllOf(targetUserId);
+
+        String loginName = current.summary().loginName();
+        // 前后快照都为 null：审计里不留任何与密码有关的值，见类注释
+        auditRecorder.record(new AuditEntry(AuditBizType.USER, loginName, AuditAction.UPDATE,
+                "重置密码 " + loginName, null, null));
     }
 }

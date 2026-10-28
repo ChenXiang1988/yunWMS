@@ -1,7 +1,13 @@
 package com.yunwms.auth.application.service;
 
+import com.yunwms.auth.application.audit.UserAuditSnapshots;
 import com.yunwms.auth.application.command.ChangeUserStatusCommand;
+import com.yunwms.auth.domain.model.AuditAction;
+import com.yunwms.auth.domain.model.AuditBizType;
+import com.yunwms.auth.domain.model.AuditEntry;
+import com.yunwms.auth.domain.model.UserProfile;
 import com.yunwms.auth.domain.model.UserStatus;
+import com.yunwms.auth.domain.port.AuditRecorder;
 import com.yunwms.auth.domain.port.CurrentSession;
 import com.yunwms.auth.domain.port.SessionInvalidator;
 import com.yunwms.auth.domain.port.UserAccountUpdater;
@@ -34,8 +40,14 @@ import java.time.Instant;
  * <p>两条保护都用 {@link ErrorCode#CONFLICT}（409 段位）而不是 40000：入参本身合法，
  * 被拒绝的是它造成的状态。与「不能移除自己最后的内置角色」同一取舍，理由见那个用例的说明。
  *
- * <p>不开事务：只有一条 UPDATE，会话失效也不是事务资源。加了事务反而会让「库已改、会话未失效」
- * 看起来像可以一起回滚——它们本来就不能。
+ * <p><b>留痕写明方向。</b>摘要写「停用用户」或「启用用户」而不是「修改状态」：看日志的人需要知道
+ * 这次是收紧还是放宽。同状态重放同样记一条——那次提交确实发生过，方向取目标状态；
+ * 与编辑、启停角色的「没改就不记」不同，这里每一次提交都真的把状态写成目标值。
+ *
+ * <p>不开事务：只有一条 UPDATE，会话失效与审计都不是能一起回滚的东西。加了事务反而会让
+ * 「库已改、会话未失效」看起来像可以一起回滚——它们本来就不能。三个动作的顺序固定为
+ * 「落库 → 失效会话 → 留痕」：审计放在最后，是因为前面两步都是不可撤销的既成事实，
+ * 而审计写失败时异常照常透出（管理员重试即可补上），不该让它先于会话失效挡住停用。
  */
 @Service
 public class UserStatusChangeService {
@@ -44,15 +56,18 @@ public class UserStatusChangeService {
     private final UserAccountUpdater userAccountUpdater;
     private final SessionInvalidator sessionInvalidator;
     private final CurrentSession currentSession;
+    private final AuditRecorder auditRecorder;
 
     public UserStatusChangeService(UserQuery userQuery,
                                    UserAccountUpdater userAccountUpdater,
                                    SessionInvalidator sessionInvalidator,
-                                   CurrentSession currentSession) {
+                                   CurrentSession currentSession,
+                                   AuditRecorder auditRecorder) {
         this.userQuery = userQuery;
         this.userAccountUpdater = userAccountUpdater;
         this.sessionInvalidator = sessionInvalidator;
         this.currentSession = currentSession;
+        this.auditRecorder = auditRecorder;
     }
 
     /**
@@ -73,9 +88,9 @@ public class UserStatusChangeService {
                 .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED));
 
         long targetUserId = command.userId();
-        if (!userQuery.existsById(targetUserId)) {
-            throw BizException.notFound("用户不存在");
-        }
+        // 一次读同时回答「在不在」与「改前是什么」：分两次读会让快照里的值来自另一个时间点
+        UserProfile current = userQuery.findById(targetUserId)
+                .orElseThrow(() -> BizException.notFound("用户不存在"));
 
         UserStatus targetStatus = command.status();
         if (targetStatus == UserStatus.DISABLED) {
@@ -94,5 +109,11 @@ public class UserStatusChangeService {
             // 管理员会看到「操作失败」，用户却需要重新登录一次。反过来只是「库已改、会话晚几毫秒失效」
             sessionInvalidator.invalidateAllOf(targetUserId);
         }
+
+        String loginName = current.summary().loginName();
+        // 方向取目标状态而不是「前后对比」：同状态重放时前后相同，但那次提交确实把账号写成了这个状态
+        String summary = (targetStatus == UserStatus.DISABLED ? "停用用户 " : "启用用户 ") + loginName;
+        auditRecorder.record(new AuditEntry(AuditBizType.USER, loginName, AuditAction.UPDATE, summary,
+                UserAuditSnapshots.of(current), UserAuditSnapshots.ofStatusChanged(current, targetStatus)));
     }
 }
