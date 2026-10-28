@@ -13,6 +13,7 @@ import com.yunwms.master.domain.port.OwnerContactRepository;
 import com.yunwms.master.domain.port.OwnerRepository;
 import com.yunwms.web.api.ErrorCode;
 import com.yunwms.web.exception.BizException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,10 +46,12 @@ import java.util.List;
  * 「这个货主一个主联系人也没有」的中间态。{@link #list} 不加事务——只有两次只读查询，
  * 各看各的快照，加注解不会让它们更一致（与 {@code OwnerQueryService} 同一处理）。
  *
- * <p><b>不翻译 {@code ux_owner_contact_primary} 的冲突：</b>并发下两笔「设我为主」的请求若都越过了
- * 清理步骤，后写的一笔会撞上那个唯一索引。翻译它需要一个「该货主已有主联系人，请重新提交」的错误码，
- * 而协议层当前没有；在补上之前宁可让它按 50000 暴露，也不复用泛化的 40900 把一次并发失败
- * 伪装成一次可重试的业务冲突。
+ * <p><b>并发下撞上 {@code ux_owner_contact_primary} 时翻译成 40900：</b>两笔「设我为主」的请求若都越过了
+ * 清理步骤，后写的一笔会被那个唯一索引拒绝——那是一次能被如实解释的正常失败（别人先设了主联系人），
+ * 因此不再按 50000 暴露。提示里写明「该货主已有主联系人，请刷新列表后重新提交」，调用方才能知道
+ * 重试前要先刷新，而不是把同一份请求反复提交。约束名到错误码的映射归 {@link OwnerConstraintTranslator}，
+ * 本类不再判约束名。{@code catch} 只包住仓储写入那一行：扩大到整个方法，会把审计等其他来源的
+ * {@link DataIntegrityViolationException} 一并报成「已有主联系人」，那是谎报。
  *
  * <p><b>审计的对象类型是 {@code OWNER}、{@code bizId} 是货主编码：</b>理由见 {@link OwnerAuditEvent}；
  * 编码取自这次可见性判定的返回值，因此不为审计多查一次货主。
@@ -119,7 +122,8 @@ public class OwnerContactService {
      * @param command 新增入参；其中的 {@code isPrimary} 决定是否切换主联系人
      * @return 新联系人，标识为数据库生成值
      * @throws BizException 当前会话无效（40100）；货主不存在、已逻辑删除或不在当前数据范围内（40400）；
-     *                      角色为空白或不在 {@code CONTACT_ROLE} 字典的启用项中（40000）
+     *                      角色为空白或不在 {@code CONTACT_ROLE} 字典的启用项中（40000）；
+     *                      写入主联系人时该货主已有另一条主联系人，只可能在并发下发生（40900）
      */
     @Transactional
     public OwnerContact create(SaveOwnerContactCommand command) {
@@ -133,7 +137,13 @@ public class OwnerContactService {
             ownerContactRepository.clearPrimary(owner.id(), operatorId);
         }
 
-        long id = ownerContactRepository.insert(owner.id(), draft, operatorId);
+        long id;
+        try {
+            id = ownerContactRepository.insert(owner.id(), draft, operatorId);
+        } catch (DataIntegrityViolationException e) {
+            // 只包这一条写语句：下面审计的库异常不该被解释成「已有主联系人」（见类注释）
+            throw OwnerConstraintTranslator.translateContactWrite(e);
+        }
         OwnerContact created = toContact(id, owner.id(), draft);
         // before 为 null：新增没有变更前值。bizId 用货主编码而不是主键——审计要能被「按编码追溯」查到
         auditTrail.record(OwnerAuditEvent.OWNER_CONTACT_CREATED, owner.code(), null,
@@ -152,7 +162,8 @@ public class OwnerContactService {
      * @return 更新后的联系人
      * @throws BizException 当前会话无效（40100）；联系人不存在或已逻辑删除（40400）；
      *                      该联系人的货主不在当前数据范围内（40400）；
-     *                      角色为空白或不在 {@code CONTACT_ROLE} 字典的启用项中（40000）
+     *                      角色为空白或不在 {@code CONTACT_ROLE} 字典的启用项中（40000）；
+     *                      写入主标记时该货主已有另一条主联系人，只可能在并发下发生（40900）
      */
     @Transactional
     public OwnerContact update(long contactId, SaveOwnerContactCommand command) {
@@ -169,7 +180,12 @@ public class OwnerContactService {
             ownerContactRepository.clearPrimary(existing.ownerId(), operatorId);
         }
 
-        ownerContactRepository.update(existing.id(), draft, operatorId);
+        try {
+            ownerContactRepository.update(existing.id(), draft, operatorId);
+        } catch (DataIntegrityViolationException e) {
+            // 与新增同一处理：只包这一条写语句，审计失败不能被说成「已有主联系人」
+            throw OwnerConstraintTranslator.translateContactWrite(e);
+        }
         OwnerContact updated = toContact(existing.id(), existing.ownerId(), draft);
         auditTrail.record(OwnerAuditEvent.OWNER_CONTACT_UPDATED, owner.code(),
                 OwnerAuditSnapshots.ofContact(existing), OwnerAuditSnapshots.ofContact(updated));

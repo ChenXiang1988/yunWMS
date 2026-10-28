@@ -31,6 +31,17 @@ final class OwnerConstraintTranslator {
     /** {@code owner.external_code} 的部分唯一索引，口径是未删除的货主。 */
     private static final String OWNER_EXTERNAL_CODE_UNIQUE_INDEX = "ux_owner_external_code";
 
+    /** {@code owner_contact.owner_id} 的部分唯一索引，口径是未删除且 {@code is_primary} 的联系人。 */
+    private static final String OWNER_CONTACT_PRIMARY_UNIQUE_INDEX = "ux_owner_contact_primary";
+
+    /**
+     * 主联系人冲突的提示：必须点明「已有主联系人」，并把下一步动作写出来。
+     *
+     * <p>只说「数据冲突」时操作人拿不到任何可执行的信息：他不知道是别人刚刚设了主联系人，
+     * 也就不会想到先刷新列表再重试。
+     */
+    private static final String PRIMARY_CONTACT_TAKEN_MESSAGE = "该货主已有主联系人，请刷新列表后重新提交";
+
     private OwnerConstraintTranslator() {
     }
 
@@ -86,6 +97,39 @@ final class OwnerConstraintTranslator {
             return e;
         }
         return externalCodeTakenOrOriginal(e, cause);
+    }
+
+    /**
+     * 翻译联系人写入撞上的主联系人唯一索引，其余约束原样返回。
+     *
+     * <p><b>为什么会撞上：</b>「先清旧主、再写新主」是两个步骤，并发下两笔「设我为主」可能都越过了
+     * 清理步骤，后写的一笔被 {@code ux_owner_contact_primary} 拒绝。这是一次能被如实解释的正常失败
+     * ——别人先设了主联系人——因此翻译成业务错误，而不是让人在 50000 上看到一条 SQL 报错。
+     *
+     * <p><b>为什么复用泛化的 {@link ErrorCode#CONFLICT} 而不新增专用码：</b>该码的语义正是
+     * 「当前状态与提交冲突，重试可能成功」，与这次失败吻合；为一个低频并发场景扩错误码表，
+     * 会让前端多一个只在极少数时刻才出现的分支。区分度由提示文案承担，见 {@link #PRIMARY_CONTACT_TAKEN_MESSAGE}。
+     * 联系人写入还受外键与 CHECK 约束，那些不属于本用例可解释的失败，仍按类注释的原则原样上抛。
+     *
+     * <p><b>调用方必须只把仓储写入那一行包进 {@code try}：</b>本方法假定入参异常只可能来自那一条写语句。
+     * 连审计等其他写入一起包住，一次「审计表写不进去」就会被报成「该货主已有主联系人」——那是谎报，
+     * 而且会把真正的存储故障藏起来。
+     *
+     * <p><b>这里不查库：</b>翻译只需要约束名。因此它与 {@link #translateInsert} 的前缀反查不同——
+     * 即使这条写入发生在事务里、PostgreSQL 已把事务置为 aborted，本方法也不会再发出一条必然失败的查询。
+     *
+     * @param e 数据库抛出的完整性约束冲突
+     * @return 已翻译的业务异常；约束未知时为原始异常，由全局异常处理归到 50000
+     */
+    static RuntimeException translateContactWrite(DataIntegrityViolationException e) {
+        String cause = causeOf(e);
+        if (cause == null) {
+            return e;
+        }
+        if (cause.contains(OWNER_CONTACT_PRIMARY_UNIQUE_INDEX)) {
+            return new BizException(ErrorCode.CONFLICT, PRIMARY_CONTACT_TAKEN_MESSAGE);
+        }
+        return e;
     }
 
     /**
