@@ -1,8 +1,8 @@
 # 接口台账
 
 > **生成物，禁止手改。** 由 `code/tools/api-inventory/gen_api_inventory.py` 生成。
-> 来源：实时拉取 `http://localhost:18091/v3/api-docs`
-> 源 commit：`265d768`
+> 来源：实时拉取 `http://localhost:18092/v3/api-docs`
+> 源 commit：`e935abc`
 > 计数口径：OpenAPI operation（path × method），不是 Java 方法数
 > 字段记号：`a.b` 嵌套，`a[]` 数组元素，`↻` 自引用已截断，`…` 嵌套过深已截断
 
@@ -10,15 +10,15 @@
 
 | 项 | 值 |
 | --- | --- |
-| 接口总数 | 28 |
-| GET | 10 |
+| 接口总数 | 29 |
+| GET | 11 |
 | POST | 5 |
 | PUT | 11 |
 | DELETE | 2 |
 
 | 主体 | 数量 |
 | --- | --- |
-| console（仓网端） | 26 |
+| console（仓网端） | 27 |
 | 共用 | 2 |
 
 ## 统一响应外壳
@@ -35,7 +35,7 @@
 
 ## 接口清单
 
-共 28 个接口。
+共 29 个接口。
 
 ### 1. `POST /api/auth/login`
 
@@ -89,7 +89,44 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 3. `GET /api/console/dicts`
+### 3. `GET /api/console/audit-logs`
+
+按对象查询审计日志
+
+按「对象类型 + 对象标识」检索该对象的全部变更记录，按操作时间倒序返回，供货主详情、商品详情的操作日志抽屉使用。两个筛选条件都必填：少任一个就退化成全表分页，而审计表只会越来越大。每行带出操作人、操作时间、动作、变更前后快照与来源端；beforeValue / afterValue 原样返回，子表类数据（联系人、税号）保存的是完整集合快照而不是差异。本接口只读：审计日志不提供删除与修改端点。
+
+- 主体：console（仓网端）
+- 分页：是
+- 响应外壳：`ApiResult`
+
+**请求字段**
+
+无请求体。
+
+**返回字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `pageNo` | integer(int32) | 页码，从 1 开始 |
+| `pageSize` | integer(int32) | 每页条数，取值 1 至 200，超出范围时接口返回 40000 |
+| `total` | integer(int64) | 满足筛选条件的总条数，不是本页条数 |
+| `records` | AuditLogItemResponse[] | 本页数据；无数据时为空数组，不会是 null |
+| `records[].id` | string | 日志标识，字符串形式的十进制整数 |
+| `records[].bizType` | string | 审计对象类型编码，如 OWNER、OWNER_CONTACT、SKU、USER |
+| `records[].bizId` | string | 对象标识，与 bizType 一起定位被审计的那条数据 |
+| `records[].action` | string | 审计动作编码：CREATE 新增、UPDATE 修改、DELETE 删除、AUDIT 审核、PERMISSION_CHANGE 权限变更、LOGIN 登录、LABEL_PRINT 标签打印 |
+| `records[].operatorId` | string | 操作人标识，字符串形式的十进制整数；系统内部触发为 null |
+| `records[].operatorName` | string | 操作人姓名，写入当时的快照，不随人员之后改名而变化 |
+| `records[].operatorIp` | string | 来源地址；取不到当前请求时为 null |
+| `records[].sourcePortal` | string | 来源端编码：CONSOLE 仓网端、PORTAL 货主端；系统内部触发或来源无法判定时为 null |
+| `records[].summary` | string | 变更摘要，人读的一句话；没有摘要时为 null |
+| `records[].beforeValue` | object | 变更前快照，原样返回；无变更前值（如新增）时为 null。子表类数据的快照是完整集合，不是差异 |
+| `records[].beforeValue` | object | 无字段声明 |
+| `records[].afterValue` | object | 变更后快照，原样返回；无变更后值（如删除）时为 null |
+| `records[].afterValue` | object | 无字段声明 |
+| `records[].createdAt` | string(date-time) | 操作时间，ISO-8601 UTC 字符串 |
+
+### 4. `GET /api/console/dicts`
 
 查询字典类型清单
 
@@ -114,7 +151,7 @@
 | `[][].itemCount` | integer(int64) | 该类型下未删除的字典项数量，含已停用的项；取值为整数 |
 | `[][].status` | string | 类型状态编码：ACTIVE 启用，DISABLED 停用。停用的类型不应再被新的引用处使用 |
 
-### 4. `GET /api/console/dicts/batch`
+### 5. `GET /api/console/dicts/batch`
 
 批量查询多类字典项
 
@@ -134,7 +171,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 5. `GET /api/console/dicts/{dictType}/items`
+### 6. `GET /api/console/dicts/{dictType}/items`
 
 查询某类字典项
 
@@ -162,7 +199,7 @@
 | `[][].ext` | object | 扩展属性，原样透传；没有扩展属性时为 {}；行政区划等层级字典用 parent 指向父项的 value |
 | `[][].ext` | object | 无字段声明 |
 
-### 6. `GET /api/console/owners`
+### 7. `GET /api/console/owners`
 
 分页查询货主
 
@@ -191,7 +228,7 @@
 | `records[].status` | string | 货主状态编码：DRAFT 草稿，POTENTIAL 潜在，ACTIVE 合作中，SUSPENDED 暂停，TERMINATED 终止。终止态的货主仍出现在列表里，写操作按钮应置灰 |
 | `records[].updatedAt` | string(date-time) | 最后修改时刻，ISO 8601 带时区（UTC） |
 
-### 7. `POST /api/console/owners`
+### 8. `POST /api/console/owners`
 
 新建货主
 
@@ -228,7 +265,7 @@
 | `id` | string | 新货主的标识，字符串形式的十进制整数；后续详情、编辑都用它定位 |
 | `code` | string | 系统编码，形如 OWNER0001，由编码规则生成且不可修改；被占用时接口返回 40904，此时重新提交即可 |
 
-### 8. `GET /api/console/owners/{id}`
+### 9. `GET /api/console/owners/{id}`
 
 查询货主详情
 
@@ -266,7 +303,7 @@
 | `remark` | string | 备注，可为 null |
 | `createdAt` | string(date-time) | 创建时刻，ISO 8601 带时区（UTC） |
 
-### 9. `PUT /api/console/owners/{id}`
+### 10. `PUT /api/console/owners/{id}`
 
 编辑货主档案
 
@@ -300,7 +337,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 10. `DELETE /api/console/owners/{id}`
+### 11. `DELETE /api/console/owners/{id}`
 
 删除草稿货主
 
@@ -320,7 +357,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 11. `POST /api/console/owners/{id}/account`
+### 12. `POST /api/console/owners/{id}/account`
 
 为货主开通主账号
 
@@ -344,7 +381,7 @@
 | `accountId` | string | 新建账号的标识，字符串形式的十进制整数；后续停用、重置密码用它定位 |
 | `loginName` | string | 登录名，等于该货主的系统编码，形如 OWNER0001；由系统生成、不可修改，账号首次登录后会被要求先改密码 |
 
-### 12. `PUT /api/console/owners/{id}/status`
+### 13. `PUT /api/console/owners/{id}/status`
 
 流转货主状态
 
@@ -367,7 +404,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 13. `GET /api/console/owners/{id}/termination-impact`
+### 14. `GET /api/console/owners/{id}/termination-impact`
 
 查询终止影响清单
 
@@ -388,7 +425,7 @@
 | `skuCount` | integer(int64) | 该货主下仍存在的商品数，排除已删除的商品。终止不会修改这些商品的状态，它们保留但不可用于新的业务单据 |
 | `accountCount` | integer(int64) | 该货主下仍存在的账号数，停用的账号也计入，排除已删除的账号。终止不会停用这些账号 |
 
-### 14. `GET /api/console/roles`
+### 15. `GET /api/console/roles`
 
 分页查询角色
 
@@ -419,7 +456,7 @@
 | `records[].permissionCount` | integer(int64) | 该角色已勾选的菜单与权限点数量，取值为整数（菜单与操作两级都计入） |
 | `records[].remark` | string | 备注，可为 null |
 
-### 15. `POST /api/console/roles`
+### 16. `POST /api/console/roles`
 
 创建角色
 
@@ -447,7 +484,7 @@
 | `id` | string | 新角色的标识，字符串形式的十进制整数；后续详情、编辑、启停、删除都用它定位 |
 | `code` | string | 新角色编码，按落库值返回；程序按编码引用角色，创建后不可修改 |
 
-### 16. `GET /api/console/roles/{id}`
+### 17. `GET /api/console/roles/{id}`
 
 查询角色详情
 
@@ -477,7 +514,7 @@
 | `dataScopeType` | string | 数据范围类型编码：ALL 全部货主，ASSIGNED 我负责的货主，CUSTOM 指定货主 |
 | `ownerIds` | string[] | 数据范围为 CUSTOM 时已选定的货主标识（字符串形式的十进制整数），按标识升序；ALL 与 ASSIGNED 时为空数组。与 dataScopeType 一起用于回填数据范围配置 |
 
-### 17. `PUT /api/console/roles/{id}`
+### 18. `PUT /api/console/roles/{id}`
 
 编辑角色
 
@@ -501,7 +538,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 18. `DELETE /api/console/roles/{id}`
+### 19. `DELETE /api/console/roles/{id}`
 
 删除角色
 
@@ -521,7 +558,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 19. `PUT /api/console/roles/{id}/data-scope`
+### 20. `PUT /api/console/roles/{id}/data-scope`
 
 配置角色数据范围（整批替换）
 
@@ -544,7 +581,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 20. `PUT /api/console/roles/{id}/status`
+### 21. `PUT /api/console/roles/{id}/status`
 
 启用或停用角色
 
@@ -566,7 +603,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 21. `GET /api/console/users`
+### 22. `GET /api/console/users`
 
 分页查询用户账号
 
@@ -598,7 +635,7 @@
 | `records[].roles` | string[] | 已分配的角色编码列表（含停用中的角色）；没有角色时为空数组。列表要显示人能读的编码，编辑表单回填用的角色标识在详情接口的 roleIds 里给 |
 | `records[].lastLoginAt` | string(date-time) | 最后登录时刻，ISO 8601 带时区（UTC），如 2026-10-24T08:30:00Z；从未登录过为 null |
 
-### 22. `POST /api/console/users`
+### 23. `POST /api/console/users`
 
 创建用户账号
 
@@ -628,7 +665,7 @@
 | `id` | string | 新账号的用户标识，字符串形式的十进制整数；后续详情、编辑、启停、分配角色都用它定位，同时用于跳转到详情页 |
 | `loginName` | string | 新账号的登录名，按落库值返回（未做大小写改写）；与请求里的登录名一致，便于前端核对 |
 
-### 23. `GET /api/console/users/{id}`
+### 24. `GET /api/console/users/{id}`
 
 查询用户详情
 
@@ -662,7 +699,7 @@
 | `createdAt` | string(date-time) | 账号创建时刻，ISO 8601 带时区（UTC） |
 | `roleIds` | string[] | 已分配的角色标识列表（字符串形式的十进制整数），用于回填编辑表单的勾选状态；没有角色时为空数组。与 roles 是同一批角色的两种表示 |
 
-### 24. `PUT /api/console/users/{id}`
+### 25. `PUT /api/console/users/{id}`
 
 编辑用户基本信息
 
@@ -686,7 +723,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 25. `PUT /api/console/users/{id}/data-scope`
+### 26. `PUT /api/console/users/{id}/data-scope`
 
 配置用户级数据范围覆盖（整批替换）
 
@@ -709,7 +746,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 26. `PUT /api/console/users/{id}/password`
+### 27. `PUT /api/console/users/{id}/password`
 
 重置他人密码
 
@@ -731,7 +768,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 27. `PUT /api/console/users/{id}/roles`
+### 28. `PUT /api/console/users/{id}/roles`
 
 分配用户角色（整批替换）
 
@@ -753,7 +790,7 @@
 | --- | --- | --- |
 | `—` | object | 无字段声明 |
 
-### 28. `PUT /api/console/users/{id}/status`
+### 29. `PUT /api/console/users/{id}/status`
 
 启用或停用用户账号
 

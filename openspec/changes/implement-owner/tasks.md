@@ -62,7 +62,18 @@
 - [x] 2.7a 预置业务字典并实现查询（类型清单 / 单项清单 / 批量），验证停用项在 `enabledOnly=true` 时不返回、`false` 时返回
       —— 157 单测 + 67 集成测试通过；种子 5 类 122 项（`COUNTRY` 28、`PROVINCE` 82 含美国 51 与中国 31）；类型清单与批量各 1 条 SQL（有断言）；层级用 `ext.parent` 承载，未加 `parent_id` 列
 - [ ] 2.7b 实现字典项维护（新增、编辑、启停、删除），验证 `system:dict:update` 权限生效、停用后不需重启即在引用处消失；同时补 `system:dict:update` 的首个消费者（本批已插点但无接口）
-- [ ] 2.8 实现审计日志（七类操作、前后值摘要、只追加），验证日志无删除入口且可按对象倒序追溯
+- [x] 2.8a 实现审计能力本体：`sys_audit_log` 补来源端列、写入端口（操作人由实现自取）、
+只追加（Mapper 不继承 BaseMapper，无 update/delete）、按对象倒序查询端点 `system:audit:list`
+      —— 472 测试通过（auth 236 + master 92 + app 144）；实测两条日志按 `created_at` 倒序、
+`jsonb` 含嵌套对象与显式 null 往返后深比较相等、`source_portal='PDA'` 被 CHECK 拒绝而 NULL 允许、
+无权限得 403；`grep -rn "DELETE FROM sys_audit_log\|update sys_audit_log"` 无结果
+      —— **规格要求「来源端」而表里没有该列，已补**：不靠从操作人 subjectType 推导，
+因为审计要记录当时的事实而非事后推断
+      —— **本批无生产者**：审计能力就绪但还没有调用方，2.8b 接入
+- [ ] 2.8b 把审计接入七类操作（主数据新增/修改/删除、审核、权限变更、登录、标签打印），
+子表类变更存完整集合快照；验证 5.1 主链路的四步操作都能在审计里查到
+      —— **待决策**：`sys_audit_log` 归属已登记为 `wms-auth`，而 `wms-master` 的货主操作要留痕时
+与「auth/master 互不依赖」冲突，端口该放哪需要一次决策
 - [ ] 2.9 暴露管理端踢人入口（`SessionInvalidator.invalidateAllOf`），验证仅持有踢人权限点的角色可调用、被踢用户下一次请求立即 401；该能力已在 1.4 实现，此处只补授权与入口
 
 ## 3. 客户管理

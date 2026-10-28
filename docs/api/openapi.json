@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:18091",
+      "url": "http://localhost:18092",
       "description": "Generated server url"
     }
   ],
@@ -19,6 +19,10 @@
     {
       "name": "货主档案",
       "description": "仓网端的货主（客户）建档、列表、详情、编辑、状态流转、删除与主账号开通。建档由系统生成客户编码并占用 SKU 前缀；编辑不能改编码、SKU 前缀与状态；状态流转按五态流转表判定，终止前要求确认影响清单；只有草稿可以删除，删除为软删除；主账号只能为合作中的货主单独开通，登录名取货主系统编码。全部接口都要求对应权限点，只登录但没有权限点的账号会拿到 403。"
+    },
+    {
+      "name": "审计日志",
+      "description": "按对象追溯变更记录，按操作时间倒序。只提供查询：审计日志只追加不可修改，没有删除与修改入口——这是结构上的不存在，不是权限校验的拒绝。"
     },
     {
       "name": "认证",
@@ -1438,6 +1442,86 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResultMapStringListDictItemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/console/audit-logs": {
+      "get": {
+        "tags": [
+          "审计日志"
+        ],
+        "summary": "按对象查询审计日志",
+        "description": "按「对象类型 + 对象标识」检索该对象的全部变更记录，按操作时间倒序返回，供货主详情、商品详情的操作日志抽屉使用。两个筛选条件都必填：少任一个就退化成全表分页，而审计表只会越来越大。每行带出操作人、操作时间、动作、变更前后快照与来源端；beforeValue / afterValue 原样返回，子表类数据（联系人、税号）保存的是完整集合快照而不是差异。本接口只读：审计日志不提供删除与修改端点。",
+        "operationId": "page_3",
+        "parameters": [
+          {
+            "name": "bizType",
+            "in": "query",
+            "description": "审计对象类型编码，必填，如 OWNER、OWNER_CONTACT、SKU、USER",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OWNER",
+                "OWNER_CONTACT",
+                "OWNER_TAX",
+                "SKU",
+                "USER",
+                "ROLE",
+                "LABEL_PRINT"
+              ]
+            }
+          },
+          {
+            "name": "bizId",
+            "in": "query",
+            "description": "对象标识，必填，如 OWNER0001；与 bizType 一起定位被审计的数据",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageNo",
+            "in": "query",
+            "description": "页码，从 1 开始；省略时取 1",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "每页条数，上限 200；省略时取 20，超出上限返回 40000",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultPageResultAuditLogItemResponse"
                 }
               }
             }
@@ -2959,6 +3043,123 @@
             "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
           }
         }
+      },
+      "ApiResultPageResultAuditLogItemResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PageResultAuditLogItemResponse"
+          }
+        }
+      },
+      "AuditLogItemResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "日志标识，字符串形式的十进制整数"
+          },
+          "bizType": {
+            "type": "string",
+            "description": "审计对象类型编码，如 OWNER、OWNER_CONTACT、SKU、USER",
+            "example": "OWNER"
+          },
+          "bizId": {
+            "type": "string",
+            "description": "对象标识，与 bizType 一起定位被审计的那条数据",
+            "example": "OWNER0001"
+          },
+          "action": {
+            "type": "string",
+            "description": "审计动作编码：CREATE 新增、UPDATE 修改、DELETE 删除、AUDIT 审核、PERMISSION_CHANGE 权限变更、LOGIN 登录、LABEL_PRINT 标签打印",
+            "example": "UPDATE"
+          },
+          "operatorId": {
+            "type": "string",
+            "description": "操作人标识，字符串形式的十进制整数；系统内部触发为 null"
+          },
+          "operatorName": {
+            "type": "string",
+            "description": "操作人姓名，写入当时的快照，不随人员之后改名而变化"
+          },
+          "operatorIp": {
+            "type": "string",
+            "description": "来源地址；取不到当前请求时为 null"
+          },
+          "sourcePortal": {
+            "type": "string",
+            "description": "来源端编码：CONSOLE 仓网端、PORTAL 货主端；系统内部触发或来源无法判定时为 null",
+            "example": "CONSOLE"
+          },
+          "summary": {
+            "type": "string",
+            "description": "变更摘要，人读的一句话；没有摘要时为 null"
+          },
+          "beforeValue": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "description": "变更前快照，原样返回；无变更前值（如新增）时为 null。子表类数据的快照是完整集合，不是差异"
+            },
+            "description": "变更前快照，原样返回；无变更前值（如新增）时为 null。子表类数据的快照是完整集合，不是差异"
+          },
+          "afterValue": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "description": "变更后快照，原样返回；无变更后值（如删除）时为 null"
+            },
+            "description": "变更后快照，原样返回；无变更后值（如删除）时为 null"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "操作时间，ISO-8601 UTC 字符串",
+            "format": "date-time"
+          }
+        },
+        "description": "本页数据；无数据时为空数组，不会是 null"
+      },
+      "PageResultAuditLogItemResponse": {
+        "type": "object",
+        "properties": {
+          "pageNo": {
+            "type": "integer",
+            "description": "页码，从 1 开始",
+            "format": "int32",
+            "example": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "description": "每页条数，取值 1 至 200，超出范围时接口返回 40000",
+            "format": "int32",
+            "example": 20
+          },
+          "total": {
+            "type": "integer",
+            "description": "满足筛选条件的总条数，不是本页条数",
+            "format": "int64",
+            "example": 137
+          },
+          "records": {
+            "type": "array",
+            "description": "本页数据；无数据时为空数组，不会是 null",
+            "items": {
+              "$ref": "#/components/schemas/AuditLogItemResponse"
+            }
+          }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
       },
       "ApiErrorBody": {
         "type": "object",
