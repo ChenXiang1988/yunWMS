@@ -6,7 +6,9 @@ import com.yunwms.master.application.dto.OwnerPage;
 import com.yunwms.master.application.dto.ProvisionedOwnerAccount;
 import com.yunwms.master.application.dto.TerminationImpact;
 import com.yunwms.master.domain.model.OwnerAddress;
+import com.yunwms.master.domain.model.OwnerContact;
 import com.yunwms.master.interfaces.controller.response.CreatedOwnerResponse;
+import com.yunwms.master.interfaces.controller.response.OwnerContactResponse;
 import com.yunwms.master.interfaces.controller.response.OwnerDetailResponse;
 import com.yunwms.master.interfaces.controller.response.OwnerListItemResponse;
 import com.yunwms.master.interfaces.controller.response.OwnerTerminationImpactResponse;
@@ -107,6 +109,42 @@ public class OwnerResponseAssembler {
      */
     public ProvisionedOwnerAccountResponse toProvisionedAccountResponse(ProvisionedOwnerAccount account) {
         return new ProvisionedOwnerAccountResponse(Long.toString(account.accountId()), account.loginName());
+    }
+
+    /**
+     * 组装单条联系人的响应。
+     *
+     * <p>只把标识转成字符串，其余字段原样回带：用例返回的就是这次落库的值（它刻意不回读一次库），
+     * 在这里再裁剪或转义，响应与库里的内容就会不一致，而审计留痕记的是落库值——
+     * 排查「界面显示的和日志里的不一样」时没有任何一处能充当准绳。
+     *
+     * @param contact 联系人
+     * @return 联系人响应体
+     */
+    public OwnerContactResponse toContactResponse(OwnerContact contact) {
+        return new OwnerContactResponse(
+                Long.toString(contact.id()),
+                contact.name(),
+                contact.roleType(),
+                contact.phone(),
+                contact.email(),
+                contact.isPrimary(),
+                contact.remark());
+    }
+
+    /**
+     * 组装联系人列表响应。
+     *
+     * <p>保持用例返回的顺序（联系人标识升序，即登记先后），不在这里再排一次：顺序是仓储端口契约的一部分，
+     * 两处各排一次时「同一毫秒登记的两条谁在前」会得到两个答案，而两处都「看起来对」。
+     *
+     * @param contacts 联系人列表，可为空列表
+     * @return 联系人响应体列表，恒不为 {@code null}
+     */
+    public List<OwnerContactResponse> toContactListResponse(List<OwnerContact> contacts) {
+        return contacts.stream()
+                .map(this::toContactResponse)
+                .toList();
     }
 
     private static OwnerListItemResponse toListItem(OwnerPage.Summary summary) {
