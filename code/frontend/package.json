@@ -9,7 +9,7 @@
   "scripts": {
     "dev:owner": "pnpm --filter @yunwms/owner-portal dev",
     "dev:network": "pnpm --filter @yunwms/network-console dev",
-    "build": "pnpm -r build",
+    "build": "pnpm check:ui && pnpm -r build",
     "build:owner": "pnpm --filter @yunwms/owner-portal build",
     "build:network": "pnpm --filter @yunwms/network-console build",
     "typecheck": "pnpm -r typecheck",
