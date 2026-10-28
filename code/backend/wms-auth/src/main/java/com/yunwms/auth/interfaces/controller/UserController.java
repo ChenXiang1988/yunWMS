@@ -12,6 +12,7 @@ import com.yunwms.auth.application.service.UserCreationService;
 import com.yunwms.auth.application.service.UserDataScopeConfigurationService;
 import com.yunwms.auth.application.service.UserPasswordResetService;
 import com.yunwms.auth.application.service.UserRoleAssignmentService;
+import com.yunwms.auth.application.service.UserSessionKickService;
 import com.yunwms.auth.application.service.UserStatusChangeService;
 import com.yunwms.auth.application.service.UserUpdateService;
 import com.yunwms.auth.domain.model.SubjectType;
@@ -33,6 +34,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -48,20 +50,21 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>路径前缀 {@code /api/console} 表示仓网端：货主端（{@code /api/portal}）不提供建号能力，
  * 它的账号由管理员在仓网端开通。
  *
- * <p>本类做建号、列表、详情、编辑基本信息、配置数据范围覆盖、启停、重置密码与分配角色。
+ * <p>本类做建号、列表、详情、编辑基本信息、配置数据范围覆盖、启停、踢下线、重置密码与分配角色。
  * 数据范围走独立端点 {@code PUT /{id}/data-scope}，不并入编辑基本信息：合在一起之后
  * 「只改展示名」的请求必须把范围也提交，漏传就等于把某个人的范围清空。
  *
- * <p>权限点分四个：列表与详情共用 {@code system:user:list}（看得到列表的人本来就能从列表点进详情，
+ * <p>权限点分五个：列表与详情共用 {@code system:user:list}（看得到列表的人本来就能从列表点进详情，
  * 拆成两个权限点只会多一次配置而没有边界收益）；建号用 {@code system:user:create}；
  * 编辑基本信息、启停与分配角色共用 {@code system:user:update}——三者改的都是「这个账号本身」，
  * 其中分配角色最重（角色决定这个人能做什么，能改别人的角色等于能改别人的权限），
  * 因此它不能借用建号权限；重置密码用 {@code system:user:reset}，它比编辑更进一步
- * （拿到它等于能替任何人设置凭据），所以必须单独受控。
- * 四个权限点由 {@code V025}、{@code V027} 与 {@code V028} 定义，
+ * （拿到它等于能替任何人设置凭据），所以必须单独受控；踢下线用 {@code system:user:kick}，
+ * 它是安全动作——能给员工改备注的角色，不一定该有强制把人赶下线的能力。
+ * 五个权限点由 {@code V025}、{@code V027}、{@code V028} 与 {@code V041} 定义，
  * 注解由 {@code SaTokenAnnotationConfig} 注册的拦截器消费。
  */
-@Tag(name = "用户管理", description = "仓网端的账号管理：建号、查询、编辑基本信息、启停、重置密码与分配角色。"
+@Tag(name = "用户管理", description = "仓网端的账号管理：建号、查询、编辑基本信息、启停、踢下线、重置密码与分配角色。"
         + "货主端没有建号能力，货主账号由管理员在这里开通。全部接口都要求对应权限点，"
         + "只登录但没有权限点的账号会拿到 403。")
 @RestController
@@ -73,6 +76,7 @@ public class UserController {
     private final UserRoleAssignmentService userRoleAssignmentService;
     private final UserUpdateService userUpdateService;
     private final UserStatusChangeService userStatusChangeService;
+    private final UserSessionKickService userSessionKickService;
     private final UserPasswordResetService userPasswordResetService;
     private final UserDataScopeConfigurationService userDataScopeConfigurationService;
     private final UserResponseAssembler userResponseAssembler;
@@ -82,6 +86,7 @@ public class UserController {
                           UserRoleAssignmentService userRoleAssignmentService,
                           UserUpdateService userUpdateService,
                           UserStatusChangeService userStatusChangeService,
+                          UserSessionKickService userSessionKickService,
                           UserPasswordResetService userPasswordResetService,
                           UserDataScopeConfigurationService userDataScopeConfigurationService,
                           UserResponseAssembler userResponseAssembler) {
@@ -90,6 +95,7 @@ public class UserController {
         this.userRoleAssignmentService = userRoleAssignmentService;
         this.userUpdateService = userUpdateService;
         this.userStatusChangeService = userStatusChangeService;
+        this.userSessionKickService = userSessionKickService;
         this.userPasswordResetService = userPasswordResetService;
         this.userDataScopeConfigurationService = userDataScopeConfigurationService;
         this.userResponseAssembler = userResponseAssembler;
@@ -256,16 +262,19 @@ public class UserController {
      * <p>停用会让该账号的既有会话立即失效、且无法再次登录（规格「停用用户」）。
      * 目标状态与当前状态相同时返回成功，不报错。
      *
+     * <p>停用方向有三条业务保护：不能停用自己、不能停用最后一个可用超管、名下仍有货主的员工必须先转交。
+     *
      * @param id      用户标识
      * @param request 目标状态
-     * @return 成功无数据；用户不存在（40400）、停用自己或停用最后一个可用超管（40900）
-     *         通过业务错误码返回
+     * @return 成功无数据；用户不存在（40400）、停用自己、停用最后一个可用超管、停用的员工仍担任
+     *         货主负责人（40900）通过业务错误码返回
      */
     @Operation(summary = "启用或停用用户账号",
             description = "切换账号状态。停用立即生效：该账号的既有会话随即失效，且无法再次登录，"
                     + "不必等令牌过期。目标状态与当前状态相同时返回成功，不报错——重复提交同一次启停是正常的重放。"
-                    + "两条业务保护：不能停用自己，也不能停用最后一个可用的超级管理员（返回 40900），"
-                    + "否则系统会失去唯一能配置权限的账号。账号不存在返回 40400。")
+                    + "三条业务保护（均返回 40900）：不能停用自己；不能停用最后一个可用的超级管理员，"
+                    + "否则系统会失去唯一能配置权限的账号；仍担任货主负责人的员工不能停用，"
+                    + "必须先转交名下货主，否则货主侧会挂着一个永远停用的负责人。账号不存在返回 40400。")
     @SaCheckPermission("system:user:update")
     @PutMapping("/{id}/status")
     public ApiResult<Void> changeStatus(
@@ -273,6 +282,36 @@ public class UserController {
             @PathVariable long id,
             @Valid @RequestBody ChangeUserStatusRequest request) {
         userStatusChangeService.change(new ChangeUserStatusCommand(id, request.status()));
+        return ApiResult.ok();
+    }
+
+    /**
+     * 使该用户的全部会话立即失效（踢下线）。
+     *
+     * <p>用 {@code DELETE} 而不是 {@code PUT}：被删掉的是该用户手上的全部会话，而不是把账号的某个
+     * 属性改成新值。{@code PUT /{id}/status} 与 {@code PUT /{id}/password} 改的是账号本身，
+     * 重复提交会得到同一个状态；踢下线没有「当前值」可言，只有「发生过」。
+     *
+     * <p>允许踢自己：只会把发起本次请求的会话一起打掉，权限与角色都在库里，重新登录即可。
+     * 与「不能停用自己」不是同一条判断——那条防的是操作完就没有恢复入口。判定写在
+     * {@link UserSessionKickService} 的类说明里。
+     *
+     * @param id 用户标识，可以是当前登录账号
+     * @return 成功无数据；用户不存在或已逻辑删除（40400）通过业务错误码返回
+     */
+    @Operation(summary = "踢下线（使该用户的全部会话立即失效）",
+            description = "让指定账号手里的全部令牌立刻作废：下一次请求即返回 40100，需要重新登录。"
+                    + "用于账号疑似被盗、人员交接这类必须立刻止血的场景。它不改变账号状态，"
+                    + "被踢的人重新登录即可继续使用；要禁止登录请停用账号。允许踢自己——"
+                    + "只会把自己这次会话一起打掉，不丢任何权限。账号不存在返回 40400："
+                    + "对不存在的标识执行失效本来会静默成功，那样接口回 200 而实际什么都没发生。")
+    @SaCheckPermission("system:user:kick")
+    @DeleteMapping("/{id}/sessions")
+    public ApiResult<Void> kickSessions(
+            @Parameter(description = "用户标识，取自列表或详情响应里的 id；可以是当前登录账号")
+            @PathVariable long id) {
+        userSessionKickService.kick(id);
+        // 不回带任何会话信息：令牌值的唯一去处是它自己的持有者，响应里出现一次就是多一处泄露面
         return ApiResult.ok();
     }
 
