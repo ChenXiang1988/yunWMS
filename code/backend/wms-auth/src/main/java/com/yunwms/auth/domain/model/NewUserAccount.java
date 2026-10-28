@@ -30,4 +30,19 @@ public record NewUserAccount(
         String email,
         String wecomUserId,
         String passwordHash) {
+
+    /**
+     * 建号固定的初始状态：停用是后续操作，不是创建时的选择。
+     *
+     * <p>声明在聚合上而不是写死在写入口：审计快照要如实记下「当时落库的是什么」，
+     * 若它自己再写一份 {@code ACTIVE}，两处就会各自漂移，而漂移只会在读日志时表现为一句假话。
+     */
+    public static final UserStatus INITIAL_STATUS = UserStatus.ACTIVE;
+
+    /**
+     * 建号固定为「需先改密」：初始密码只够换一次登录。
+     *
+     * <p>与 {@link #INITIAL_STATUS} 同一理由声明在这里：写入口与审计快照读同一个常量。
+     */
+    public static final boolean INITIAL_MUST_CHANGE_PASSWORD = true;
 }

@@ -1,7 +1,6 @@
 package com.yunwms.auth.infrastructure.persistence.repository;
 
 import com.yunwms.auth.domain.model.NewRole;
-import com.yunwms.auth.domain.model.RoleStatus;
 import com.yunwms.auth.domain.port.RoleRegistrar;
 import com.yunwms.auth.infrastructure.persistence.entity.SysDataScopeOwnerEntity;
 import com.yunwms.auth.infrastructure.persistence.entity.SysRoleEntity;
@@ -72,11 +71,12 @@ public class RoleRegistrarImpl implements RoleRegistrar {
         SysRoleEntity entity = new SysRoleEntity();
         entity.setCode(role.code());
         entity.setName(role.name());
-        // 接口不能创建内置角色：builtin 恒为 false，见 NewRole 的说明
-        entity.setBuiltin(Boolean.FALSE);
+        // 接口不能创建内置角色：builtin 恒为 false，见 NewRole 的说明。
+        // 两个固定值取自聚合上的建档常量：审计快照同样读它们，两处各写一份迟早会各说各话
+        entity.setBuiltin(NewRole.INITIAL_BUILTIN);
         // 枚举入库显式存 name()：库里该列是 varchar 且有 CHECK，存 ordinal 会在枚举顺序调整后静默错位
         entity.setDataScopeType(role.dataScopeType().name());
-        entity.setStatus(RoleStatus.ACTIVE.name());
+        entity.setStatus(NewRole.INITIAL_STATUS.name());
         entity.setRemark(role.remark());
         entity.setCreatedBy(operatorId);
         entity.setUpdatedBy(operatorId);

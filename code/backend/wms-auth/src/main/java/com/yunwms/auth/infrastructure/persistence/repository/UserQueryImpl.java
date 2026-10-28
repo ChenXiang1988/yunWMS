@@ -1,6 +1,5 @@
 package com.yunwms.auth.infrastructure.persistence.repository;
 
-import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.yunwms.auth.domain.model.SubjectType;
 import com.yunwms.auth.domain.model.UserProfile;
 import com.yunwms.auth.domain.model.UserRoleGrant;
@@ -114,6 +113,9 @@ public class UserQueryImpl implements UserQuery {
                 summary,
                 entity.getEmail(),
                 entity.getWecomUserId(),
+                // 该列是 NOT NULL，取到 null 属于映射问题：直接拆箱暴露，不在这里挑一个默认值，
+                // 猜「需改密」或「不需改密」都是在替一次真实的读失败编造结论
+                entity.getMustChangePassword(),
                 // 用户级覆盖值原样返回（可为 null = 继承角色默认）：在这里替它挑一个默认值，
                 // 等于把「没配置」说成「配置成了某一个值」
                 entity.getDataScopeType(),
@@ -121,13 +123,6 @@ public class UserQueryImpl implements UserQuery {
                 dataScopeQuery.findUserOwnerIds(userId),
                 entity.getCreatedAt(),
                 grants.stream().map(UserRoleGrant::roleId).toList()));
-    }
-
-    @Override
-    public boolean existsById(long userId) {
-        // 只数行而不取详情：selectCount 同样带逻辑删除条件，且不需要把整行读回来
-        return sysUserMapper.selectCount(Wrappers.<SysUserEntity>lambdaQuery()
-                .eq(SysUserEntity::getId, userId)) > 0;
     }
 
     @Override
@@ -202,5 +197,11 @@ public class UserQueryImpl implements UserQuery {
 
     private static String codeOf(UserStatus status) {
         return status == null ? null : status.name();
+    }
+
+    @Override
+    public boolean existsById(long userId) {
+        return sysUserMapper.selectCount(Wrappers.<SysUserEntity>lambdaQuery()
+                .eq(SysUserEntity::getId, userId)) > 0;
     }
 }

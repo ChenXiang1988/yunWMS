@@ -55,6 +55,17 @@ public record NewRole(String code,
     /** 编码不合规时给管理员看的话术；与 {@link #CODE_PATTERN} 描述同一条规则。 */
     public static final String CODE_FORMAT_HINT = "角色编码需以大写字母开头，只能包含大写字母、数字与下划线，长度 2 到 32 位";
 
+    /**
+     * 建档固定的 {@code builtin} 取值：接口不能创建内置角色。
+     *
+     * <p>与 {@link #INITIAL_STATUS} 一样声明在聚合上而不是写死在写入口：审计快照要如实记下
+     * 「当时落库的是什么」，读两个不同的来源迟早会读到两句不同的话。
+     */
+    public static final boolean INITIAL_BUILTIN = false;
+
+    /** 建档固定的初始状态：停用是后续操作，不是创建时的选择。 */
+    public static final RoleStatus INITIAL_STATUS = RoleStatus.ACTIVE;
+
     private static final Pattern CODE_MATCHER = Pattern.compile(CODE_PATTERN);
 
     /**

@@ -139,7 +139,8 @@ class UserQueryServiceTest {
     }
 
     private static UserProfile profile() {
-        return new UserProfile(summary(), "zhangsan@example.com", "wx_zhangsan", null, List.of(),
+        // 第四个参数是「仍需先改密」：本用例的账号已改过密，所以是 false
+        return new UserProfile(summary(), "zhangsan@example.com", "wx_zhangsan", false, null, List.of(),
                 Instant.parse("2026-01-04T08:30:00Z"), List.of(3L));
     }
 

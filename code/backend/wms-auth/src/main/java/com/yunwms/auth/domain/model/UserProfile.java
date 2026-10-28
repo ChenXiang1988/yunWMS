@@ -16,6 +16,9 @@ import java.util.List;
  * @param summary       与列表行同源的摘要
  * @param email         邮箱；货主账号可为 {@code null}
  * @param wecomUserId   企业微信 userid，内部员工用于应用消息推送；可为 {@code null}
+ * @param mustChangePassword 是否仍需先改密。不进列表摘要：编辑表单不展示也不提交它，列在列表里只是噪音。
+ *                      放进详情是因为它是账号状态的一部分，而管理侧读 {@code sys_user.must_change_password}
+ *                      只有这一处（登录链路读的是 {@link UserAccount}，那份只服务认证）
  * @param dataScopeType 用户级数据范围覆盖值；{@code null} 表示继承角色默认
  * @param ownerIds      {@code dataScopeType = CUSTOM} 时该覆盖配置里的指定货主标识，按标识升序；
  *                      其他情况为空列表。与 {@code dataScopeType} 一起构成完整的覆盖配置，
@@ -26,6 +29,7 @@ import java.util.List;
 public record UserProfile(UserSummary summary,
                           String email,
                           String wecomUserId,
+                          boolean mustChangePassword,
                           String dataScopeType,
                           List<Long> ownerIds,
                           Instant createdAt,
