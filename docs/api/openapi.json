@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:8080",
+      "url": "http://localhost:18091",
       "description": "Generated server url"
     }
   ],
@@ -18,7 +18,7 @@
     },
     {
       "name": "货主档案",
-      "description": "仓网端的货主（客户）建档、列表、详情、编辑、状态流转与删除。建档由系统生成客户编码并占用 SKU 前缀；编辑不能改编码、SKU 前缀与状态；状态流转按五态流转表判定，终止前要求确认影响清单；只有草稿可以删除，删除为软删除。全部接口都要求对应权限点，只登录但没有权限点的账号会拿到 403。"
+      "description": "仓网端的货主（客户）建档、列表、详情、编辑、状态流转、删除与主账号开通。建档由系统生成客户编码并占用 SKU 前缀；编辑不能改编码、SKU 前缀与状态；状态流转按五态流转表判定，终止前要求确认影响清单；只有草稿可以删除，删除为软删除；主账号只能为合作中的货主单独开通，登录名取货主系统编码。全部接口都要求对应权限点，只登录但没有权限点的账号会拿到 403。"
     },
     {
       "name": "认证",
@@ -1170,6 +1170,59 @@
         }
       }
     },
+    "/api/console/owners/{id}/account": {
+      "post": {
+        "tags": [
+          "货主档案"
+        ],
+        "summary": "为货主开通主账号",
+        "description": "由仓网端操作人为处于「合作中」的货主建立一个货主主账号：登录名由系统按货主系统编码生成（如 OWNER0001），界面只读；初始密码由操作人设定，账号被标记为首次登录需修改，首次登录后除改密外调用任何业务接口返回 40104。只有合作中（ACTIVE）的货主可以开号：草稿、潜在、暂停、终止一律 40900，提示里带当前状态。同一货主最多一个主账号：重复开号返回 40900，提示里带该货主已有的登录名；登录名被别的货主占用时同样 40900，但提示是「已被其他账号占用」——两种情形的处置不同，文案因此不同。请求体只有姓名与初始密码：没有 loginName（系统生成）、没有 phone（属联系人档案，3.5）、没有 roleIds（货主侧角色属 3.4/4.4），多传字段返回 40000。本接口不建联系人、不动货主档案字段、不改货主状态，也不产生子账号。",
+        "operationId": "openAccount",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "货主标识，取自列表响应里的 id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerAccountProvisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultProvisionedOwnerAccountResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
     "/api/auth/login": {
       "post": {
         "tags": [
@@ -2019,6 +2072,62 @@
           "code": {
             "type": "string",
             "description": "系统编码，形如 OWNER0001，由编码规则生成且不可修改；被占用时接口返回 40904，此时重新提交即可",
+            "example": "OWNER0001"
+          }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
+      },
+      "OwnerAccountProvisionRequest": {
+        "required": [
+          "displayName",
+          "initialPassword"
+        ],
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string",
+            "description": "主账号姓名（展示名），必填，最长 64 个字符；登录货主端后显示在页头。与登录名无关——登录名固定取货主系统编码",
+            "example": "张三"
+          },
+          "initialPassword": {
+            "type": "string",
+            "description": "初始密码明文，必填，需满足密码策略：8–20 位且同时包含大写字母、小写字母与数字。账号落地时只存哈希，且被标记为首次登录必须修改；该账号首次登录后除改密外调用任何业务接口都会返回 40104",
+            "example": "Owner@1234"
+          }
+        }
+      },
+      "ApiResultProvisionedOwnerAccountResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ProvisionedOwnerAccountResponse"
+          }
+        }
+      },
+      "ProvisionedOwnerAccountResponse": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "description": "新建账号的标识，字符串形式的十进制整数；后续停用、重置密码用它定位",
+            "example": "42"
+          },
+          "loginName": {
+            "type": "string",
+            "description": "登录名，等于该货主的系统编码，形如 OWNER0001；由系统生成、不可修改，账号首次登录后会被要求先改密码",
             "example": "OWNER0001"
           }
         },
