@@ -48,6 +48,17 @@
             <groupId>cn.dev33</groupId>
             <artifactId>sa-token-spring-boot3-starter</artifactId>
         </dependency>
+        <!--
+            会话存储用的 Redis 协议客户端。依赖名带 redis、与 config.yaml「Redis 7.4+ 禁止」表观冲突，
+            所以这里把边界写清楚：服务端是 Valkey 8（code/backend/docker-compose.dev.yml 的
+            valkey/valkey:8-alpine），本依赖只是 Spring 侧的协议客户端（Lettuce，Apache-2.0），
+            不含任何服务端二进制，不构成「引入 Redis 服务端」——那条约束管的是部署的服务端版本，
+            不是客户端协议库，两者不冲突。
+
+            会话侧只写 String、基本类型包装类与时间，不存领域对象
+            （依据 com.yunwms.auth.infrastructure.security.SessionAttributes 的类注释），
+            因此将来换存储实现不用迁领域模型，序列化方式也不会绑死在某个实现上。
+        -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
