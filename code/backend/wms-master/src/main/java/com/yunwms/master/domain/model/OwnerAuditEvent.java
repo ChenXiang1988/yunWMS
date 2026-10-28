@@ -22,6 +22,11 @@ package com.yunwms.master.domain.model;
  * （建档 → 改状态 → 改联系人 → 开号）。记成独立类型后，从货主详情追溯时这几条会消失，
  * 而追溯的入口恰恰在那里。代价要说清楚：这三条日志的 {@code biz_id} 只有货主编码，
  * 同一货主下的多条联系人日志只能靠前后快照的内容区分，不靠对象标识。
+ *
+ * <p><b>{@link #OWNER_ASSIGNEE_CHANGED} 同理取 {@code OWNER}：</b>调整主副负责人是货主详情上的动作，
+ * 按编码追溯时要与建档、改状态、改联系人排在同一条链上。代价与联系人那三条相同：
+ * {@code biz_id} 只有货主编码，具体换了谁只能从前后快照里的两个员工标识读出
+ * （{@code OwnerAuditSnapshots#ofAssignee}）。
  */
 public enum OwnerAuditEvent {
 
@@ -47,7 +52,16 @@ public enum OwnerAuditEvent {
     OWNER_CONTACT_UPDATED("OWNER", "UPDATE", "修改联系人"),
 
     /** 删除联系人：软删除，快照只有变更前值。 */
-    OWNER_CONTACT_DELETED("OWNER", "DELETE", "删除联系人");
+    OWNER_CONTACT_DELETED("OWNER", "DELETE", "删除联系人"),
+
+    /**
+     * 调整负责客服：主、副两个角色一次写到目标状态，含「换人」与「撤销副负责人」。
+     *
+     * <p>动作取 {@code UPDATE} 而不是 {@code DELETE} 或 {@code CREATE}：这两种解读都只对了一半——
+     * 一次提交可能同时换掉主负责人（删一行 + 插一行）并清掉副负责人，也可能只是首次指定。
+     * 对象仍是同一个货主，变更的本质是「这两个角色现在是谁」，快照的前后值才说明具体动了哪一边。
+     */
+    OWNER_ASSIGNEE_CHANGED("OWNER", "UPDATE", "调整负责客服");
 
     private final String bizType;
 

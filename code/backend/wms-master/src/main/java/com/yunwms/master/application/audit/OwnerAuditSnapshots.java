@@ -136,6 +136,34 @@ public final class OwnerAuditSnapshots {
     }
 
     /**
+     * 负责客服的快照：主、副两个角色各记一个员工标识，键始终存在，值为 {@code null} 表示该角色当时没有人。
+     *
+     * <p><b>只记标识，不记员工姓名：</b>姓名会随改名变化，而审计表只追加——记了姓名，
+     * 表里就同时留着「当时的姓名」与「现在的姓名」两份同一个人的名字，事后读日志时无从判断哪个是准的。
+     * 姓名还会让「这次换人了没有」这个判断多一层歧义：同名的两个人、或同一个人改了名，
+     * 隔着两条日志看都分辨不出来。标识是员工唯一不变的事实，
+     * 要展示姓名由读日志的界面拿标识去查，那份姓名与用户档案永远一致。
+     *
+     * <p>值为 {@link Long} 而不是字符串：两个键回答的都是「换人了没有」，
+     * 按数值记可以直接比较与筛选；{@link #ofAccountOpened} 把标识写成字符串是因为它的键集里混着登录名，
+     * 那里取字符串是为了同一份快照里类型一致，这里没有那个约束。
+     *
+     * <p>不含货主标识与关系标识：归属由审计的 {@code bizId}（货主编码）给出，
+     * 与 {@link #ofContact} 同一处理；那张表的行标识每次替换都会变（删一行、插一行），
+     * 记下来也回溯不到任何东西。
+     *
+     * @param primaryUserId   主负责人的员工标识，配置成功后必不为 {@code null}
+     * @param secondaryUserId 副负责人的员工标识；该货主不设副负责人时为 {@code null}
+     * @return 快照，键为 {@code primaryUserId} 与 {@code secondaryUserId}
+     */
+    public static Map<String, Object> ofAssignee(Long primaryUserId, Long secondaryUserId) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("primaryUserId", primaryUserId);
+        snapshot.put("secondaryUserId", secondaryUserId);
+        return snapshot;
+    }
+
+    /**
      * 按固定的键顺序装配快照。
      *
      * <p>键列表只出现在这里：五个入口若各拼一份，加字段时必然只改到其中几处，
