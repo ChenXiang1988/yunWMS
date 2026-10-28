@@ -337,3 +337,94 @@ export function updateOwnerContact(
 export function deleteOwnerContact(ownerId: string, contactId: string): Promise<void> {
   return http.delete<void, void>(`/console/owners/${ownerId}/contacts/${contactId}`)
 }
+
+/**
+ * 货主税号，字段与后端 `OwnerTaxResponse` 一一对应。
+ *
+ * 不含 ownerId：它就在请求路径上。`taxType` 是 TAX_ID_TYPE 字典的 value，不是枚举：
+ * 类型通过字典扩展，写成联合类型会让每加一种税制都得改前端类型。
+ */
+export interface OwnerTax {
+  /** 税号标识，编辑、删除都用它定位 */
+  id: string
+  /** 国家，ISO 3166-1 alpha-2 代码，取自 COUNTRY 字典 */
+  country: string
+  /** 州省，取自 PROVINCE 字典；国家级税号（统一社会信用代码、VAT）未填时为 null */
+  province: string | null
+  /** 税号类型取值，展示时按 TAX_ID_TYPE 字典取中文标签 */
+  taxType: string
+  /** 税号，必填字段，不会为 null；原样返回，不做脱敏与格式化 */
+  taxNumber: string
+  /** 是否该货主在该国家下的默认税号，同一货主同一国家至多一条为 true */
+  isDefault: boolean
+}
+
+/**
+ * 税号请求体，新增与编辑共用同一个结构。
+ *
+ * 编辑是全量替换：`province` 传 null 表示清空，`isDefault` 省略等于提交 false，
+ * 所以调用方必须提交希望保留的全部值——「设为默认」只改默认标记时也要带上原值，
+ * 见 `tax-model.ts` 的 `buildSetDefaultPayload`。
+ *
+ * 编辑接口虽然接收 `country` 与 `taxType`，但以记录自身的值为准，传别的值既不生效
+ * 也不报错；前端在编辑态把这两项置为只读，见 `OwnerTaxTab.vue`。
+ */
+export interface TaxPayload {
+  /** 国家，必填，2 位大写字母的 ISO 3166-1 alpha-2 代码，取 COUNTRY 字典的 value */
+  country: string
+  /** 州省，可为空，最长 64 个字符；传 null 或整串空白表示清空 */
+  province: string | null
+  /** 税号类型，必填，取 TAX_ID_TYPE 字典的启用项 */
+  taxType: string
+  /** 税号，必填，最长 64 个字符；后端原样保存，不做格式化 */
+  taxNumber: string
+  /** 是否设为该国家下的默认税号，缺省按 false 处理 */
+  isDefault: boolean
+}
+
+/**
+ * 查询某货主的全部税号。
+ *
+ * 不分页：单个货主的税务登记是个位数量级。后端按国家、州省、类型升序返回，空州省的
+ * 国家级税号排在每个国家末尾，前端不重排。货主不存在、已逻辑删除或不在数据范围内
+ * 返回 40400，而不是空列表——空列表的意思只是「这个货主没有登记税号」。
+ */
+export function listOwnerTaxes(ownerId: string): Promise<OwnerTax[]> {
+  return http.get<OwnerTax[], OwnerTax[]>(`/console/owners/${ownerId}/taxes`)
+}
+
+/**
+ * 新增税号，返回新税号（含标识）。
+ *
+ * 置 `isDefault` 为 true 时后端先把该货主同国家的原默认税号置为非默认再写入本条，
+ * 两步同一事务。并发抢默认可能返回 40900，前端不判错误码、以重新取回的列表为准，
+ * 见 `OwnerTaxTab.vue`。返回的新行不直接并进列表：同一次调用可能改掉了另一行。
+ */
+export function createOwnerTax(ownerId: string, payload: TaxPayload): Promise<OwnerTax> {
+  return http.post<OwnerTax, OwnerTax, TaxPayload>(`/console/owners/${ownerId}/taxes`, payload)
+}
+
+/**
+ * 编辑税号（全量替换州省、税号与默认标记）。
+ *
+ * 国家与类型不可改：它们与归属一起构成这一行的身份，换国家或换类型应删旧登新。
+ * 成功不回带更新后的税号——设默认会连带把另一行改成非默认，回带单行会让人以为
+ * 其余行没变；需要最新状态时重新取列表。
+ */
+export function updateOwnerTax(
+  ownerId: string,
+  taxId: string,
+  payload: TaxPayload
+): Promise<void> {
+  return http.put<void, void, TaxPayload>(`/console/owners/${ownerId}/taxes/${taxId}`, payload)
+}
+
+/**
+ * 删除税号（后端软删除）。
+ *
+ * 删除会释放该货主在该国家下的默认名额，之后可以直接把另一条设为默认。重复删除
+ * 返回 40400，与读取侧同一口径：已删除与不存在是同一件事。
+ */
+export function deleteOwnerTax(ownerId: string, taxId: string): Promise<void> {
+  return http.delete<void, void>(`/console/owners/${ownerId}/taxes/${taxId}`)
+}
