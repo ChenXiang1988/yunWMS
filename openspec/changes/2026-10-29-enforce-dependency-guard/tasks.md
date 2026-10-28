@@ -30,8 +30,8 @@
 - [x] 3.2 编写 `allowlist.json`，登记现有全部直接依赖（坐标 / 版本 / 许可证 / 登记理由）
       —— 验证：正向核对 0 警告，说明清单与实际依赖逐条对齐；许可证逐项实测
       （pom licenses 段 / GitHub LICENSE / jar 内 META-INF/LICENSE.txt / npm registry）
-- [ ] 3.3 补 `tests/test_check.py` 与 `README.md`（含「如何登记一个新依赖」）
-      —— 验证：`python -m unittest discover -s tests` 通过
+- [x] 3.3 补 `tests/test_check.py` 与 `README.md`（含「如何登记一个新依赖」）
+      —— 验证：`python -m unittest discover -s tests` 9 例通过
 
 ## 4. 前端与 CI
 
@@ -43,21 +43,27 @@
 
 ## 5. 验收
 
-- [ ] 5.1 全量验证：后端 `./mvnw -B verify`、前端 typecheck / build / check:ui、Python 工具测试
-      —— 验证：全部通过，无存量误报
-- [ ] 5.2 只读审计并写 `completion.md`
-      —— 验证：路径未越界、单次提交 ≤400 行、无业务行为与数据库改动
+- [x] 5.1 全量验证：容器内 `./mvnw -B test` 跑架构门禁、前端 typecheck / build / check:ui、Python 工具与自检
+      —— 后端 5 个工程 enforcer Rule 0-2 全 passed、ArchUnit 7 用例通过、BUILD SUCCESS；
+      前端 `pnpm run build` 端到端 EXIT=0、`pnpm typecheck` 通过、check:ui 通过；
+      Python 准入核对 EXIT=0 且 0 警告、自检 9 例 OK。**未跑完整 `verify` 的集成测试**
+      （Testcontainers 需 docker-in-docker，本机未配；由 CI 覆盖，enforcer 绑 validate 在其之前）
+- [x] 5.2 只读审计并写 `completion.md`
+      —— 审计结论见 `completion.md`
 
 ## 提交拆分（一次提交一件事，代码与文档分开）
 
-| # | 提交 | 内容 |
-| --- | --- | --- |
-| 1 | `docs(research)` | 调研文档 + change 四件套 |
-| 2 | `build(backend)` | enforcer 插件 |
-| 3 | `docs(backend)` | data-redis 注释 |
-| 4 | `feat(tools)` | 依赖准入工具与清单 |
-| 5 | `build(frontend)` | build 前置 check:ui |
-| 6 | `ci` | CI 步骤 |
+实际 7 笔（清单与工具因 400 行上限拆开，且清单必须先落，否则脚本读不到清单会崩）：
+
+| # | 提交 | 内容 | 行数 |
+| --- | --- | --- | --- |
+| 1 | `docs(research)` | 调研文档 + change 三件套 | 343 |
+| 2 | `build(backend)` | enforcer 插件 | 97 |
+| 3 | `docs(backend)` | data-redis 注释 | 11 |
+| 4 | `docs(tools)` | 准入清单（先于工具，避免脚本读不到清单） | 181 |
+| 5 | `feat(tools)` | 核对工具 + 自检 + README | 381 |
+| 6 | `build(frontend)` | build 前置 check:ui | 2 |
+| 7 | `ci` | CI 步骤 | 8 |
 
 ## 本期不做（明确登记）
 

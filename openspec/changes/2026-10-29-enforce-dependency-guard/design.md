@@ -105,6 +105,33 @@
 - tools job 增加两步：跑 `check_dependencies.py`（失败即红），跑该目录的 unittest。
 - 不改动后端 job：`mvn verify` 已包含 enforcer（绑 `validate`，在 `verify` 之前执行）。
 
+## 实现后的补充（2026-10-29）
+
+本节记录实现与上文决策之间的偏差，不修改上文（design 只增不改，决策轨迹要可追溯）。
+
+### 1. D2 的扫描范围窄于实现
+
+实现除 `apps/*` 与 `packages/*` 外，还扫描前端根 `package.json` 与 `peerDependencies`。
+原因：根 package.json 持有 `typescript` 这类 workspace 级开发依赖，不扫会漏；
+`packages/ui-web` 的 `vue` 只声明在 `peerDependencies` 里，不扫会漏。
+实现是设计的超集，无功能缺口，此处补齐记录。
+
+### 2. D3 中残留的 `allowlist.yaml` 应为 `allowlist.json`
+
+以 D2「为什么清单用 JSON」为准：Python 标准库无 YAML 解析器，为读清单引入 PyYAML
+等于让护栏自己先带一个第三方依赖。
+
+### 3. 裁决：JSqlParser 的 LGPL / Apache-2.0 双许可可接受
+
+AGENTS.md 明文禁止的是 GPL / AGPL / SSPL，LGPL 不在其列。JSqlParser 按 Apache-2.0 路径使用，
+且全仓 SQL 改写只走这一个解析器（父 pom 已注明）。维持现状，不换解析器、不引入第二套解析器。
+
+### 4. 构建插件未纳入准入登记（有意留白）
+
+本次新增的 `maven-enforcer-plugin` 自身不在 `allowlist.json` 内：脚本只解析 `<dependencies>`
+与 package.json 的依赖段，不解析 `<build><plugins>`。把它写进清单会造成「清单有、代码未用」
+的假警告。扩展到 plugins 需要新增一整类扫描与清单段，属后续 change。
+
 ## Risks / Trade-offs
 
 - **enforcer 插件拉不下来或版本与 Maven 3.9.9 不兼容** → 落地时先跑一次 `./mvnw -B validate`
