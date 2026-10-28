@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+    放在 mapper/master/ 而不是 mapper/ 根下：MyBatis-Plus 的默认扫描位置是 classpath*:/mapper/**/*.xml，
+    按模块分目录可以在多个模块都加 XML 之后仍然一眼看出归属。
+
+    本文件只有三条写语句：读侧（按货主取列表、按标识读）都是单表等值查询，
+    走 BaseMapper + Lambda Wrapper，见 OwnerTaxMapper 的类注释。
+-->
+<mapper namespace="com.yunwms.master.infrastructure.persistence.mapper.OwnerTaxMapper">
+
+    <!--
+        编辑税号的可编辑列。
+
+        为什么不用 updateById：它按「非空字段才进 SET」的策略生成语句，而「清空州省」
+        （国家级税号本来就没有州省）恰恰是一次合法的编辑——null 会被整列略过，旧值留在库里、
+        接口回了成功，用户以为改了。这里把三列全部写死，null 就是写 NULL。
+
+        SET 里没有 owner_id / country / tax_type：这三列是这一行的身份（哪个货主、哪一国的哪种税号），
+        改它们等于换一条记录。端口虽把 country 与 tax_type 放进了 OwnerTaxDraft（新建与更新共用
+        一个写入模型），但语句不碰它们——即使上层传了一组不一样的值，这条语句也改不到，
+        不会出现「编辑了一次号码，行的国家悄悄变了」这种事。
+
+        SET 里没有 created_at / created_by / deleted_at：创建痕迹只由 insert 写入；
+        删除标记只能由下面那条 softDelete 写。让编辑有机会改 deleted_at，等于给了
+        「把已删除的税号悄悄改活」的路径。
+
+        updated_at 用库内 now()，与 insert 走列默认值同源，应用侧不取第二次时钟；
+        updated_by 由调用方给出，为空说明调用方没取到操作人，属于不该发生的情况。
+
+        is_default 取参数而不写死：设默认与取消默认共用这一条语句，调用方先 clearDefault
+        腾出名额再写，每国至多一条的约束仍由 ux_owner_tax_default 保证。
+
+        手写 SQL 必须自己带 deleted_at IS NULL：MyBatis-Plus 的逻辑删除只作用于它生成的语句。
+        已软删除的税号因此不会被改活，那次编辑会命中零行——调用方不据行数判成功（见 Mapper 注释）。
+    -->
+    <update id="updateTax">
+        UPDATE owner_tax_registration
+        SET province = #{province},
+            tax_number = #{taxNumber},
+            is_default = #{isDefault},
+            updated_at = now(),
+            updated_by = #{updatedBy}
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+    </update>
+
+    <!--
+        软删除：置 deleted_at，并留下「谁删的」。
+
+        不写 is_default：删掉一条默认税号之后，该货主在该国的名额自然空出来（部分唯一索引带
+        deleted_at IS NULL），不需要先把它改成非默认；反过来，把标记一起改掉会让
+        「这次删的是不是默认税号」在数据层面看不出来。
+
+        WHERE 上的 deleted_at IS NULL 同时是「不重复删除」的判据：第二次删除命中零行，
+        调用方据此回 404，而不是回一个看不出来发生过的成功。这也是端口要求本方法返回布尔值的原因
+        ——它是唯一需要向调用方如实交代「这一行在我读到之后已经不在了」的写入（docs/coding.md
+        「持久化与副作用」要求非插入写入校验实际结果）。
+
+        手写 SQL 必须自己带 deleted_at IS NULL：逻辑删除配置只作用于 MyBatis-Plus 生成的语句。
+    -->
+    <update id="softDelete">
+        UPDATE owner_tax_registration
+        SET deleted_at = now(),
+            updated_at = now(),
+            updated_by = #{updatedBy}
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+    </update>
+
+    <!--
+        清掉货主在某国的默认税号标记。
+
+        没有默认税号时本语句命中零行：那是本方法的正常输入（第一个默认税号也得先清一次再写，
+        否则用例里要分叉成「有旧默认」与「没有旧默认」两条路径），不是失败，调用方也不看影响行数。
+        AND is_default 让「本来就没有默认」与「已经清过」都落成同一件事：命中零行，什么都不发生。
+
+        条件带 country：默认是「每国一个」（ux_owner_tax_default 的键是 owner_id, country），
+        换美国的默认税号不该顺手清掉中国的默认标记。
+
+        不加 LIMIT 1：命中行数由 ux_owner_tax_default（owner_id, country 上、WHERE is_default AND
+        deleted_at IS NULL 的部分唯一索引）保证至多一行；加 LIMIT 反而会让「索引被绕过约束写坏」
+        这件事以「只清了一条」的形态被掩盖。
+
+        手写 SQL 必须自己带 deleted_at IS NULL：逻辑删除配置只作用于 MyBatis-Plus 生成的语句。
+        漏掉它，已软删除的行也会被这条语句碰到——它本来就不该再被任何写语句命中。
+    -->
+    <update id="clearDefault">
+        UPDATE owner_tax_registration
+        SET is_default = false,
+            updated_at = now(),
+            updated_by = #{updatedBy}
+        WHERE owner_id = #{ownerId}
+          AND country = #{country}
+          AND is_default
+          AND deleted_at IS NULL
+    </update>
+
+</mapper>

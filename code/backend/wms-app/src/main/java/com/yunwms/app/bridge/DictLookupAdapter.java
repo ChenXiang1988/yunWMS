@@ -6,6 +6,8 @@ import com.yunwms.auth.domain.port.DictQuery;
 import com.yunwms.master.domain.port.DictLookup;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
+
 /**
  * 把 {@code wms-master} 的字典窄端口接到 {@code wms-auth} 的字典查询上。
  *
@@ -22,8 +24,9 @@ import org.springframework.stereotype.Component;
  * 而不是现在预造一个批量接口。
  *
  * <p>本类只做翻译：不缓存字典（缓存会让「管理员停用了某一项」在多长时间后生效变成一个说不清的问题），
- * 不在本地兜底默认值（字典里没有就是没有）。唯一的例外是 {@code ext.postalCodeRequired} 缺失时按
- * {@code true} 处理——那是端口契约里写明的约定，不是本类擅自补的默认值。
+ * 不在本地兜底默认值（字典里没有就是没有）。例外只有两处，都是端口契约里写明的约定、不是本类擅自
+ * 补的默认值：{@code ext.postalCodeRequired} 缺失时按 {@code true} 处理；{@code ext.countries}
+ * 缺失时按不限国家处理。
  */
 @Component
 public class DictLookupAdapter implements DictLookup {
@@ -38,6 +41,15 @@ public class DictLookupAdapter implements DictLookup {
      * 其余地区不写——缺失即必填，这样新增地区时不会因为忘记写这个键而放宽校验。
      */
     private static final String POSTAL_CODE_REQUIRED_KEY = "postalCodeRequired";
+
+    /**
+     * 字典项 {@code ext} 里列出「适用国家」的键。
+     *
+     * <p>键名与 {@code V042} 写入的 {@code TAX_ID_TYPE} 项一致。缺该键表示不限国家，
+     * 因此新增一个国家专用类型时必须写这个键——漏写会让它放开到所有国家，见
+     * {@link #appliesToCountry} 对类型写坏的说明。
+     */
+    private static final String COUNTRIES_KEY = "countries";
 
     private final DictQuery dictQuery;
 
@@ -96,6 +108,52 @@ public class DictLookupAdapter implements DictLookup {
                 .findFirst()
                 .map(DictLookupAdapter::postalCodeRequiredOf)
                 .orElse(true);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>适用国家取字典项的 {@code ext.countries}。只查启用项，理由同 {@link #isActiveItem}：
+     * 停用项对新建数据而言等于不存在。整类项一次取回再在内存里找，与另外三个方法一致——
+     * {@code TAX_ID_TYPE} 只有四项，为「按 value 查单项」再加一条字典侧契约不划算。
+     */
+    @Override
+    public boolean isItemApplicableTo(String dictType, String value, String countryValue) {
+        requireText(dictType, "字典类型编码");
+        requireText(value, "字典项取值");
+        requireText(countryValue, "国家取值");
+        return dictQuery.findItems(dictType, DictStatus.ACTIVE, null).stream()
+                .filter(item -> value.equals(item.value()))
+                .findFirst()
+                .map(item -> appliesToCountry(item, countryValue))
+                .orElse(false);
+    }
+
+    /**
+     * 按字典项声明的国家清单判断它是否适用于某国家。
+     *
+     * <p>缺键、值为 {@code null}、或清单为空都表示不限国家：判据是「有没有列出国家」，
+     * 而不是清单长度。种子数据里的 {@code VAT} 写的就是空对象——它跨多国，写死一份清单
+     * 等于给自己造一个必然过期的第二真源。
+     *
+     * <p>值不是集合（如把 {@code ["CN"]} 误写成 {@code "CN"}）时判为<b>不适用</b>：当成不限国家
+     * 会把这个类型放开到所有国家，与规格的「税号类型与国家匹配」相反；判为不适用则用户提交时
+     * 会看到「类型与国家不匹配」，问题当场暴露。这个分支只有手工改库才能进入，种子数据不会产生它。
+     *
+     * @param item         字典项
+     * @param countryValue 国家取值，已由调用方判过非空白
+     * @return 该项适用于该国家时返回 {@code true}
+     */
+    private static boolean appliesToCountry(DictItem item, String countryValue) {
+        Object countries = item.ext().get(COUNTRIES_KEY);
+        if (countries == null) {
+            return true;
+        }
+        if (!(countries instanceof Collection<?> declaredCountries)) {
+            return false;
+        }
+        return declaredCountries.isEmpty()
+                || declaredCountries.stream().anyMatch(countryValue::equals);
     }
 
     /**

@@ -31,6 +31,58 @@ final class OwnerConstraintTranslator {
     /** {@code owner.external_code} 的部分唯一索引，口径是未删除的货主。 */
     private static final String OWNER_EXTERNAL_CODE_UNIQUE_INDEX = "ux_owner_external_code";
 
+    /** {@code owner_contact.owner_id} 的部分唯一索引，口径是未删除且 {@code is_primary} 的联系人。 */
+    private static final String OWNER_CONTACT_PRIMARY_UNIQUE_INDEX = "ux_owner_contact_primary";
+
+    /** {@code owner_assignee} 的 {@code (owner_id, relation_type)} 唯一索引，保证同一货主每角色至多一行。 */
+    private static final String OWNER_ASSIGNEE_ROLE_UNIQUE_INDEX = "ux_owner_assignee_role";
+
+    /**
+     * {@code owner_tax_registration} 的部分唯一索引，口径是未删除的
+     * {@code (owner_id, country, COALESCE(province, ''), tax_type)}。
+     *
+     * <p>命中它说明同一货主在同一国家、同一州省下的同类型税号已经存在，
+     * 而不是「号码重复」——两行号码不同但类型相同同样会被拒。
+     */
+    private static final String OWNER_TAX_UNIQUE_INDEX = "ux_owner_tax_unique";
+
+    /** {@code owner_tax_registration} 的部分唯一索引，口径是未删除且 {@code is_default} 的行，键为 {@code (owner_id, country)}。 */
+    private static final String OWNER_TAX_DEFAULT_UNIQUE_INDEX = "ux_owner_tax_default";
+
+    /**
+     * 主联系人冲突的提示：必须点明「已有主联系人」，并把下一步动作写出来。
+     *
+     * <p>只说「数据冲突」时操作人拿不到任何可执行的信息：他不知道是别人刚刚设了主联系人，
+     * 也就不会想到先刷新列表再重试。
+     */
+    private static final String PRIMARY_CONTACT_TAKEN_MESSAGE = "该货主已有主联系人，请刷新列表后重新提交";
+
+    /**
+     * 主负责人冲突的提示：必须点明「已有主负责人」，并把下一步动作写出来。
+     *
+     * <p>与主联系人同源：操作人看到「数据冲突」时无从判断该改什么，只有告诉他别人刚占了这个位置、
+     * 要先刷新看到最新的负责人，他才不会把同一份请求反复提交。
+     */
+    private static final String PRIMARY_ASSIGNEE_TAKEN_MESSAGE = "该货主已有主负责人，请刷新后重试";
+
+    /**
+     * 重复登记的提示：必须点明「同一国家/州省下的同类型」，而不是「税号重复」。
+     *
+     * <p>唯一索引的键里没有 {@code tax_number}——两行号码不同但类型相同同样被拒。说成「税号重复」时，
+     * 操作人会去核对自己填的号码，改了半天号码仍然被拒；说清是「同类型已登记」，他才知道该改类型、
+     * 该改州省，还是该去编辑已有那条。
+     */
+    private static final String TAX_REGISTRATION_TAKEN_MESSAGE = "该货主在此国家/州省下已有同类型税号";
+
+    /**
+     * 默认税号冲突的提示：必须点明「该国家已有默认税号」，并把下一步动作写出来。
+     *
+     * <p>与主联系人、主负责人同源：只说「数据冲突」时操作人拿不到任何可执行的信息。
+     * 这里还要带「刷新后重试」：冲突只可能来自另一个人刚刚把同国另一条设成了默认，
+     * 刷新之前他看到的页签是旧数据，再提交一次还是会撞。
+     */
+    private static final String DEFAULT_TAX_TAKEN_MESSAGE = "该货主在该国家已有默认税号，请刷新后重试";
+
     private OwnerConstraintTranslator() {
     }
 
@@ -86,6 +138,114 @@ final class OwnerConstraintTranslator {
             return e;
         }
         return externalCodeTakenOrOriginal(e, cause);
+    }
+
+    /**
+     * 翻译联系人写入撞上的主联系人唯一索引，其余约束原样返回。
+     *
+     * <p><b>为什么会撞上：</b>「先清旧主、再写新主」是两个步骤，并发下两笔「设我为主」可能都越过了
+     * 清理步骤，后写的一笔被 {@code ux_owner_contact_primary} 拒绝。这是一次能被如实解释的正常失败
+     * ——别人先设了主联系人——因此翻译成业务错误，而不是让人在 50000 上看到一条 SQL 报错。
+     *
+     * <p><b>为什么复用泛化的 {@link ErrorCode#CONFLICT} 而不新增专用码：</b>该码的语义正是
+     * 「当前状态与提交冲突，重试可能成功」，与这次失败吻合；为一个低频并发场景扩错误码表，
+     * 会让前端多一个只在极少数时刻才出现的分支。区分度由提示文案承担，见 {@link #PRIMARY_CONTACT_TAKEN_MESSAGE}。
+     * 联系人写入还受外键与 CHECK 约束，那些不属于本用例可解释的失败，仍按类注释的原则原样上抛。
+     *
+     * <p><b>调用方必须只把仓储写入那一行包进 {@code try}：</b>本方法假定入参异常只可能来自那一条写语句。
+     * 连审计等其他写入一起包住，一次「审计表写不进去」就会被报成「该货主已有主联系人」——那是谎报，
+     * 而且会把真正的存储故障藏起来。
+     *
+     * <p><b>这里不查库：</b>翻译只需要约束名。因此它与 {@link #translateInsert} 的前缀反查不同——
+     * 即使这条写入发生在事务里、PostgreSQL 已把事务置为 aborted，本方法也不会再发出一条必然失败的查询。
+     *
+     * @param e 数据库抛出的完整性约束冲突
+     * @return 已翻译的业务异常；约束未知时为原始异常，由全局异常处理归到 50000
+     */
+    static RuntimeException translateContactWrite(DataIntegrityViolationException e) {
+        String cause = causeOf(e);
+        if (cause == null) {
+            return e;
+        }
+        if (cause.contains(OWNER_CONTACT_PRIMARY_UNIQUE_INDEX)) {
+            return new BizException(ErrorCode.CONFLICT, PRIMARY_CONTACT_TAKEN_MESSAGE);
+        }
+        return e;
+    }
+
+    /**
+     * 翻译负责客服写入撞上的角色唯一索引，其余约束原样返回。
+     *
+     * <p><b>为什么会撞上：</b>{@code replace} 的语义是「删同角色旧行 + 插新行」，并发下两笔「改主负责人」
+     * 可能都走完了删除那一步（各自删掉自己看到的那一行，删除命中零行也算无操作），后写的一笔插入时
+     * 被 {@code ux_owner_assignee_role} 拒绝。这是一次能被如实解释的正常失败——别人先改了同一角色——
+     * 因此翻译成业务错误，而不是让人在 50000 上看到一条 SQL 报错。
+     *
+     * <p><b>为什么复用泛化的 {@link ErrorCode#CONFLICT} 而不新增专用码：</b>该码的语义正是
+     * 「当前状态与提交冲突，重试可能成功」，与这次失败吻合；为一个低频并发场景扩错误码表，
+     * 会让前端多一个只在极少数时刻才出现的分支。区分度由提示文案承担，见
+     * {@link #PRIMARY_ASSIGNEE_TAKEN_MESSAGE}。负责人写入还受外键与 {@code ck_assignee_relation} 约束，
+     * 那些不属于本用例可解释的失败，仍按类注释的原则原样上抛。
+     *
+     * <p><b>调用方必须只把主角色那一次 {@code replace} 包进 {@code try}：</b>本方法假定入参异常只可能来自
+     * 那一条写语句，而提示说的是「已有主负责人」。把副负责人那次写入、或审计等其他写入一起包住，
+     * 一次「审计表写不进去」就会被报成「该货主已有主负责人」——那是谎报，而且会把真正的存储故障藏起来。
+     * 副负责人撞上同一索引时也不走这里：它的失败不叫「已有主负责人」，按未知约束上抛比编一句假话好。
+     *
+     * <p><b>这里不查库：</b>翻译只需要约束名。因此与 {@link #translateInsert} 的前缀反查不同——
+     * 这条写入发生在事务里，撞约束之后 PostgreSQL 已把事务置为 aborted，本方法不会再发出一条必然失败的查询。
+     *
+     * @param e 数据库抛出的完整性约束冲突
+     * @return 已翻译的业务异常；约束未知时为原始异常，由全局异常处理归到 50000
+     */
+    static RuntimeException translateAssigneeWrite(DataIntegrityViolationException e) {
+        String cause = causeOf(e);
+        if (cause == null) {
+            return e;
+        }
+        if (cause.contains(OWNER_ASSIGNEE_ROLE_UNIQUE_INDEX)) {
+            return new BizException(ErrorCode.CONFLICT, PRIMARY_ASSIGNEE_TAKEN_MESSAGE);
+        }
+        return e;
+    }
+
+    /**
+     * 翻译税号写入撞上的两条唯一索引，其余约束原样返回。
+     *
+     * <p><b>{@code ux_owner_tax_unique} 与 {@code ux_owner_tax_default} 的处理并列，因为提示不同：</b>
+     * 前者说的是「这个组合已经登记过」，后者说的是「该国家已有默认税号」。两者都回 40900
+     * （{@link ErrorCode#CONFLICT} 的语义是「当前状态与提交冲突，重试可能成功」），
+     * 区分度由文案承担；把两者合成一句「数据冲突」，操作人就无从判断是改类型还是先刷新。
+     *
+     * <p><b>为什么会在并发下撞上：</b>{@code ux_owner_tax_default} 是「先清旧默认、再写新默认」
+     * 两个步骤，两笔并发的「设为默认」可能都越过了清理步骤，后写的一笔被拒。{@code ux_owner_tax_unique}
+     * 则是两笔并发的新增提交了同一组合——两条请求只有一条能生效，另一条刷新后再决定改类型还是编辑已有那条。
+     * 两者都是能被如实解释的正常失败，因此不按 50000 暴露，也不为此新增专用码
+     * （只在低频并发场景出现的码，会让前端多一个几乎走不到的分支）。
+     *
+     * <p><b>调用方必须只把仓储写入那一行包进 {@code try}：</b>本方法假定入参异常只可能来自那一条写语句。
+     * 清旧默认、审计等其他写入各自含义不同，一起包住会把「审计表写不进去」报成「已有同类型税号」——
+     * 那是谎报，也会把真正的存储故障藏起来。税号写入还受外键与 {@code ck_tax_country} 约束，
+     * 那些不属于本用例可解释的失败，仍按类注释的原则原样上抛。
+     *
+     * <p><b>这里不查库：</b>翻译只需要约束名，因此不像 {@link #translateInsert} 那样反查占用方——
+     * 这条写入发生在事务里，撞约束之后 PostgreSQL 已把事务置为 aborted，再发一条查询必然失败。
+     *
+     * @param e 数据库抛出的完整性约束冲突
+     * @return 已翻译的业务异常；约束未知时为原始异常，由全局异常处理归到 50000
+     */
+    static RuntimeException translateTaxWrite(DataIntegrityViolationException e) {
+        String cause = causeOf(e);
+        if (cause == null) {
+            return e;
+        }
+        if (cause.contains(OWNER_TAX_UNIQUE_INDEX)) {
+            return new BizException(ErrorCode.CONFLICT, TAX_REGISTRATION_TAKEN_MESSAGE);
+        }
+        if (cause.contains(OWNER_TAX_DEFAULT_UNIQUE_INDEX)) {
+            return new BizException(ErrorCode.CONFLICT, DEFAULT_TAX_TAKEN_MESSAGE);
+        }
+        return e;
     }
 
     /**

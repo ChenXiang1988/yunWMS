@@ -26,4 +26,67 @@
         ORDER BY a.owner_id
     </select>
 
+    <!--
+        某货主某角色当前是谁：负责客服的编辑回显，以及「改之前先看现在是谁」。
+
+        不带 ORDER BY / LIMIT：ux_owner_assignee_role 保证 (owner_id, relation_type) 至多一行，
+        加 LIMIT 1 反而会把「索引被绕过约束写坏」这件事掩盖成「取到了第一条」。
+
+        不加 deleted_at 条件：本表没有该列（V008），删除是物理删除。
+        也不联 owner / sys_user：这里只回答「是谁」，姓名与货主状态由各自的端口回答。
+    -->
+    <select id="selectUserIdByOwnerIdAndRelation" resultType="java.lang.Long">
+        SELECT a.user_id
+        FROM owner_assignee a
+        WHERE a.owner_id = #{ownerId}
+          AND a.relation_type = #{relation}
+    </select>
+
+    <!--
+        写入一条负责客服关系。
+
+        created_at 交给列默认值 now()，应用侧只写 created_by：
+        库内一次取时钟是同一行时间戳的唯一来源，应用侧再取一次会引入两个可能相差几毫秒的来源
+        （同 OwnerContactMapper.xml 的插入）。
+
+        不写 id：id 是 GENERATED ALWAYS AS IDENTITY，应用侧给值会被数据库拒绝。
+
+        不做 ON CONFLICT DO NOTHING：并发替换时后写的一笔撞上 ux_owner_assignee_role 是应当暴露的
+        冲突，吞掉它会让「谁生效」取决于时序而调用方看不到任何信号（理由见 Mapper 接口注释）。
+    -->
+    <insert id="insertAssignee">
+        INSERT INTO owner_assignee (owner_id, user_id, relation_type, created_by)
+        VALUES (#{ownerId}, #{userId}, #{relation}, #{createdBy})
+    </insert>
+
+    <!--
+        物理删除某货主某角色：本表没有 deleted_at，撤销负责人就是删掉这一行。
+
+        命中零行是正常结果：该角色本来就没有人（第一次指定负责人正是这个情形），
+        端口把这种情况声明为无操作，调用方不看影响行数。
+
+        按 (owner_id, relation_type) 定位而不是按 id：调用方在「先删同角色旧行、再插新行」里
+        不该需要先查出旧行的标识，而唯一索引保证至多命中一行，也就不存在「删多了」的可能。
+    -->
+    <delete id="deleteByOwnerIdAndRelation">
+        DELETE FROM owner_assignee
+        WHERE owner_id = #{ownerId}
+          AND relation_type = #{relation}
+    </delete>
+
+    <!--
+        某人担任主或副负责人的货主数：停用员工前的「名下是否还有货主」。
+
+        count(DISTINCT a.owner_id) 而不是 count(*)：同一个人对同一个货主可以既是主负责人
+        又是副负责人（两行），count(*) 会把「还有 1 个货主要转交」说成 2 个。
+        去重口径与上面的 selectOwnerIdsByUserId 一致，两处不能给出不同的数字。
+
+        不联 owner、不加状态条件：已终止的货主仍在名下，且本表不该知道货主有哪些状态。
+    -->
+    <select id="countByUserId" resultType="java.lang.Long">
+        SELECT count(DISTINCT a.owner_id)
+        FROM owner_assignee a
+        WHERE a.user_id = #{userId}
+    </select>
+
 </mapper>

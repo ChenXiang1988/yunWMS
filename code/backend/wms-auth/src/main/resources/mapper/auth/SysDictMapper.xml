@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <!--
-    数据字典的读取语句。四条：类型清单、类型是否存在、某类字典项、多类型字典项。
+    数据字典的语句：四条读（类型清单、类型是否存在、某类字典项、多类型字典项）、一条按标识读
+    （判存在与取变更前快照）、四条写（新增、编辑、启停、逻辑删除）。
 
     为什么项数必须聚合进类型清单这一条：在应用层对每一类再查一次，字典类型有几个就几条 SQL，
     而这张表是全模块共用的，类型只会越来越多。
@@ -9,6 +10,10 @@
     为什么按 ext.parent 过滤而不用 parent_id 列：层级写在 ext 里，任何字典都能带层级，
     也不需要把字典绑死成树（见 V032 与 DictQuery 的说明）。表达式过滤用不到索引，
     但行政区划这一类只有百余行，全表扫描的代价远小于为此加一个 GIN 索引。
+
+    读与写放在同一个文件：同一张表的两套 SQL 分到两个文件时，「deleted_at IS NULL」与审计列的写法
+    会被各写一遍，而漏写的那一遍就是一条能把数据改坏的语句。端口仍然分成 DictQuery 与 DictMaintenance
+    ——分开的理由是事务语义与回执不同，不是 SQL 该住在不同文件里。
 -->
 <mapper namespace="com.yunwms.auth.infrastructure.persistence.mapper.SysDictMapper">
 
@@ -108,5 +113,124 @@
         </if>
         ORDER BY i.dict_type, i.sort_no, i.id
     </select>
+
+    <!--
+        按标识取一条未删除的字典项。列清单复用 itemColumns：管理端展示的字段与下拉必须完全一致，
+        各写一份列清单的话，「编辑页少一个 label_en」这类错位不会被编译拦下。
+    -->
+    <select id="selectItemById"
+            resultType="com.yunwms.auth.infrastructure.persistence.entity.DictItemRow">
+        SELECT
+        <include refid="itemColumns"/>
+        FROM sys_dict_item i
+        WHERE i.id = #{id}
+          AND i.deleted_at IS NULL
+    </select>
+
+    <!--
+        新增一项，主键用 RETURNING 取回。
+
+        用 <select> 而不是 <insert> 执行：MyBatis 的 <insert> 走 executeUpdate，PostgreSQL 驱动不会把
+        RETURNING 的行作为结果集交出来；<select> 走 executeQuery，能拿到那一行。这与 SysCodeRuleMapper.xml
+        的取号语句是同一手法，理由也一样。不改成 useGeneratedKeys 是因为它要求参数是一个带 id 属性的对象，
+        而本批没有为写入建实体。
+
+        status 不在列清单里：列有 DEFAULT 'ACTIVE'，新增项一律启用。新增路径因此没有「建档即停用」的写法。
+
+        created_at / updated_at 交给列默认值 DEFAULT now()，应用侧只写 created_by / updated_by：
+        应用侧再取一次时钟会引入第二个时间来源，同一行的创建与修改时间就不再同源。
+        created_by 与 updated_by 取同一个参数：新增这一刻，创建人与最后修改人是同一个人。
+
+        ext 必须显式 CAST：连接没有配 stringtype=unspecified，字符串参数以 varchar 发送，
+        直接赋给 jsonb 列会报「column ext is of type jsonb but expression is of type character varying」。
+        传入的永远是 JSON 对象文本（空的扩展属性是 {}），因此列上不会出现一半 NULL、一半 {} 的差异。
+    -->
+    <select id="insertItem" resultType="java.lang.Long">
+        INSERT INTO sys_dict_item (dict_type,
+                                   label,
+                                   label_en,
+                                   value,
+                                   sort_no,
+                                   ext,
+                                   created_by,
+                                   updated_by)
+        VALUES (#{dictType},
+                #{label},
+                #{labelEn},
+                #{value},
+                #{sortNo},
+                CAST(#{ext} AS jsonb),
+                #{operatorId},
+                #{operatorId})
+        RETURNING id
+    </select>
+
+    <!--
+        编辑的 SET 清单：四个可编辑列加审计两列。
+
+        没有 dict_type / value：两者是业务数据的引用键（owner.owner_type 等存的就是 value），改掉等于
+        让历史数据指向一个不存在的项。端口层也不给（DictItemDraft 里没有这两个字段），两层都不写才算真的改不到。
+
+        没有 status：状态是 changeStatus 的事。编辑顺带改状态，会让「这次编辑让某个取值从下拉里消失」
+        在审计里看不出来。
+
+        没有 created_at / created_by / deleted_at：创建痕迹只由 insert 写，删除标记只能由 softDelete 写。
+        让编辑有机会写 deleted_at，等于给了「把已删除的项悄悄改活」的路径。
+
+        label_en 与 ext 无条件写：null 就是写 NULL、{} 就是空对象，「清空英文名」「去掉扩展属性」都是
+        合法的编辑。这也是不能用 updateById 的原因——它按「非空字段才进 SET」生成语句，清空会变成一次
+        静默的空操作，用户以为改了。
+
+        updated_at 用库内 now()，updated_by 由调用方给出（为空说明调用方没取到操作人，属于不该发生的情况）。
+    -->
+    <update id="updateItem">
+        UPDATE sys_dict_item
+        SET label      = #{label},
+            label_en   = #{labelEn},
+            sort_no    = #{sortNo},
+            ext        = CAST(#{ext} AS jsonb),
+            updated_at = now(),
+            updated_by = #{operatorId}
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+    </update>
+
+    <!--
+        启停只改 status 与审计两列。
+
+        不带「仅当状态不同才更新」的条件：重复点同一个状态是正常操作，命中行数在本语句上不作为判据。
+
+        WHERE 上的 deleted_at IS NULL 不能省：已删除的项不该再被任何写语句命中。省掉它，「删除后又启用」
+        会命中那一行，而读侧只看 deleted_at——数据上看起来像被改活了，其实只是多了一行没人看得见的更新。
+    -->
+    <update id="updateStatus">
+        UPDATE sys_dict_item
+        SET status     = #{status},
+            updated_at = now(),
+            updated_by = #{operatorId}
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+    </update>
+
+    <!--
+        逻辑删除：置 deleted_at，并留下「谁删的」。
+
+        不写 status：删掉一个停用项之后它仍是停用的，顺带改状态会让「这次删的是哪一类」在数据层面看不出来。
+
+        deleted_at IS NULL 同时是「不重复删除」的判据：第二次删除命中零行，调用方据此回 404，
+        而不是回一个看不出来发生过的成功。仓储也据此决定返回值，这是本文件唯一需要行数的语句。
+
+        没有物理 DELETE：value 可能被历史业务数据引用，物理删掉之后「这条记录当时写的是哪个值」
+        就无从追溯。若需要让该 value 重新可用，逻辑删除本身已经做到了——ux_sys_dict_item_value 带
+        WHERE deleted_at IS NULL（V018），已删除的行不再参与唯一性判定，同一类型下可以重新新增同值的项。
+    -->
+    <update id="softDelete">
+        UPDATE sys_dict_item
+        SET deleted_at = now(),
+            updated_at = now(),
+            updated_by = #{operatorId}
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+    </update>
 
 </mapper>

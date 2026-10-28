@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:18093",
+      "url": "http://localhost:8080",
       "description": "Generated server url"
     }
   ],
@@ -15,6 +15,10 @@
     {
       "name": "角色管理",
       "description": "仓网端的角色管理：建、读、改、启停、删在这里闭环。角色是授权数据的来源，能改角色就等于能给自己加权限，因此全部接口都要求权限点而不是只要求登录。货主端没有角色管理能力，权限由管理员在这里配置。"
+    },
+    {
+      "name": "货主联系人",
+      "description": "货主详情「联系人」页签的读写入口：列表、新增、编辑与删除。一个货主可有多条联系人，至多一条为主联系人，由库里的部分唯一索引保证；置某条为主时接口先清掉原有主标记再写入，两步在同一次事务里，不会留下「一个主联系人也没有」的中间态。归属取路径里的 ownerId：请求体不含 ownerId，响应也不回带它。编辑与删除按联系人自身记录的归属判可见性，路径里的 ownerId 只用于定位，因此把 ownerId 传错不会把请求导向另一个货主。联系人没有独立的可见范围，它随货主的可见性；货主不可见时返回 40400 而不是空列表。列表用 system:owner:list，三个写入口共用 system:owner:contact:edit，只登录但没有权限点的账号会拿到 403。"
     },
     {
       "name": "货主档案",
@@ -25,16 +29,24 @@
       "description": "按对象追溯变更记录，按操作时间倒序。只提供查询：审计日志只追加不可修改，没有删除与修改入口——这是结构上的不存在，不是权限校验的拒绝。"
     },
     {
+      "name": "用户管理",
+      "description": "仓网端的账号管理：建号、查询、编辑基本信息、启停、踢下线、重置密码与分配角色。货主端没有建号能力，货主账号由管理员在这里开通。全部接口都要求对应权限点，只登录但没有权限点的账号会拿到 403。"
+    },
+    {
       "name": "认证",
       "description": "两端共用的登录与本人改密入口。登录时的主体类型（内部员工或货主账号）由后端按账号判定，调用方不传也不允许传。"
     },
     {
-      "name": "用户管理",
-      "description": "仓网端的账号管理：建号、查询、编辑基本信息、启停、重置密码与分配角色。货主端没有建号能力，货主账号由管理员在这里开通。全部接口都要求对应权限点，只登录但没有权限点的账号会拿到 403。"
+      "name": "数据字典",
+      "description": "仓网端的字典读取与维护：类型清单、某类字典项、多类型批量读取，以及字典项的新增、编辑、启停、删除。读接口用 enabledOnly 承载两种消费语义——下拉只要启用项，历史数据回显要连停用项一起取，因此不拆成两个端点；双语名称同时返回，由前端按当前界面语言取值，后端不做回退。写接口不提供改 dictType 与 value 的能力：两者是业务数据的引用键，改掉会让历史数据指向不存在的项。"
     },
     {
-      "name": "数据字典",
-      "description": "字典的读取入口：类型清单、某类字典项、多类型批量读取。同一个接口用 enabledOnly 承载两种消费语义——下拉只要启用项，历史数据回显要连停用项一起取，因此不拆成两个端点；双语名称同时返回，由前端按当前界面语言取值，后端不做回退。"
+      "name": "货主税号",
+      "description": "货主详情「税号」页签的读写入口：列表、新增、编辑与删除。一个货主可有多条税务登记，按国家、州省与类型区分；同一货主在同一国家、同一州省下的同一类型至多一条，同一货主同一国家至多一条默认税号，两条都由库里的部分唯一索引保证。税号类型取自 TAX_ID_TYPE 字典，且必须与其适用国家匹配；州销售税号必须选择州省，州省非空时必须属于所选国家，两条都由字典判定。归属取路径里的 ownerId：请求体不含 ownerId，响应也不回带它。编辑与删除按税号自身记录的归属判可见性，路径里的 ownerId 只用于定位，因此把 ownerId 传错不会把请求导向另一个货主。税号没有独立的可见范围，它随货主的可见性；货主不可见时返回 40400 而不是空列表。列表用 system:owner:list，三个写入口共用 system:owner:tax:edit，只登录但没有权限点的账号会拿到 403。"
+    },
+    {
+      "name": "货主负责客服",
+      "description": "货主详情「负责客服」的读写入口：一名主负责人 + 至多一名副负责人。两个角色由 owner_assignee 的 (owner_id, relation_type) 唯一索引保证各至多一个，并发下两笔「改主负责人」撞上该索引时返回 40900 并提示刷新后重试。写入是全量替换：请求体同时给出主、副两个角色的目标值，不传副负责人表示不设副，而主负责人不可撤销——每个货主一旦配置负责人，主负责人就在其中。归属取路径里的 ownerId，请求体不含该字段；负责人没有独立的可见范围，它随货主的可见性，货主不可见时返回 40400。读用 system:owner:list（与货主详情同口径），写用 system:owner:update（负责客服属货主档案的维护范围），只登录但没有权限点的账号会拿到 403。"
     }
   ],
   "paths": {
@@ -138,7 +150,7 @@
           "用户管理"
         ],
         "summary": "启用或停用用户账号",
-        "description": "切换账号状态。停用立即生效：该账号的既有会话随即失效，且无法再次登录，不必等令牌过期。目标状态与当前状态相同时返回成功，不报错——重复提交同一次启停是正常的重放。两条业务保护：不能停用自己，也不能停用最后一个可用的超级管理员（返回 40900），否则系统会失去唯一能配置权限的账号。账号不存在返回 40400。",
+        "description": "切换账号状态。停用立即生效：该账号的既有会话随即失效，且无法再次登录，不必等令牌过期。目标状态与当前状态相同时返回成功，不报错——重复提交同一次启停是正常的重放。三条业务保护（均返回 40900）：不能停用自己；不能停用最后一个可用的超级管理员，否则系统会失去唯一能配置权限的账号；仍担任货主负责人的员工不能停用，必须先转交名下货主，否则货主侧会挂着一个永远停用的负责人。账号不存在返回 40400。",
         "operationId": "changeStatus",
         "parameters": [
           {
@@ -585,6 +597,328 @@
         }
       }
     },
+    "/api/console/owners/{ownerId}/taxes/{taxId}": {
+      "put": {
+        "tags": [
+          "货主税号"
+        ],
+        "summary": "编辑货主税号",
+        "description": "全量替换一条税务登记的三个可编辑字段与默认标记：州省、税号、是否默认。字段传 null 表示清空，不传按 null 处理，因此调用方必须提交自己希望保留的全部值；校验口径与新增一致（列宽、州省归属、统一社会信用代码 18 位）。国家与类型不可改：它们与归属一起构成这一行的身份，请求体里虽有这两个字段（与新增共用一个请求体），编辑时服务以记录自身的值为准，传别的值既不生效也不报错——换国家或换类型应删旧登新。州销售税号清空州省返回 40000；州省非空时必须属于这一行的国家，否则返回 40000。isDefault 缺省按 false 处理——全量替换下省略等于提交 false，要保留默认标记必须显式传 true；置 true 时同样先清同国旧默认再写入，两步在同一事务里。并发下两笔「设为默认」仍可能撞上唯一索引 ux_owner_tax_default，此时返回 40900 并提示刷新后重新提交。归属不可改：税号不支持在货主之间移动，路径里的 ownerId 只用于定位、不参与归属判定，所以把它写错不会把请求导向另一个货主，改到的始终是 taxId 指向的那条税号，而它是否改得动仍由它自己的货主对当前账号是否可见决定。成功后不回带更新后的税号：设为默认会连带把另一行改成非默认，回带单行会让调用方以为列表的其余行没变；需要最新状态时重新取列表。税号不存在、已逻辑删除，或其所属货主不在当前账号的数据范围内返回 40400。",
+        "operationId": "update_2",
+        "parameters": [
+          {
+            "name": "ownerId",
+            "in": "path",
+            "description": "货主标识，仅用于定位资源、不参与归属判定；写错也不会改到另一个货主的税号",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "taxId",
+            "in": "path",
+            "description": "税号标识，取自税号列表响应里的 id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerTaxSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultVoid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "货主税号"
+        ],
+        "summary": "删除货主税号",
+        "description": "软删除一条税务登记（置 deleted_at），它不再出现在列表里，记录本身保留供追溯。删除会释放该货主在该国家下的默认税号名额：删掉默认税号之后可以直接把另一条设为默认，不需要先取消默认标记。归属判定与编辑一致——路径里的 ownerId 只用于定位、不参与归属判定，写错它不会删掉另一个货主的税号。幂等：重复删除返回 40400——读取侧本就把「已删除」与「不存在」当作同一件事，第二次删除不会产生写入，也不会把记录写活。税号不存在、已逻辑删除，或其所属货主不在当前账号的数据范围内返回 40400。",
+        "operationId": "delete_1",
+        "parameters": [
+          {
+            "name": "ownerId",
+            "in": "path",
+            "description": "货主标识，仅用于定位资源、不参与归属判定；写错也不会删掉另一个货主的税号",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "taxId",
+            "in": "path",
+            "description": "税号标识，取自税号列表响应里的 id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultVoid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/console/owners/{ownerId}/contacts/{contactId}": {
+      "put": {
+        "tags": [
+          "货主联系人"
+        ],
+        "summary": "编辑货主联系人",
+        "description": "全量替换一条联系人的五个可编辑字段与主标记：字段传 null 表示清空，不传按 null 处理，因此调用方必须提交自己希望保留的全部值。姓名、角色与电话必填，只填空白按未填处理；校验口径与新增完全一致（列宽、角色须取自 CONTACT_ROLE 字典的启用项）。isPrimary 缺省按 false 处理——全量替换下省略等于提交 false，要保留主标记必须显式传 true；置 true 时同样先清旧主再写入，两步在同一事务里。并发下两笔「设我为主」仍可能撞上唯一索引 ux_owner_contact_primary，此时返回 40900 并提示「该货主已有主联系人，请刷新列表后重新提交」——两条并发请求只有一条能成为主联系人，另一条刷新列表后再提交。归属不可改：联系人不支持在货主之间移动，请求体里没有 ownerId，路径里的 ownerId 只用于定位资源、不参与归属判定——服务按联系人自身记录里的归属判可见性，所以把路径里的 ownerId 写错不会把请求导向另一个货主，改到的始终是 contactId 指向的那条联系人，而它是否改得动仍由它自己的货主对当前账号是否可见决定。成功后不回带更新后的联系人：设为主联系人会连带把另一行改成非主，回带单行会让调用方以为列表的其余行没变；需要最新状态时重新取列表。联系人不存在、已逻辑删除，或其所属货主不在当前账号的数据范围内返回 40400。",
+        "operationId": "update_3",
+        "parameters": [
+          {
+            "name": "ownerId",
+            "in": "path",
+            "description": "货主标识，仅用于定位资源、不参与归属判定；写错也不会改到另一个货主的联系人",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "contactId",
+            "in": "path",
+            "description": "联系人标识，取自联系人列表响应里的 id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerContactSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultVoid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "货主联系人"
+        ],
+        "summary": "删除货主联系人",
+        "description": "软删除一条联系人（置 deleted_at），它不再出现在列表里，记录本身保留供追溯。删除会释放该货主的主联系人名额：删掉主联系人之后可以直接把另一条设为主，不需要先取消主标记。归属判定与编辑一致——路径里的 ownerId 只用于定位、不参与归属判定，改错它不会删掉另一个货主的联系人。幂等：重复删除返回 40400——读取侧本就把「已删除」与「不存在」当作同一件事，第二次删除不会产生写入，也不会把记录写活。联系人不存在、已逻辑删除，或其所属货主不在当前账号的数据范围内返回 40400。",
+        "operationId": "delete_2",
+        "parameters": [
+          {
+            "name": "ownerId",
+            "in": "path",
+            "description": "货主标识，仅用于定位资源、不参与归属判定；写错也不会删掉另一个货主的联系人",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "contactId",
+            "in": "path",
+            "description": "联系人标识，取自联系人列表响应里的 id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultVoid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/console/owners/{ownerId}/assignees": {
+      "get": {
+        "tags": [
+          "货主负责客服"
+        ],
+        "summary": "查询货主负责客服",
+        "description": "取某货主当前的主、副负责人各一名，只含员工标识，不含姓名——姓名在 sys_user，属 wms-auth 的用户表，本接口不把姓名抄一份。三个标识都以字符串返回：字符串形式的十进制整数。某个角色还没有人时该字段为 null，不是 \"null\" 也不是空串——配置弹窗据此显示「未配置」并允许选择员工。响应回带 ownerId：配置弹窗随货主切换复用同一个组件，先发的请求可能在切换之后才返回，前端凭这个字段判断手里这份配置是不是当前货主的并丢弃过期响应。负责人没有独立的可见范围，它随货主的可见性：货主不存在、已被逻辑删除或不在当前账号的数据范围内返回 40400，而不是返回两个 null——后者会让人以为这个货主还没配置负责人。",
+        "operationId": "detail_2",
+        "parameters": [
+          {
+            "name": "ownerId",
+            "in": "path",
+            "description": "货主标识，取自货主列表或详情响应里的 id；不可见时返回 40400",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOwnerAssigneeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "货主负责客服"
+        ],
+        "summary": "配置货主负责客服",
+        "description": "全量替换某货主的主、副负责人：一次提交给出两个角色的目标值，而不是「这次改哪一个角色」——部分更新分不清「没传」与「传了空值表示清除」，一次「只换副负责人」的提交就可能静默清掉主负责人。primaryUserId 必填，字符串形式的十进制整数：主负责人不能撤销，换人只能提交另一名员工；缺失或只填空白返回 40000。secondaryUserId 不传或传 null 表示该货主不设副负责人，已有的副负责人会被清除；传了值就必须是可解析的十进制整数。两个标识不是十进制整数（含超出 Long 范围、整串空白）一律返回 40000 并带出字段名与原值，不会因解析失败变成 50000。主副不能是同一名员工，否则返回 40000——唯一索引建在角色上，拦不住同一个人各占一行。两个员工都必须在册且启用，否则返回 40000 并点名是哪个角色。并发下两笔「改主负责人」仍可能撞上唯一索引 ux_owner_assignee_role，此时返回 40900 并提示「该货主已有主负责人，请刷新后重试」——两条只有一条生效，另一条刷新后再提交。成功后不回带配置，需要最新值时重新 GET。货主不存在、已逻辑删除或不在当前账号的数据范围内返回 40400。",
+        "operationId": "update_4",
+        "parameters": [
+          {
+            "name": "ownerId",
+            "in": "path",
+            "description": "货主标识，取自货主列表或详情响应里的 id；不可见时返回 40400",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerAssigneeSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultVoid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
     "/api/console/owners/{id}": {
       "get": {
         "tags": [
@@ -592,7 +926,7 @@
         ],
         "summary": "查询货主详情",
         "description": "取单个货主的完整档案：列表行已有的标识、编码、名称、客户类型、状态与更新时间之外，再带出英文名称、简称、外部码、SKU 前缀、结算主体、注册地址六字段、备注与创建时间，供详情页「基本信息」页签回填。SKU 前缀只读——它是已生成 SKUID 的前四位，创建后不可修改。本批只做基本信息页签：联系人（3.5）、税号（3.6）与主账号（3.3）不在响应里，也不返回占位字段。货主不存在、已被逻辑删除或不在当前账号的数据范围内返回 40400——范围外的货主与「不存在」同口径，两者的区别本身就是一条能拿来枚举他方数据的信息。",
-        "operationId": "detail_2",
+        "operationId": "detail_3",
         "parameters": [
           {
             "name": "id",
@@ -633,7 +967,7 @@
         ],
         "summary": "编辑货主档案",
         "description": "全量替换可编辑字段：字段传 null 表示清空，不传按 null 处理，即调用方必须提交自己希望保留的全部值。编码、SKU 前缀与状态不在可编辑范围内——编码是标识，SKU 前缀是已生成 SKUID 的前四位（改了会让已打印的标签指向另一个货主的货，草稿期同样不允许），状态属状态流转。这三个字段不出现在请求体里，多传会被拒绝而不是静默忽略。字典校验与建档同一套：客户类型、国家要启用，州省要属于所选国家，美国必须填州省，无邮编地区（港澳台）可留空邮编。外部码在未删除的货主之间唯一，被他人占用返回 40906；传 null 可清空，清空后该编码可被其他货主使用。客户名称可以重复。货主不存在返回 40400。成功后不回带详情，需要最新值时重新取。",
-        "operationId": "update_2",
+        "operationId": "update_5",
         "parameters": [
           {
             "name": "id",
@@ -684,7 +1018,7 @@
         ],
         "summary": "删除草稿货主",
         "description": "删除一条草稿状态的货主，执行软删除（置 deleted_at），该记录不再出现在列表与详情里。只有草稿（DRAFT）可以删除：其他状态返回 40900，提示里带当前状态；已提交的货主应先走状态流转（终止），删除不是「停止合作」的替代品。删除不释放系统编码与 SKU 前缀——两个唯一索引都是全表口径，已删除的货主仍占着它们，新建档时用同一个前缀仍会得到 40905。删除也不会级联删除该货主下的商品与账号（软删除本就不触发外键级联），按规格草稿下本就不该有这两样。幂等：重复删除返回 40400（与查详情同一口径），不会二次写入，也不会把记录写活。",
-        "operationId": "delete_1",
+        "operationId": "delete_3",
         "parameters": [
           {
             "name": "id",
@@ -745,6 +1079,153 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/OwnerStatusChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultVoid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/console/dicts/items/{id}": {
+      "put": {
+        "tags": [
+          "数据字典"
+        ],
+        "summary": "编辑字典项",
+        "description": "全量替换字典项的中文名、英文名、排序号与扩展属性：提交什么就是改后的值，labelEn 传 null 表示清空英文名，ext 传 null 表示清空扩展属性（落库为 {}）。dictType、value 与 status 不在可编辑范围内——前两者是业务数据的引用键，改了会让历史数据指向不存在的项，状态请走 PUT /items/{id}/status；多传这些字段会被拒绝而不是静默忽略。sortNo 必传，不按「不传就取 0」处理。字典项不存在或已被逻辑删除返回 40400，中文名为空或字段超长返回 40000。成功后不回带详情。",
+        "operationId": "updateItem",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "字典项标识，取自字典项列表响应里的 id；标识全局唯一，因此路径里不再带类型编码",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DictItemUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultVoid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "数据字典"
+        ],
+        "summary": "删除字典项",
+        "description": "删除一个字典项，采用逻辑删除（置 deleted_at，行仍在库里）：删除后列表与下拉都查不到它，而引用过该取值的历史数据仍能解释。不物理删除是因为 value 可能被历史业务数据引用，删掉记录之后「这条当时写的是哪个取值」就无从追溯。删除不看当前状态，已停用的项可以直接删；删掉之后同一类型下同值可以重新新增，新建的是另一行标识。字典项不存在、已被删除，或判存在之后被其他请求抢先删除，均返回 40400（提示语区分这两种「已经不在」）。成功后不回带被删对象。",
+        "operationId": "deleteItem",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "字典项标识，取自字典项列表响应里的 id；标识全局唯一，因此路径里不再带类型编码",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultVoid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/console/dicts/items/{id}/status": {
+      "put": {
+        "tags": [
+          "数据字典"
+        ],
+        "summary": "启用或停用字典项",
+        "description": "切换字典项状态。停用立即生效：读侧每次按状态过滤，停用项下一次请求就不再出现在enabledOnly=true 的结果里，而 enabledOnly=false 与历史数据回显仍能看到它，不必重启也不依赖缓存失效；启用同样立即恢复。目标状态与当前状态相同时返回成功，不报错——重复点「停用」不该收到错误。status 用枚举名而不是序号，传 null 与传未知编码都会被拒绝。字典项不存在或已被逻辑删除返回 40400。",
+        "operationId": "changeItemStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "字典项标识，取自字典项列表响应里的 id；标识全局唯一，因此路径里不再带类型编码",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DictItemStatusRequest"
               }
             }
           },
@@ -1174,6 +1655,194 @@
         }
       }
     },
+    "/api/console/owners/{ownerId}/taxes": {
+      "get": {
+        "tags": [
+          "货主税号"
+        ],
+        "summary": "查询货主税号",
+        "description": "取某货主名下的全部税务登记，按国家、州省、税号类型升序返回，不分页——单个货主的税号是个位数量级，翻页只会让「一共几条」变成一个要另算的数字；州省为空的记录（国家级税号）排在每个国家的末尾。每行带标识、国家、州省、类型取值、税号与是否该国默认，不含 ownerId：它就在路径上，响应里再带一份会让前端有两处可能不一致的来源。先判货主可见性再取列表：货主不存在、已被逻辑删除或不在当前账号的数据范围内返回 40400，而不是返回空列表——空列表的意思是「这个货主没有登记税号」，与「你无权看这个货主」对调用方的下一步动作完全不同。没有税号时返回 []，不是 null。",
+        "operationId": "list",
+        "parameters": [
+          {
+            "name": "ownerId",
+            "in": "path",
+            "description": "货主标识，取自货主列表或详情响应里的 id；不可见时返回 40400",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultListOwnerTaxResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "货主税号"
+        ],
+        "summary": "新增货主税号",
+        "description": "在路径指定的货主名下新增一条税务登记。归属取路径里的 ownerId，请求体不含该字段，多传字段返回 40000（FAIL_ON_UNKNOWN_PROPERTIES，不静默忽略）。国家、税号类型与税号必填，州省可为空；列宽上限为国家 2、州省 64、类型 20、税号 64个字符，超出返回 40000。国家取 COUNTRY 字典的取值，类型取 TAX_ID_TYPE 字典的启用项，且必须适用于所填国家（如州销售税号只适用于 US），否则返回 40000 并在提示里带出提交的类型与国家。州销售税号（US_STATE_SALES）必须填州省——它按州登记，没有州就不成立，而库里的唯一索引把空州省归一后判重，不填州省的州销售税号会让不同州的登记被判成重复；州省非空时必须属于所选国家，否则返回 40000。统一社会信用代码（CN_USCC）还必须是18 位大写字母或数字，不做大小写归一。isDefault 缺省按 false 处理；置 true 时接口先把该货主同国家的原有默认税号置为非默认再写入本条，两步在同一次事务里，因此成功返回后同国家至多只有一条默认税号。并发下两笔「设为默认」仍可能撞上唯一索引ux_owner_tax_default，此时返回 40900 并提示刷新后重新提交。字段不去首尾空格：提交「 941234567 」会原样入库。货主不存在、已逻辑删除或不在当前账号的数据范围内返回 40400。返回新税号（含标识），前端据此渲染这一行而不必重新取列表。",
+        "operationId": "create_3",
+        "parameters": [
+          {
+            "name": "ownerId",
+            "in": "path",
+            "description": "货主标识，取自货主列表或详情响应里的 id；不可见时返回 40400",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerTaxSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOwnerTaxResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/console/owners/{ownerId}/contacts": {
+      "get": {
+        "tags": [
+          "货主联系人"
+        ],
+        "summary": "查询货主联系人",
+        "description": "取某货主名下的全部联系人，按登记先后（联系人标识升序）返回，不分页——单个货主的联系人是几条到几十条，翻页只会让「一共几条」变成一个要另算的数字。每行带标识、姓名、角色取值、电话、邮箱、是否主联系人与备注，不含 ownerId：它就在路径上，响应里再带一份会让前端有两处可能不一致的来源。先判货主可见性再取列表：货主不存在、已被逻辑删除或不在当前账号的数据范围内返回 40400，而不是返回空列表——空列表的意思是「这个货主没有联系人」，与「你无权看这个货主」对调用方的下一步动作完全不同。没有联系人时返回 []，不是 null。",
+        "operationId": "list_1",
+        "parameters": [
+          {
+            "name": "ownerId",
+            "in": "path",
+            "description": "货主标识，取自货主列表或详情响应里的 id；不可见时返回 40400",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultListOwnerContactResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "货主联系人"
+        ],
+        "summary": "新增货主联系人",
+        "description": "在路径指定的货主名下新增一条联系人。归属取路径里的 ownerId，请求体不含该字段，多传字段返回 40000（FAIL_ON_UNKNOWN_PROPERTIES，不静默忽略）。姓名、角色与电话必填，只填空白按未填处理；列宽上限为姓名 64、角色 20、电话 32、邮箱 128、备注 255 个字符，超出返回 40000。角色必须取自 CONTACT_ROLE 字典的启用项（BUSINESS / FINANCE / LOGISTICS / ONSITE / RETURN），停用项按不存在处理，不在其中的取值返回 40000 且提示里带提交的原值。isPrimary 缺省按 false 处理；置 true 时接口先把该货主原有的主联系人置为非主再写入本条，两步在同一次事务里，因此成功返回后列表里至多只有一条主联系人，不会有「一个主联系人也没有」的中间态。并发下两笔「设我为主」仍可能撞上唯一索引 ux_owner_contact_primary，此时返回 40900 并提示「该货主已有主联系人，请刷新列表后重新提交」——两条并发请求只有一条能成为主联系人，另一条刷新列表后再提交。字段不去首尾空格：提交「 张三 」会原样入库。货主不存在、已逻辑删除或不在当前账号的数据范围内返回 40400。返回新联系人（含标识），前端据此渲染这一行而不必重新取列表。",
+        "operationId": "create_4",
+        "parameters": [
+          {
+            "name": "ownerId",
+            "in": "path",
+            "description": "货主标识，取自货主列表或详情响应里的 id；不可见时返回 40400",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerContactSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOwnerContactResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
     "/api/console/owners/{id}/account": {
       "post": {
         "tags": [
@@ -1211,6 +1880,117 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResultProvisionedOwnerAccountResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/console/dicts/{dictType}/items": {
+      "get": {
+        "tags": [
+          "数据字典"
+        ],
+        "summary": "查询某类字典项",
+        "description": "取一个字典类型下的项，按排序号升序返回，同时带出中英双语名称、取值、状态与扩展属性。enabledOnly 承载两种消费语义：true（默认）只返回启用项，对应「停用后不可选」；false 连停用项一起返回，对应「历史数据仍正常展示」——编辑页要同时显示下拉与历史值，拆成两个端点会逼它调两次。parentValue 按扩展属性里的 parent 过滤层级（如 PROVINCE 下取国家 US 的州/省），不靠给字典项加 parent_id 列。label 与 labelEn 原样返回、后端不做语言回退：接口不知道界面语言，回退会让「英文界面看到中文」无法排查。字典类型不存在返回 404 段错误码。",
+        "operationId": "items",
+        "parameters": [
+          {
+            "name": "dictType",
+            "in": "path",
+            "description": "字典类型编码，取自类型清单响应里的 dictType，如 OWNER_TYPE",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "enabledOnly",
+            "in": "query",
+            "description": "true（默认）只返回启用项，供下拉使用；false 连停用项一起返回，供历史数据回显",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "parentValue",
+            "in": "query",
+            "description": "只返回扩展属性 parent 等于该值的项，用于按国家取省/州；省略表示不按层级筛选",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultListDictItemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "数据字典"
+        ],
+        "summary": "新增字典项",
+        "description": "在一个已存在的字典类型下新增取值为 value 的项。新项的 status 恒为 ACTIVE，不由调用方指定；dictType 与 value 是业务数据的引用键，建好之后不可修改（多传会被拒绝而不是忽略）。同一类型下已存在同值的未删除项返回 40900；已删除的同值项不占用取值，因此可以先删再建，新建的是另一行标识，历史数据引用的仍是同一取值。字典类型不存在或已被删除返回 40000（不是 40400：路径指向的类型清单本身是存在的，错的是这次提交的参数）。value、label 为空或超出 64 字符返回 40000；sortNo 省略同样返回 40000——列上虽有默认值 0，但按默认值处理会让漏传的项静默排到最前。响应只回带标识，不回带整行。",
+        "operationId": "createItem",
+        "parameters": [
+          {
+            "name": "dictType",
+            "in": "path",
+            "description": "字典类型编码，取自类型清单响应里的 dictType，如 COUNTRY",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DictItemCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultCreatedDictItemResponse"
                 }
               }
             }
@@ -1326,67 +2106,6 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResultListDictTypeListItemResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          }
-        }
-      }
-    },
-    "/api/console/dicts/{dictType}/items": {
-      "get": {
-        "tags": [
-          "数据字典"
-        ],
-        "summary": "查询某类字典项",
-        "description": "取一个字典类型下的项，按排序号升序返回，同时带出中英双语名称、取值、状态与扩展属性。enabledOnly 承载两种消费语义：true（默认）只返回启用项，对应「停用后不可选」；false 连停用项一起返回，对应「历史数据仍正常展示」——编辑页要同时显示下拉与历史值，拆成两个端点会逼它调两次。parentValue 按扩展属性里的 parent 过滤层级（如 PROVINCE 下取国家 US 的州/省），不靠给字典项加 parent_id 列。label 与 labelEn 原样返回、后端不做语言回退：接口不知道界面语言，回退会让「英文界面看到中文」无法排查。字典类型不存在返回 404 段错误码。",
-        "operationId": "items",
-        "parameters": [
-          {
-            "name": "dictType",
-            "in": "path",
-            "description": "字典类型编码，取自类型清单响应里的 dictType，如 OWNER_TYPE",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "enabledOnly",
-            "in": "query",
-            "description": "true（默认）只返回启用项，供下拉使用；false 连停用项一起返回，供历史数据回显",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": true
-            }
-          },
-          {
-            "name": "parentValue",
-            "in": "query",
-            "description": "只返回扩展属性 parent 等于该值的项，用于按国家取省/州；省略表示不按层级筛选",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultListDictItemResponse"
                 }
               }
             }
@@ -1522,6 +2241,49 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResultPageResultAuditLogItemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/console/users/{id}/sessions": {
+      "delete": {
+        "tags": [
+          "用户管理"
+        ],
+        "summary": "踢下线（使该用户的全部会话立即失效）",
+        "description": "让指定账号手里的全部令牌立刻作废：下一次请求即返回 40100，需要重新登录。用于账号疑似被盗、人员交接这类必须立刻止血的场景。它不改变账号状态，被踢的人重新登录即可继续使用；要禁止登录请停用账号。允许踢自己——只会把自己这次会话一起打掉，不丢任何权限。账号不存在返回 40400：对不存在的标识执行失效本来会静默成功，那样接口回 200 而实际什么都没发生。",
+        "operationId": "kickSessions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "用户标识，取自列表或详情响应里的 id；可以是当前登录账号",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultVoid"
                 }
               }
             }
@@ -1698,6 +2460,117 @@
           }
         }
       },
+      "OwnerTaxSaveRequest": {
+        "required": [
+          "country",
+          "taxNumber",
+          "taxType"
+        ],
+        "type": "object",
+        "properties": {
+          "country": {
+            "maxLength": 2,
+            "minLength": 0,
+            "type": "string",
+            "description": "国家，必填，2 位大写字母的 ISO 3166-1 alpha-2 代码，取 COUNTRY 字典的 value；编辑时服务以记录自身的国家为准，此值不参与判定",
+            "example": "US"
+          },
+          "province": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string",
+            "description": "州省，可为空，最长 64 个字符，取 PROVINCE 字典中属于所选国家的启用项。不为空时必须属于所选国家，否则返回 40000；税号类型为 US_STATE_SALES（州销售税号）时必填，其余类型（统一社会信用代码、EIN、VAT）可以留空。传 null 或整串空白表示清空",
+            "example": "US-CA"
+          },
+          "taxType": {
+            "maxLength": 20,
+            "minLength": 0,
+            "type": "string",
+            "description": "税号类型，必填，取 TAX_ID_TYPE 字典的启用项：CN_USCC 统一社会信用代码、US_EIN 雇主识别号、US_STATE_SALES 州销售税号、VAT 增值税号。空白、停用项、未知取值，或该类型不适用于所填国家，均返回 40000；编辑时服务以记录自身的类型为准，此值不参与判定",
+            "example": "US_STATE_SALES"
+          },
+          "taxNumber": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string",
+            "description": "税号，必填，最长 64 个字符；按原样保存，不去首尾空格。只有 CN_USCC 校验形态（18 位大写字母或数字），其余类型随各国税制而变，不做格式校验",
+            "example": "941234567"
+          },
+          "isDefault": {
+            "type": "boolean",
+            "description": "是否设为该货主在该国家下的默认税号，缺省（不传）按 false 处理。置 true 时接口会先把该货主同国家的原有默认税号置为非默认再写入本条，因此一个国家至多一条默认。要保留一条已有的默认标记必须显式传 true——本接口是全量替换，省略该字段等于提交 false",
+            "example": true
+          }
+        }
+      },
+      "OwnerContactSaveRequest": {
+        "required": [
+          "name",
+          "phone",
+          "roleType"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string",
+            "description": "联系人姓名，必填，最长 64 个字符；只填空白按未填处理。姓名可以重复——它是联系人的称呼，不是标识",
+            "example": "张三"
+          },
+          "roleType": {
+            "maxLength": 20,
+            "minLength": 0,
+            "type": "string",
+            "description": "联系人角色，必填，取 CONTACT_ROLE 字典的启用项：BUSINESS 业务对接人、FINANCE 财务联系人、LOGISTICS 物流联系人、ONSITE 现场联系人、RETURN 退货联系人。空白、停用项或未知取值均返回 40000，提示里带提交的原值",
+            "example": "BUSINESS"
+          },
+          "phone": {
+            "maxLength": 32,
+            "minLength": 0,
+            "type": "string",
+            "description": "联系电话，必填，最长 32 个字符；只填空白按未填处理。按原样保存，不做格式校验——国内外号码形态不一，格式校验会把能打通的号码挡在外面",
+            "example": "13800001111"
+          },
+          "email": {
+            "maxLength": 128,
+            "minLength": 0,
+            "type": "string",
+            "description": "邮箱，可为空，最长 128 个字符；传 null 或整串空白表示清空。按原样保存，不做格式校验",
+            "example": "zhangsan@example.com"
+          },
+          "isPrimary": {
+            "type": "boolean",
+            "description": "是否主联系人，缺省（不传）按 false 处理。置 true 时接口会先把该货主原有的主联系人置为非主再写入本条，因此一个货主至多一条主联系人。要保留一条已有的主标记必须显式传 true——本接口是全量替换，省略该字段等于提交 false",
+            "example": true
+          },
+          "remark": {
+            "maxLength": 255,
+            "minLength": 0,
+            "type": "string",
+            "description": "备注，可为空，最长 255 个字符；传 null 或整串空白表示清空",
+            "example": "工作日 9:00-18:00 接听"
+          }
+        }
+      },
+      "OwnerAssigneeSaveRequest": {
+        "required": [
+          "primaryUserId"
+        ],
+        "type": "object",
+        "properties": {
+          "primaryUserId": {
+            "type": "string",
+            "description": "主负责人的员工标识，必填，以字符串传输：字符串形式的十进制整数，如 \"7\"。主负责人不能撤销——换人请提交另一名员工，省略该字段或传空白返回 40000；不是十进制整数的字符串同样返回 40000",
+            "example": "7"
+          },
+          "secondaryUserId": {
+            "type": "string",
+            "description": "副负责人的员工标识，以字符串传输：字符串形式的十进制整数，如 \"9\"。不传或传 null 表示该货主不设副负责人，已有的副负责人会被清除；传了值就必须是可解析的十进制整数，否则返回 40000",
+            "example": "9"
+          }
+        }
+      },
       "OwnerUpdateRequest": {
         "required": [
           "addressLine",
@@ -1805,6 +2678,56 @@
             "type": "boolean",
             "description": "是否已看过终止影响清单并确认。只在目标状态为 TERMINATED 时生效：未传或 false 时接口返回 40900，提示里带该货主下的商品数与账号数；其余目标状态忽略本字段。重复提交终止（当前已是终止）不要求确认，按幂等成功处理",
             "example": false
+          }
+        }
+      },
+      "DictItemUpdateRequest": {
+        "required": [
+          "label",
+          "sortNo"
+        ],
+        "type": "object",
+        "properties": {
+          "label": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string",
+            "description": "中文名，必填，最长 64 个字符。全量替换语义：提交什么就是改后的值"
+          },
+          "labelEn": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string",
+            "description": "英文名，可为 null，最长 64 个字符。全量替换语义：传 null 表示清空，不传同样按 null 处理；后端不做语言回退"
+          },
+          "sortNo": {
+            "type": "integer",
+            "description": "排序号，必传，越小越靠前，不能为 null。全量替换语义；允许与其他项重复，同号时按标识升序",
+            "format": "int32"
+          },
+          "ext": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "description": "扩展属性，可为 null，原样落库为 jsonb。全量替换语义：传 null 表示清空（落库为 {}），不传同样按 null 处理"
+            },
+            "description": "扩展属性，可为 null，原样落库为 jsonb。全量替换语义：传 null 表示清空（落库为 {}），不传同样按 null 处理"
+          }
+        }
+      },
+      "DictItemStatusRequest": {
+        "required": [
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "目标状态，必传：ACTIVE 启用，DISABLED 停用。传 null 与传未知编码都会被拒绝，不按「不传就不改」处理；与当前状态相同时返回成功，重复提交不报错",
+            "enum": [
+              "ACTIVE",
+              "DISABLED"
+            ]
           }
         }
       },
@@ -2161,6 +3084,121 @@
         },
         "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
       },
+      "ApiResultOwnerTaxResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
+          },
+          "data": {
+            "$ref": "#/components/schemas/OwnerTaxResponse"
+          }
+        }
+      },
+      "OwnerTaxResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "税号标识，字符串形式的十进制整数；编辑与删除都用它定位",
+            "example": "7"
+          },
+          "country": {
+            "type": "string",
+            "description": "国家，2 位大写字母的 ISO 3166-1 alpha-2 代码，取自 COUNTRY 字典的 value",
+            "example": "US"
+          },
+          "province": {
+            "type": "string",
+            "description": "州省，取 PROVINCE 字典的 value；国家级税号（统一社会信用代码、VAT）未填时为 null，州销售税号一定有值",
+            "example": "US-CA"
+          },
+          "taxType": {
+            "type": "string",
+            "description": "税号类型，取自 TAX_ID_TYPE 字典的 value：CN_USCC 统一社会信用代码、US_EIN 雇主识别号、US_STATE_SALES 州销售税号、VAT 增值税号；展示时按字典取中文标签，接口只给 value",
+            "example": "US_STATE_SALES"
+          },
+          "taxNumber": {
+            "type": "string",
+            "description": "税号，必填字段，不会为 null；原样返回，不做脱敏与格式化",
+            "example": "941234567"
+          },
+          "isDefault": {
+            "type": "boolean",
+            "description": "是否该货主在该国家下的默认税号，同一货主同一国家至多一条为 true；页签上的「默认」标记用它渲染",
+            "example": true
+          }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
+      },
+      "ApiResultOwnerContactResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
+          },
+          "data": {
+            "$ref": "#/components/schemas/OwnerContactResponse"
+          }
+        }
+      },
+      "OwnerContactResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "联系人标识，字符串形式的十进制整数；编辑、删除都用它定位",
+            "example": "12"
+          },
+          "name": {
+            "type": "string",
+            "description": "联系人姓名，可与其他联系人重名——姓名不是标识；按原样返回，不去首尾空格",
+            "example": "张三"
+          },
+          "roleType": {
+            "type": "string",
+            "description": "角色取值，取自 CONTACT_ROLE 字典的 value：BUSINESS 业务对接人、FINANCE 财务联系人、LOGISTICS 物流联系人、ONSITE 现场联系人、RETURN 退货联系人；展示时按字典取中文标签，接口只给 value",
+            "example": "BUSINESS"
+          },
+          "phone": {
+            "type": "string",
+            "description": "联系电话，必填字段，不会为 null；原样返回，不做脱敏与格式化",
+            "example": "13800001111"
+          },
+          "email": {
+            "type": "string",
+            "description": "邮箱，可为 null（未填或已清空）；原样返回，不做脱敏",
+            "example": "zhangsan@example.com"
+          },
+          "isPrimary": {
+            "type": "boolean",
+            "description": "是否主联系人，同一货主至多一条为 true；页签上的「主」标记用它渲染",
+            "example": true
+          },
+          "remark": {
+            "type": "string",
+            "description": "备注，可为 null（未填或已清空）",
+            "example": "工作日 9:00-18:00 接听"
+          }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
+      },
       "OwnerAccountProvisionRequest": {
         "required": [
           "displayName",
@@ -2213,6 +3251,76 @@
             "type": "string",
             "description": "登录名，等于该货主的系统编码，形如 OWNER0001；由系统生成、不可修改，账号首次登录后会被要求先改密码",
             "example": "OWNER0001"
+          }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
+      },
+      "DictItemCreateRequest": {
+        "required": [
+          "label",
+          "sortNo",
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "value": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string",
+            "description": "取值，必填，最长 64 个字符，如 CHILLED；业务数据存的就是它，建好之后不可修改。同一字典类型下的未删除项里唯一，重复返回 40900（已删除的同值项不占用取值）"
+          },
+          "label": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string",
+            "description": "中文名，必填，最长 64 个字符，如「冷藏」；给人看的名字，同一类型下可重名"
+          },
+          "labelEn": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string",
+            "description": "英文名，可为 null，最长 64 个字符。后端不做语言回退：为空时由前端取中文名，整串空白与不传同处理（归一成 null）"
+          },
+          "sortNo": {
+            "type": "integer",
+            "description": "排序号，必传，越小越靠前，不能为 null。列上虽有默认值 0，但省略字段会让这一项静默排到最前，因此不按「不传就取 0」处理；允许与其他项重复，同号时按标识升序",
+            "format": "int32"
+          },
+          "ext": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "description": "扩展属性，可为 null，原样落库为 jsonb；传 null 与不传都按 {} 处理。行政区划等层级字典在 parent 里写父项的 value，如 {\"parent\": \"US\"}"
+            },
+            "description": "扩展属性，可为 null，原样落库为 jsonb；传 null 与不传都按 {} 处理。行政区划等层级字典在 parent 里写父项的 value，如 {\"parent\": \"US\"}"
+          }
+        }
+      },
+      "ApiResultCreatedDictItemResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CreatedDictItemResponse"
+          }
+        }
+      },
+      "CreatedDictItemResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "新字典项的标识，字符串形式的十进制整数；后续编辑、启停、删除都用它定位"
           }
         },
         "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
@@ -2745,6 +3853,92 @@
             "items": {
               "$ref": "#/components/schemas/OwnerListItemResponse"
             }
+          }
+        },
+        "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"
+      },
+      "ApiResultListOwnerTaxResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
+          },
+          "data": {
+            "type": "array",
+            "description": "业务数据；失败时为 null，分页接口为 PageResult 结构",
+            "items": {
+              "$ref": "#/components/schemas/OwnerTaxResponse"
+            }
+          }
+        }
+      },
+      "ApiResultListOwnerContactResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
+          },
+          "data": {
+            "type": "array",
+            "description": "业务数据；失败时为 null，分页接口为 PageResult 结构",
+            "items": {
+              "$ref": "#/components/schemas/OwnerContactResponse"
+            }
+          }
+        }
+      },
+      "ApiResultOwnerAssigneeResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "业务结果码，0 表示成功；非 0 时 data 为 null",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "可直接展示给用户的中文提示；失败时为具体原因，成功时固定为「成功」",
+            "example": "成功"
+          },
+          "data": {
+            "$ref": "#/components/schemas/OwnerAssigneeResponse"
+          }
+        }
+      },
+      "OwnerAssigneeResponse": {
+        "type": "object",
+        "properties": {
+          "ownerId": {
+            "type": "string",
+            "description": "货主标识，字符串形式的十进制整数；与请求路径上的 ownerId 相同，供前端丢弃切换货主之后才返回的过期响应",
+            "example": "3"
+          },
+          "primaryUserId": {
+            "type": "string",
+            "description": "主负责人的员工标识，字符串形式的十进制整数；该货主尚未配置负责人时为 null。员工姓名不在本响应里——它在 wms-auth 的用户表，需要时另行查询",
+            "example": "7"
+          },
+          "secondaryUserId": {
+            "type": "string",
+            "description": "副负责人的员工标识，字符串形式的十进制整数；该货主没有副负责人时为 null",
+            "example": "9"
           }
         },
         "description": "业务数据；失败时为 null，分页接口为 PageResult 结构"

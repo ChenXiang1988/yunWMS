@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { TabPane, Tabs } from 'ant-design-vue'
 import { EmptyState, PageHeader } from '@yunwms/ui-web'
+import UserTab from './components/UserTab.vue'
 
 const activeTab = ref('user')
 </script>
@@ -13,7 +14,7 @@ const activeTab = ref('user')
     <section class="panel">
       <Tabs v-model:active-key="activeTab">
         <TabPane key="user" tab="用户">
-          <EmptyState description="用户列表待接入" />
+          <UserTab />
         </TabPane>
         <TabPane key="role" tab="角色与权限">
           <EmptyState description="角色与功能权限待接入" />

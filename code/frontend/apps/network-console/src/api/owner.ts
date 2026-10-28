@@ -241,3 +241,297 @@ export function getTerminationImpact(id: string): Promise<TerminationImpact> {
 export function deleteOwner(id: string): Promise<void> {
   return http.delete<void, void>(`/console/owners/${id}`)
 }
+
+/**
+ * 货主联系人，字段与后端 `OwnerContactResponse` 一一对应。
+ *
+ * 不含 ownerId：它就在请求路径上，响应里再带一份会让前端出现两处可能不一致的来源。
+ * `roleType` 是 CONTACT_ROLE 字典的 value，不是枚举：角色通过字典扩展，写成联合类型
+ * 会让每加一个角色都得改前端类型。
+ */
+export interface OwnerContact {
+  /** 联系人标识，编辑、删除都用它定位 */
+  id: string
+  /** 姓名，可以重名——它是称呼，不是标识 */
+  name: string
+  /** 角色取值，展示时按字典取中文标签，接口只给 value */
+  roleType: string
+  /** 联系电话，必填字段，不会为 null；原样返回，不做脱敏与格式化 */
+  phone: string
+  /** 邮箱，可为 null（未填或已清空） */
+  email: string | null
+  /** 是否主联系人，同一货主至多一条为 true */
+  isPrimary: boolean
+  /** 备注，可为 null */
+  remark: string | null
+}
+
+/**
+ * 联系人请求体，新增与编辑共用同一个结构。
+ *
+ * 编辑是全量替换：字段传 null 表示清空，省略按 null 处理，所以调用方必须提交希望保留
+ * 的全部值——「设为主」只改主标记时也要带上原值，见 `contact-model.ts` 的
+ * `buildPrimaryPayload`。
+ */
+export interface ContactPayload {
+  /** 姓名，必填，最长 64 个字符；只填空白按未填处理 */
+  name: string
+  /** 角色，必填，取 CONTACT_ROLE 字典的启用项 */
+  roleType: string
+  /** 联系电话，必填，最长 32 个字符；不做格式校验 */
+  phone: string
+  /** 邮箱，可为空，最长 128 个字符；传 null 表示清空 */
+  email: string | null
+  /** 是否主联系人，缺省按 false 处理；要保留主标记必须显式传 true */
+  isPrimary: boolean
+  /** 备注，可为空，最长 255 个字符；传 null 表示清空 */
+  remark: string | null
+}
+
+/**
+ * 查询某货主的全部联系人。
+ *
+ * 不分页：单个货主的联系人是几条到几十条。货主不存在、已逻辑删除或不在数据范围内
+ * 返回 40400，而不是空列表——空列表的意思只是「这个货主没有联系人」。
+ */
+export function listOwnerContacts(ownerId: string): Promise<OwnerContact[]> {
+  return http.get<OwnerContact[], OwnerContact[]>(`/console/owners/${ownerId}/contacts`)
+}
+
+/**
+ * 新增联系人，返回新联系人（含标识）。
+ *
+ * 置 `isPrimary` 为 true 时后端先把原主联系人置为非主再写入本条，两步同一事务。
+ * 并发抢主可能返回 40900，前端不判错误码、以重新取回的列表为准，见 `OwnerContactTab.vue`。
+ */
+export function createOwnerContact(ownerId: string, payload: ContactPayload): Promise<OwnerContact> {
+  return http.post<OwnerContact, OwnerContact, ContactPayload>(
+    `/console/owners/${ownerId}/contacts`,
+    payload
+  )
+}
+
+/**
+ * 编辑联系人（全量替换）。
+ *
+ * 成功不回带更新后的联系人：设为主会连带改掉另一行，回带单行会让人以为其余行没变，
+ * 需要最新状态时重新取列表。归属不可改——请求体里没有 ownerId。
+ */
+export function updateOwnerContact(
+  ownerId: string,
+  contactId: string,
+  payload: ContactPayload
+): Promise<void> {
+  return http.put<void, void, ContactPayload>(
+    `/console/owners/${ownerId}/contacts/${contactId}`,
+    payload
+  )
+}
+
+/**
+ * 删除联系人（后端软删除）。
+ *
+ * 删除会释放该货主的主联系人名额，之后可以直接把另一条设为主。重复删除返回 40400，
+ * 与读取侧同一口径：已删除与不存在是同一件事。
+ */
+export function deleteOwnerContact(ownerId: string, contactId: string): Promise<void> {
+  return http.delete<void, void>(`/console/owners/${ownerId}/contacts/${contactId}`)
+}
+
+/**
+ * 货主税号，字段与后端 `OwnerTaxResponse` 一一对应。
+ *
+ * 不含 ownerId：它就在请求路径上。`taxType` 是 TAX_ID_TYPE 字典的 value，不是枚举：
+ * 类型通过字典扩展，写成联合类型会让每加一种税制都得改前端类型。
+ */
+export interface OwnerTax {
+  /** 税号标识，编辑、删除都用它定位 */
+  id: string
+  /** 国家，ISO 3166-1 alpha-2 代码，取自 COUNTRY 字典 */
+  country: string
+  /** 州省，取自 PROVINCE 字典；国家级税号（统一社会信用代码、VAT）未填时为 null */
+  province: string | null
+  /** 税号类型取值，展示时按 TAX_ID_TYPE 字典取中文标签 */
+  taxType: string
+  /** 税号，必填字段，不会为 null；原样返回，不做脱敏与格式化 */
+  taxNumber: string
+  /** 是否该货主在该国家下的默认税号，同一货主同一国家至多一条为 true */
+  isDefault: boolean
+}
+
+/**
+ * 税号请求体，新增与编辑共用同一个结构。
+ *
+ * 编辑是全量替换：`province` 传 null 表示清空，`isDefault` 省略等于提交 false，
+ * 所以调用方必须提交希望保留的全部值——「设为默认」只改默认标记时也要带上原值，
+ * 见 `tax-model.ts` 的 `buildSetDefaultPayload`。
+ *
+ * 编辑接口虽然接收 `country` 与 `taxType`，但以记录自身的值为准，传别的值既不生效
+ * 也不报错；前端在编辑态把这两项置为只读，见 `OwnerTaxTab.vue`。
+ */
+export interface TaxPayload {
+  /** 国家，必填，2 位大写字母的 ISO 3166-1 alpha-2 代码，取 COUNTRY 字典的 value */
+  country: string
+  /** 州省，可为空，最长 64 个字符；传 null 或整串空白表示清空 */
+  province: string | null
+  /** 税号类型，必填，取 TAX_ID_TYPE 字典的启用项 */
+  taxType: string
+  /** 税号，必填，最长 64 个字符；后端原样保存，不做格式化 */
+  taxNumber: string
+  /** 是否设为该国家下的默认税号，缺省按 false 处理 */
+  isDefault: boolean
+}
+
+/**
+ * 查询某货主的全部税号。
+ *
+ * 不分页：单个货主的税务登记是个位数量级。后端按国家、州省、类型升序返回，空州省的
+ * 国家级税号排在每个国家末尾，前端不重排。货主不存在、已逻辑删除或不在数据范围内
+ * 返回 40400，而不是空列表——空列表的意思只是「这个货主没有登记税号」。
+ */
+export function listOwnerTaxes(ownerId: string): Promise<OwnerTax[]> {
+  return http.get<OwnerTax[], OwnerTax[]>(`/console/owners/${ownerId}/taxes`)
+}
+
+/**
+ * 新增税号，返回新税号（含标识）。
+ *
+ * 置 `isDefault` 为 true 时后端先把该货主同国家的原默认税号置为非默认再写入本条，
+ * 两步同一事务。并发抢默认可能返回 40900，前端不判错误码、以重新取回的列表为准，
+ * 见 `OwnerTaxTab.vue`。返回的新行不直接并进列表：同一次调用可能改掉了另一行。
+ */
+export function createOwnerTax(ownerId: string, payload: TaxPayload): Promise<OwnerTax> {
+  return http.post<OwnerTax, OwnerTax, TaxPayload>(`/console/owners/${ownerId}/taxes`, payload)
+}
+
+/**
+ * 编辑税号（全量替换州省、税号与默认标记）。
+ *
+ * 国家与类型不可改：它们与归属一起构成这一行的身份，换国家或换类型应删旧登新。
+ * 成功不回带更新后的税号——设默认会连带把另一行改成非默认，回带单行会让人以为
+ * 其余行没变；需要最新状态时重新取列表。
+ */
+export function updateOwnerTax(
+  ownerId: string,
+  taxId: string,
+  payload: TaxPayload
+): Promise<void> {
+  return http.put<void, void, TaxPayload>(`/console/owners/${ownerId}/taxes/${taxId}`, payload)
+}
+
+/**
+ * 删除税号（后端软删除）。
+ *
+ * 删除会释放该货主在该国家下的默认名额，之后可以直接把另一条设为默认。重复删除
+ * 返回 40400，与读取侧同一口径：已删除与不存在是同一件事。
+ */
+export function deleteOwnerTax(ownerId: string, taxId: string): Promise<void> {
+  return http.delete<void, void>(`/console/owners/${ownerId}/taxes/${taxId}`)
+}
+
+/**
+ * 开通货主主账号的请求体，字段与后端 `OwnerAccountRequest` 一一对应。
+ *
+ * 只有姓名与初始密码：登录名由系统按货主编码生成，请求体里没有它；手机号属联系人
+ * 档案，货主侧角色属权限模块，也都不在这里。多传字段后端返回 40000（不静默忽略）。
+ */
+export interface OwnerAccountPayload {
+  /** 主账号姓名（展示名），必填，最长 64 个字符；登录货主端后显示在页头，与登录名无关 */
+  displayName: string
+  /**
+   * 初始密码明文，必填，需满足后端密码策略。
+   *
+   * 明文只出现在这一次请求体里：服务端只存哈希并把账号标记为首次登录须改密，
+   * 前端提交后立即从组件状态里清掉，不写存储、不回显、不进日志。
+   */
+  initialPassword: string
+}
+
+/**
+ * 开通主账号的响应，字段与后端 `CreatedOwnerAccountResponse` 一致。
+ *
+ * 不回带密码，也不回带角色与数据范围：前者不落前端，后者由后端按货主侧角色决定。
+ */
+export interface CreatedOwnerAccount {
+  /** 新建账号的标识，字符串形式的十进制整数；后续停用、重置密码用它定位 */
+  accountId: string
+  /** 登录名，等于该货主的系统编码，形如 OWNER0001；系统生成、不可修改 */
+  loginName: string
+}
+
+/**
+ * 为货主开通主账号。
+ *
+ * 只有「合作中」的货主可以开号：其余状态返回 40900 且提示里带当前状态。同一货主
+ * 至多一个主账号，重复开号同样 40900，但提示里带该货主已有的登录名；登录名被别的
+ * 货主占用时提示是「已被其他账号占用」——两种情形处置不同，前端不判文案、只透传。
+ *
+ * 开号是一次性动作：成功后该货主不能再次开号，前端据此把入口置为不可用，
+ * 见 `views/customer/account-model.ts` 的 `canOpenOwnerAccount`。
+ */
+export function openOwnerAccount(
+  ownerId: string,
+  payload: OwnerAccountPayload
+): Promise<CreatedOwnerAccount> {
+  return http.post<CreatedOwnerAccount, CreatedOwnerAccount, OwnerAccountPayload>(
+    `/console/owners/${ownerId}/account`,
+    payload
+  )
+}
+
+/**
+ * 审计日志行，字段与后端 `AuditLogItemResponse` 一一对应。
+ *
+ * `bizId` 是对象标识：货主档案及其子表记的是**货主编码**（`OWNER0001`），不是数字标识，
+ * 用 `owner.id` 去查会一条也查不到。`beforeValue` / `afterValue` 原样返回——无变更前值
+ * （如新增）时为 null，子表类日志保存的是完整集合快照而不是差异。
+ */
+export interface AuditLogItem {
+  /** 日志标识，字符串形式的十进制整数 */
+  id: string
+  /** 审计对象类型编码，如 OWNER、OWNER_CONTACT、SKU、USER */
+  bizType: string
+  /** 对象标识，与 bizType 一起定位被审计的那条数据 */
+  bizId: string
+  /** 动作编码：CREATE / UPDATE / DELETE / AUDIT / PERMISSION_CHANGE / LOGIN / LABEL_PRINT */
+  action: string
+  /** 操作人标识，系统内部触发为 null */
+  operatorId: string | null
+  /** 操作人姓名，写入当时的快照，不随人员之后改名而变化 */
+  operatorName: string | null
+  /** 来源地址；取不到当前请求时为 null */
+  operatorIp: string | null
+  /** 来源端编码：CONSOLE 仓网端、PORTAL 货主端；系统内部触发或来源无法判定时为 null */
+  sourcePortal: string | null
+  /** 变更摘要，人读的一句话；没有摘要时为 null */
+  summary: string | null
+  /** 变更前快照，原样返回；无变更前值（如新增）时为 null */
+  beforeValue: Record<string, unknown> | null
+  /** 变更后快照，原样返回；无变更后值（如删除）时为 null */
+  afterValue: Record<string, unknown> | null
+  /** 操作时间，ISO 8601 带时区（UTC） */
+  createdAt: string
+}
+
+/** 审计查询参数，与 `GET /api/console/audit-logs` 的 query 一一对应 */
+export interface AuditLogQuery {
+  /** 对象类型编码，必填；货主详情用 OWNER */
+  bizType: string
+  /** 对象标识，必填；货主用货主编码而不是数字标识 */
+  bizId: string
+  pageNo: number
+  /** 每页条数，取值 1 至 200；越界后端返回 40000 */
+  pageSize: number
+}
+
+/**
+ * 按对象查询审计日志。
+ *
+ * 两个筛选条件都必填：少任一个就退化成全表分页，所以前端不提供「只看类型」这类调用。
+ * 响应按操作时间倒序，前端不重排。本接口只读——审计日志不提供删除与修改端点。
+ */
+export function listAuditLogs(query: AuditLogQuery): Promise<PageResult<AuditLogItem>> {
+  return http.get<PageResult<AuditLogItem>, PageResult<AuditLogItem>>('/console/audit-logs', {
+    params: query
+  })
+}
