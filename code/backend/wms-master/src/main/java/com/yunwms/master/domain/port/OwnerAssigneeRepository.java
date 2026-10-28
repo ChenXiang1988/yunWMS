@@ -2,7 +2,7 @@ package com.yunwms.master.domain.port;
 
 import com.yunwms.master.domain.model.AssigneeRelation;
 
-import java.util.Optional;
+import java.util.OptionalLong;
 
 /**
  * 货主负责客服关系的写入入口：指定、撤销，以及停用员工前要用的计数。
@@ -50,11 +50,17 @@ public interface OwnerAssigneeRepository {
      * 返回形状与用途都不同（单值 vs 集合；回显 vs 数据范围），合并会让数据范围的端口长出一个
      * 它不需要的方法。
      *
+     * <p><b>返回 {@link OptionalLong} 而不是 {@code Optional<Long>}：</b>员工标识本来就是基本类型，
+     * 用 {@code Optional<Long>} 只会多一次装箱，取值时还要再拆箱。本模块既有的标识型可选返回
+     * （{@code OwnerAccountLookup#findOwnerIdByLoginName}、{@code CurrentOperator#currentUserId}）
+     * 都是 {@link OptionalLong}；留着第二种写法，下一处实现只会随便挑一个，而两种写法迟早要在
+     * 同一个调用链上互相转换。
+     *
      * @param ownerId  货主标识
      * @param relation 关系角色，调用方保证非 {@code null}（传 {@code null} 属于编程错误，不是业务输入）
-     * @return 该角色当前的员工标识；该角色尚未指定时为 empty
+     * @return 该角色当前的员工标识；该角色尚未指定时为 {@link OptionalLong#empty()}
      */
-    Optional<Long> findUserId(long ownerId, AssigneeRelation relation);
+    OptionalLong findUserId(long ownerId, AssigneeRelation relation);
 
     /**
      * 把某货主某角色的负责人替换成指定员工。
