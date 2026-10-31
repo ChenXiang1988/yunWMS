@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Martin 周报 · 2026.10.26 ~ 10.30</title>
+<style>
+:root{--bg:#f7f8fa;--card:#fff;--line:#dce2eb;--soft:#edf0f5;--ink:#1a2636;--muted:#67758a;--blue:#2f6db5;--bluebg:#eef4fb;--teal:#0f6e56;--amber:#986611}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:24px}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.8 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+a{-webkit-tap-highlight-color:transparent}a:focus-visible{outline:3px solid #85addd;outline-offset:3px}a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
+.layout{max-width:1376px;margin:auto;display:grid;grid-template-columns:215px minmax(0,1fr);gap:34px;padding:36px 28px 72px}
+.sidebar{min-width:0;align-self:start;position:sticky;top:24px;font-size:13px}
+.brand{font-size:12px;letter-spacing:.1em;color:var(--muted);margin-bottom:18px}
+.sidebar nav a{display:block;padding:8px 11px;margin:3px 0;border-radius:7px;color:#5f6f82}
+.sidebar nav a.active{background:#e7eef8;color:var(--blue);font-weight:600}
+main{min-width:0;max-width:1080px}
+h1{font-size:28px;font-weight:650;margin:0 0 7px;letter-spacing:-.5px}
+h2{font-size:20px;font-weight:600;margin:0}
+p{margin:0 0 12px}
+.sub{color:var(--muted);font-size:13px}
+.topbar{display:flex;justify-content:space-between;align-items:start;gap:12px}
+.lead{background:var(--bluebg);border:1px solid #cfdef1;border-left:3px solid #82a9d6;border-radius:8px;padding:16px 18px;margin:14px 0 22px;color:#284f7c}
+.section{margin:36px 0 0}
+.sec-head{border-bottom:1px solid var(--line);padding-bottom:12px;margin:0 0 17px;display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.sec-kicker{font-size:11px;color:var(--muted);letter-spacing:.12em;margin-bottom:3px}
+.count{color:var(--muted);font-size:12px;white-space:nowrap}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:21px 23px;margin-bottom:14px}
+.concl{background:var(--bluebg);border-left:3px solid #84a9d2;border-radius:0 6px 6px 0;padding:11px 14px;margin-bottom:15px;color:#284f7c}
+.table-wrap{overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:12px;margin:9px 0 13px}
+th,td{padding:10px 11px;text-align:left;border-bottom:1px solid var(--soft);vertical-align:top}
+th{color:#5f6f82;font-weight:500;background:#f7f9fc}
+tr:last-child td{border-bottom:0}
+.col-no{width:44px;white-space:nowrap}
+.col-prog{width:66px;white-space:nowrap;text-align:right}
+.col-pri{width:64px;white-space:nowrap}
+.col-own{width:170px}
+.col-who{width:110px;white-space:nowrap}
+.col-when{width:88px;white-space:nowrap}
+.cell-title{font-weight:600;display:block;margin-bottom:3px}
+.num{display:inline-block;min-width:22px;height:22px;line-height:22px;text-align:center;border-radius:6px;background:var(--bluebg);color:var(--blue);font-size:12px;font-weight:600}
+.prog{font-variant-numeric:tabular-nums;font-weight:600;color:#315a89}
+.badge{display:inline-block;font-size:11px;border:1px solid #c9dbef;color:#416d9d;background:#f1f6fc;border-radius:5px;padding:1px 7px;white-space:nowrap}
+.badge.high{border-color:#e0c3c3;color:#94504f;background:#fdf1f1}
+.badge.mid{border-style:dashed;color:#7a8594;background:#fafbfc}
+.link-list{display:flex;flex-direction:column;gap:2px;font-size:12px}
+.footer{font-size:11px;color:#7e8a9b;margin-top:20px}
+@media(max-width:1000px){
+  .layout{grid-template-columns:minmax(0,1fr);padding:24px 20px;gap:16px}
+  .sidebar{position:static}
+  .brand{display:none}
+  .sidebar nav{display:flex;overflow:auto;border-bottom:1px solid var(--line);padding-bottom:8px;white-space:nowrap}
+  .sidebar nav a{font-size:12px}
+  .topbar{display:block}
+}
+@media(max-width:600px){
+  .layout{padding:17px 13px 48px}
+  .panel{padding:17px 15px}
+  h1{font-size:24px}
+}
+@media print{
+  body{background:#fff}
+  .layout{display:block;padding:0}
+  .sidebar{display:none!important}
+  .panel{break-inside:avoid}
+  main{max-width:none}
+  .section{margin-top:24px}
+  a{color:inherit}
+  table{font-size:10px}
+}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<aside class="sidebar">
+  <div class="brand">WESTMOON · WEEKLY</div>
+  <nav aria-label="页面目录">
+    <a href="#work">01　本周工作内容</a>
+    <a href="#needs">02　需要支持</a>
+    <a href="#plan">03　下周工作计划</a>
+  </nav>
+</aside>
+
+<main>
+
+<header>
+  <div class="topbar">
+    <div>
+      <h1>Martin 周报</h1>
+      <p class="sub">2026 年 10 月 26 日 ~ 10 月 30 日 · 仓储库存模块</p>
+    </div>
+  </div>
+  <div class="lead">三件事均出草稿、待评审：设备管理方案 10 月 30 日提报艾欧，执行单元规则已出草稿，任务中心链路已出草稿。下周需三项配合。</div>
+</header>
+
+<section id="work" class="section">
+  <div class="sec-head">
+    <div>
+      <div class="sec-kicker">01 / THIS WEEK</div>
+      <h2>本周工作内容</h2>
+    </div>
+    <span class="count">3 项，均待评审</span>
+  </div>
+
+  <div class="panel">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-no">序号</th>
+            <th>工作内容（项目）</th>
+            <th style="width:150px">相关链接（交付件）</th>
+            <th class="col-prog">总进度</th>
+            <th style="width:270px">风险描述</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="num">1</span></td>
+            <td>
+              <span class="cell-title">设备管理</span>
+              PRD 草稿已出，覆盖四类终端接入、五条探活路径、掉线处置；PC 与 APP 两端原型同步出稿。10 月 30 日提报艾欧。
+            </td>
+            <td>
+              <div class="link-list">
+                <a href="../../reports/设备管理思路.html">设备管理思路.html</a>
+                <a href="../../PRD/硬件管理PRD.md">硬件管理PRD.md（草稿）</a>
+                <a href="../../PRD/%E7%BB%88%E7%AB%AF%E7%BA%B3%E7%AE%A1%E4%B8%8E%E6%8E%A2%E6%B4%BBPRD.md">终端接入与探活 PRD（草稿）</a>
+              </div>
+            </td>
+            <td class="col-prog"><span class="prog">85%</span></td>
+            <td>待艾欧评审，通过后改定稿再进开发。真实设备连接未接，原型探活为模拟，上线前补齐。</td>
+          </tr>
+          <tr>
+            <td><span class="num">2</span></td>
+            <td>
+              <span class="cell-title">执行单元</span>
+              PRD 草稿已出：一人一单元；编号按工号编、不随设备变；一人同时只在一个终端作业。另拟三班倒、每班 7 小时有效工时。
+            </td>
+            <td>
+              <div class="link-list">
+                <a href="../../PRD/执行单元PRD.md">执行单元PRD.md（草稿）</a>
+              </div>
+            </td>
+            <td class="col-prog"><span class="prog">75%</span></td>
+            <td>待评审，通过后进开发，系统与现场作业按新编号执行。</td>
+          </tr>
+          <tr>
+            <td><span class="num">3</span></td>
+            <td>
+              <span class="cell-title">任务中心</span>
+              PRD 草稿已出：单据拆工序、工序拆工步、工步落到动作与界面。执行看板改为按数据实时计算。
+            </td>
+            <td>
+              <div class="link-list">
+                <a href="../../PRD/任务中心PRD.md">任务中心PRD.md（草稿）</a>
+                <a href="../../reports/任务中心思路.html">任务中心思路.html</a>
+              </div>
+            </td>
+            <td class="col-prog"><span class="prog">55%</span></td>
+            <td>待流程编排确认后进入评审。动作库、工序模板、编排规则尚无归属方。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="needs" class="section">
+  <div class="sec-head">
+    <div>
+      <div class="sec-kicker">02 / NEEDS</div>
+      <h2>需要支持</h2>
+    </div>
+    <span class="count">3 项</span>
+  </div>
+
+  <div class="panel">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>事项</th>
+            <th class="col-who">找谁</th>
+            <th>需要做什么</th>
+            <th class="col-when">时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>设备管理 PRD 评审</td>
+            <td class="col-who">艾欧</td>
+            <td>出评审意见，确认能否改定稿</td>
+            <td class="col-when"><span class="badge high">下周内</span></td>
+          </tr>
+          <tr>
+            <td>流程编排交互确认</td>
+            <td class="col-who">林展弘</td>
+            <td>确认交互细节，任务中心 PRD 才能进入评审</td>
+            <td class="col-when"><span class="badge high">下周内</span></td>
+          </tr>
+          <tr>
+            <td>动作库、工序模板、编排规则</td>
+            <td class="col-who">待明确</td>
+            <td>定由谁维护、什么时候提供</td>
+            <td class="col-when"><span class="badge mid">待定</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="plan" class="section">
+  <div class="sec-head">
+    <div>
+      <div class="sec-kicker">03 / NEXT</div>
+      <h2>下周工作计划</h2>
+    </div>
+    <span class="count">4 项</span>
+  </div>
+
+  <div class="panel">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>任务</th>
+            <th class="col-pri">优先级</th>
+            <th class="col-own">涉及负责人</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>设备管理：按评审意见改 PRD，出定稿版</td>
+            <td class="col-pri"><span class="badge high">高</span></td>
+            <td class="col-own">@Martin @艾欧</td>
+          </tr>
+          <tr>
+            <td>任务中心：流程编排确认后提交评审</td>
+            <td class="col-pri"><span class="badge high">高</span></td>
+            <td class="col-own">@Martin @林展弘</td>
+          </tr>
+          <tr>
+            <td>执行单元：原型按草稿规则调整，编号改为工号派生</td>
+            <td class="col-pri"><span class="badge mid">中</span></td>
+            <td class="col-own">@Martin</td>
+          </tr>
+          <tr>
+            <td>任务中心：配置层定归属后补数据</td>
+            <td class="col-pri"><span class="badge mid">中</span></td>
+            <td class="col-own">@Martin</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">Martin · 2026-10-30</footer>
+
+</main>
+</div>
+
+<script>
+'use strict';
+const sections = [...document.querySelectorAll('main>section')];
+const nav = [...document.querySelectorAll('.sidebar nav a')];
+const observer = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (e.isIntersecting) {
+      for (const a of nav) a.classList.toggle('active', a.hash === '#' + e.target.id);
+    }
+  }
+}, { rootMargin: '-8% 0px -68% 0px' });
+sections.forEach((s) => observer.observe(s));
+</script>
+</body>
+</html>
