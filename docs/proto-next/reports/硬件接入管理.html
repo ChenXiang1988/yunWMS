@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>硬件接入 × 执行单元 · 方案图</title>
+<style>
+:root{
+  --bg:#f5f7f9;
+  --surface:#ffffff;
+  --ink:#101828;
+  --muted:#667085;
+  --line:#e5e8ee;
+  --teal:#0f766e;
+  --teal-soft:#e6f4f1;
+  --amber:#b45309;
+  --amber-soft:#fdf1dd;
+  --blue:#1d4ed8;
+  --blue-soft:#e8eefc;
+  --red:#b91c1c;
+  --red-soft:#fbe9e9;
+  --purple:#6d28d9;
+  --purple-soft:#efe9fd;
+  --slate-soft:#eef1f4;
+  --radius:18px;
+  --shadow:0 1px 2px rgba(16,24,40,.04), 0 10px 28px rgba(16,24,40,.05);
+  --shadow-hover:0 4px 10px rgba(16,24,40,.06), 0 16px 32px rgba(16,24,40,.08);
+  --fs-20:15px;
+  --fs-22:17px;
+  --fs-24:18px;
+  --fs-26:22px;
+  --fs-28:20px;
+  --fs-30:31px;
+  --fs-32:21px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg);
+  background-image:linear-gradient(180deg,#eef2f6 0%,rgba(245,247,249,0) 320px);
+  background-repeat:no-repeat;
+  color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:var(--fs-32);
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1680px;margin:0 auto;padding:0 40px}
+.topbar{padding:8px 0 6px}
+.hero{padding:8px 0 6px;position:relative}
+.hero:after{content:"";display:block;height:1px;background:linear-gradient(90deg,var(--line),transparent);margin-top:10px}
+.eyebrow{font-size:var(--fs-22);font-weight:700;letter-spacing:.16em;color:var(--teal);text-transform:uppercase}
+h1{font-size:clamp(36px,3.2vw,50px);line-height:1.08;letter-spacing:-.035em;margin:8px 0 4px;font-weight:780}
+h1 .accent{color:var(--teal)}
+.lede{font-size:clamp(20px,1.5vw,24px);color:var(--muted);margin:0 0 6px;letter-spacing:.02em}
+.hero-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.tags{display:flex;flex-wrap:wrap;gap:8px;margin:0}
+.tags span{font-size:15px;color:var(--muted);border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:3px 10px}
+.tags .status{background:var(--amber-soft);border-color:#f0d3a4;color:var(--amber);font-weight:700}
+.principle{font-size:18px;color:var(--ink);border-left:3px solid var(--teal);background:linear-gradient(90deg,rgba(15,118,110,.07),rgba(15,118,110,0));border-radius:0 8px 8px 0;padding:6px 12px;margin:0;max-width:1460px}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:24px;padding-bottom:56px}
+.split{grid-column:1/-1;display:flex;align-items:center;gap:16px;margin:12px 0 0}
+.split h2{font-size:22px;margin:0;font-weight:730;letter-spacing:-.01em;white-space:nowrap}
+.split-line{flex:1;height:1px;background:var(--line)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:32px 36px 36px;box-shadow:var(--shadow);overflow:hidden}
+.span-12{grid-column:span 12}
+.card-head{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.card-num{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:22px;padding:0 7px;border-radius:6px;background:var(--teal-soft);color:var(--teal);font-size:15px;font-weight:800;letter-spacing:.06em}
+.card h2{font-size:var(--fs-30);margin:0;font-weight:730;letter-spacing:-.02em}
+.card-note{font-size:var(--fs-22);color:var(--muted);margin-left:auto;padding-left:12px}
+.lead{font-size:var(--fs-28);color:var(--muted);margin:0 0 20px;max-width:1460px;line-height:1.65}
+.diagram{display:block;width:100%;height:auto}
+.svg-side{font-size:17px;font-weight:700;letter-spacing:.12em;fill:var(--muted)}
+.layer-title{font-size:21px;font-weight:700;fill:var(--ink)}
+.layer{stroke:none}
+.layer-task{fill:var(--amber-soft)}
+.layer-unit{fill:var(--teal-soft)}
+.layer-cap{fill:var(--blue-soft)}
+.chip{fill:#fff;stroke:var(--line);stroke-width:1}
+.chip-text{font-size:21px;font-weight:600;fill:var(--ink);text-anchor:middle}
+.chip-sub{font-size:17px;fill:var(--muted)}
+.svg-arrow{stroke:#98a2b3;stroke-width:1.6;fill:none}
+.svg-arrow-dash{stroke:#b3bcc9;stroke-width:1.4;fill:none;stroke-dasharray:6 5}
+.arrow-label{font-size:17px;fill:var(--muted);text-anchor:middle}
+.box{fill:#fff;stroke:var(--line);stroke-width:1}
+.lane-person{fill:var(--teal-soft)}
+.lane-wms{fill:var(--blue-soft)}
+.lane-pc{fill:var(--amber-soft)}
+.lane-dev{fill:var(--purple-soft)}
+.lifeline{stroke:var(--line);stroke-width:1.5;stroke-dasharray:6 6}
+.seq-note{font-size:17px;fill:var(--muted);text-anchor:middle}
+.diagram-scroll{overflow-x:auto}
+.box-title{font-size:21px;font-weight:650;text-anchor:middle;fill:var(--ink)}
+.box-sub{font-size:18px;text-anchor:middle;fill:var(--muted)}
+.badge{fill:var(--ink)}
+.badge-text{font-size:17px;font-weight:600;text-anchor:middle;fill:#fff}
+.table{width:100%;border-collapse:collapse;font-size:var(--fs-24);line-height:1.6}
+.table th,.table td{text-align:left;padding:11px 14px;border-bottom:1px solid #eef1f5;vertical-align:top}
+.table th{background:#f8fafb;font-size:var(--fs-20);font-weight:700;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--line)}
+.table tr:last-child td{border-bottom:none}
+.table tbody tr:hover td{background:#fafbfd}
+.table td:first-child{width:150px;color:var(--muted);font-weight:600;white-space:nowrap}
+.table td b{font-weight:650}
+.table-scroll{overflow-x:auto}
+.subhead{font-size:var(--fs-26);margin:28px 0 12px;font-weight:700}
+.examples{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.example{border:1px solid var(--line);border-radius:12px;padding:18px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.03);transition:box-shadow .18s ease,transform .18s ease,border-color .18s ease}
+.example-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px}
+.example h3{font-size:var(--fs-26);margin:0;font-weight:700}
+.example-tag{font-size:var(--fs-20);color:var(--teal);font-weight:700;white-space:nowrap;background:var(--teal-soft);border-radius:999px;padding:2px 8px}
+.example p{font-size:var(--fs-22);color:var(--muted);margin:0 0 8px;line-height:1.45;overflow-wrap:anywhere;word-break:break-word}
+.example p:last-child{margin-bottom:0}
+.example b{color:var(--ink);font-weight:600}
+.forms{display:grid;gap:16px}
+.forms.three{grid-template-columns:repeat(3,1fr)}
+.form{border:1px solid var(--line);border-radius:12px;padding:18px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.03);transition:box-shadow .18s ease,transform .18s ease,border-color .18s ease}
+.form h3{font-size:var(--fs-26);margin:0 0 6px;font-weight:700}
+.form p{font-size:var(--fs-22);color:var(--muted);margin:0;line-height:1.5}
+.groups{display:grid;grid-template-columns:repeat(5,1fr);gap:16px}
+.group{border:1px solid var(--line);border-radius:12px;padding:18px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.03);transition:box-shadow .18s ease,transform .18s ease,border-color .18s ease}
+.group-label{font-size:var(--fs-20);font-weight:800;letter-spacing:.1em;color:var(--teal);margin-bottom:8px}
+.group p{font-size:var(--fs-24);margin:0;line-height:1.45}
+.flow{display:grid;grid-template-columns:repeat(4,1fr);gap:28px}
+.flow-step{position:relative;border:1px solid var(--line);border-radius:12px;padding:18px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.03);transition:box-shadow .18s ease,transform .18s ease,border-color .18s ease}
+.flow-step:not(:last-child):after{content:"→";position:absolute;right:-30px;top:50%;transform:translateY(-50%);font-size:21px;color:var(--muted)}
+.flow-num{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--teal);color:#fff;font-size:17px;font-weight:700;margin-bottom:10px}
+.flow-step h3{font-size:var(--fs-26);margin:0 0 8px;font-weight:700}
+.flow-step p{font-size:var(--fs-22);color:var(--muted);margin:0;line-height:1.45}
+.usage{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+.usage div{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:#fff}
+.usage b{display:block;font-size:var(--fs-22);color:var(--teal);margin-bottom:4px}
+.usage span{font-size:var(--fs-20);color:var(--muted)}
+.methods{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.method{border:1px solid var(--line);border-radius:12px;padding:18px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.03);transition:box-shadow .18s ease,transform .18s ease,border-color .18s ease}
+.method-icon{width:44px;height:44px;color:var(--teal);margin-bottom:12px}
+.method-name{font-size:var(--fs-26);font-weight:700;color:var(--teal);margin:0 0 8px}
+.method p{font-size:var(--fs-24);margin:0;line-height:1.5}
+.example:hover,.form:hover,.group:hover,.flow-step:hover,.method:hover{box-shadow:var(--shadow-hover);transform:translateY(-2px);border-color:#d5dbe4}
+.order{font-size:var(--fs-22);color:var(--muted);margin:18px 0 0;text-align:center}
+.note{font-size:var(--fs-22);color:var(--muted);margin:16px 0 0;line-height:1.6}
+.foot{max-width:1680px;margin:0 auto;padding:20px 40px 56px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;border-top:1px solid var(--line)}
+.foot span{font-size:var(--fs-22);color:var(--muted)}
+.foot b{color:var(--ink);font-weight:600}
+#demo{overflow:visible}
+#demo .card-head{margin-bottom:12px}
+#demo .lead{margin-bottom:12px}
+.mpanes{display:grid;grid-template-columns:1fr;gap:14px}
+.mpane{border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
+.mpane-wide{grid-column:1/-1}
+.mpane-head{display:flex;align-items:baseline;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:#fbfcfd}
+.mpane-head h3{font-size:20px;margin:0;font-weight:700;letter-spacing:-.01em}
+.mpane-note{font-size:15px;color:var(--muted)}
+.mnew{margin-left:auto;align-self:center;padding:6px 12px;font-size:15px}
+.mform{display:grid;grid-template-columns:repeat(3,1fr);gap:12px 16px;padding:14px;border-bottom:1px solid var(--line);background:#f8fafb}
+.mform[hidden]{display:none}
+.mform label{display:flex;flex-direction:column;gap:4px;font-size:15px;color:var(--muted)}
+.mform input,.mform select{font:inherit;font-size:16px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
+.mform-act{grid-column:1/-1;display:flex;gap:8px;align-items:center;justify-content:flex-end}
+@media (max-width:1200px){.mform{grid-template-columns:1fr 1fr}}
+@media (max-width:760px){.mform{grid-template-columns:1fr}}
+.mlist{border-right:0;border-bottom:1px solid var(--line);padding:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;background:#fff;align-content:start}
+.mlist-title{grid-column:1/-1;font-size:17px;font-weight:700;color:var(--muted);padding:2px 2px 4px}
+.mrow{border:1px solid var(--line);border-radius:10px;background:#fff;padding:12px 14px;cursor:pointer;font-size:17px;line-height:1.45;transition:border-color .15s,box-shadow .15s,background .15s}
+.mrow b{display:block;font-size:18px;color:var(--ink)}
+.mrow span{color:var(--muted)}
+.mrow:hover{border-color:#c6d3d0;background:#fbfcfd}
+.mrow.is-active,.mrow.is-active:hover{border-color:var(--teal);background:var(--teal-soft);box-shadow:0 0 0 1px var(--teal) inset}
+.mrow.is-bad{border-color:#f0c4c4}
+.mrow.is-bad b{color:var(--red)}
+.mdetail{padding:20px 24px 24px;min-width:0;background:#fff}
+.mhead{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+.mhead h3{font-size:25px;margin:0}
+.mstatus{font-size:17px;font-weight:700;border-radius:999px;padding:4px 12px;border:1px solid var(--line);color:var(--muted);background:#fff;white-space:nowrap}
+.mstatus.is-ok{color:var(--teal);border-color:#bfe0d9;background:var(--teal-soft)}
+.mstatus.is-bad{color:var(--red);border-color:#f0c4c4;background:var(--red-soft)}
+.mstatus.is-warn{color:var(--amber);border-color:#f0d3a4;background:var(--amber-soft)}
+.mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 20px;margin:0 0 18px}
+@media (min-width:1400px){.mgrid{grid-template-columns:repeat(4,1fr)}}
+.mfield{border-bottom:1px dashed #e8ecf1;padding-bottom:8px}
+.mfield dt{font-size:15px;color:var(--muted);margin-bottom:2px;letter-spacing:.04em}
+.mfield dd{font-size:18px;margin:0;line-height:1.5;word-break:break-all}
+.mfield dd code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:17px;background:#f1f3f5;border-radius:6px;padding:2px 6px}
+.demo-label{font-size:17px;font-weight:700;color:var(--ink);margin:14px 0 2px}
+.mchips{display:flex;flex-wrap:wrap;gap:10px;margin:4px 0 16px}
+.mchip{border:1px solid var(--line);border-radius:8px;background:#f8fafb;padding:6px 11px;font-size:17px;line-height:1.4}
+.mchip b{font-size:17px}
+.mchip.is-bad{border-color:#f0c4c4;background:var(--red-soft)}
+.mchip.is-ok{border-color:#bfe0d9;background:var(--teal-soft)}
+.mchip.is-warn{border-color:#f0d3a4;background:var(--amber-soft)}
+.mactions{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}
+.mbtn{border:1px solid var(--line);border-radius:8px;background:#fff;padding:9px 16px;font-size:18px;font-weight:600;cursor:pointer;color:var(--ink);white-space:nowrap;transition:background .15s,border-color .15s,box-shadow .15s}
+.mbtn:hover{border-color:#c6d3d0;background:#fbfcfd}
+.mbtn.primary{background:var(--teal);border-color:var(--teal);color:#fff;box-shadow:0 2px 6px rgba(15,118,110,.22)}
+.mbtn.primary:hover{background:#0c6a63;border-color:#0c6a63}
+.mbtn:disabled{background:var(--slate-soft);color:var(--muted);cursor:not-allowed}
+.mnotice{font-size:18px;color:var(--muted);border-left:3px solid var(--teal);background:rgba(15,118,110,.05);border-radius:0 8px 8px 0;padding:8px 12px;margin:0 0 16px;line-height:1.55}
+.mnotice b{color:var(--ink)}
+.mimpact{border:1px solid var(--line);border-radius:10px;background:#f8fafb;padding:14px 16px;margin-top:14px}
+.mimpact h4{font-size:18px;margin:0 0 8px}
+.mimpact p{font-size:17px;color:var(--muted);margin:0;line-height:1.5}
+.mrelation{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.mrel-col{border:1px solid var(--line);border-radius:12px;background:#fff;padding:16px}
+.mrel-col h4{font-size:20px;margin:0 0 12px;color:var(--teal)}
+.mrel-card{border:1px solid var(--line);border-radius:9px;background:#f8fafb;padding:10px 12px;margin-bottom:8px;font-size:17px;line-height:1.45}
+.mrel-card b{display:block;font-size:18px}
+.mrel-card span{color:var(--muted)}
+.mrel-card.is-bad{border-color:#f0c4c4;background:var(--red-soft)}
+.demo-badge{display:inline-block;font-size:14px;color:var(--teal);border:1px solid #bfe0d9;background:var(--teal-soft);border-radius:999px;padding:4px 12px;margin-left:12px;vertical-align:middle}
+@media (max-width:1200px){
+  .mpanes{grid-template-columns:1fr}
+  .mgrid{grid-template-columns:1fr 1fr}
+}
+@media (max-width:760px){
+  .mgrid{grid-template-columns:1fr}
+  .mrelation{grid-template-columns:1fr}
+  .mpane-head{flex-wrap:wrap;align-items:center;gap:2px 10px}
+}
+@media print{
+  .mactions{display:none}
+}
+@media (max-width:1200px){
+  .wrap{padding:0 28px}
+  .card{padding:32px}
+  .forms.three,.groups,.methods,.usage,.examples{grid-template-columns:1fr 1fr}
+  .groups{grid-template-columns:repeat(3,1fr)}
+  .flow{grid-template-columns:1fr 1fr;gap:24px}
+  .flow-step:not(:last-child):after{display:none}
+}
+@media (max-width:760px){
+  body{font-size:18px}
+  h1{font-size:36px}
+  .lede{font-size:18px}
+  .card{padding:24px}
+  .grid{grid-template-columns:1fr;gap:24px}
+  .span-12{grid-column:auto}
+  .forms.three,.groups,.methods,.usage,.examples,.flow{grid-template-columns:1fr}
+  .table{font-size:14px}
+  .table th{font-size:13px}
+  .table td,.table th{padding:12px}
+  .table td:first-child{width:auto;white-space:normal}
+  .table-scroll .table{min-width:1000px}
+  .diagram-scroll .diagram{min-width:1000px}
+  .card h2{font-size:25px}
+  .card-head{flex-wrap:wrap;gap:8px 16px}
+  .card-note{margin-left:0;flex-basis:100%}
+}
+@media print{
+  @page{size:A3 landscape;margin:12mm}
+  body{background:#fff}
+  .card{box-shadow:none;break-inside:avoid}
+  .hero{padding-top:20px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar" id="topbar">
+    <header class="hero">
+      <div class="hero-top">
+        <div class="eyebrow">硬件接入 × 执行单元 · 方案图</div>
+        <div class="tags">
+          <span class="status">定稿 · 待汇报确认</span>
+          <span>by 仓库</span><span>多主体</span><span>公共能力</span>
+        </div>
+      </div>
+      <h1>先接入，<span class="accent">再组装</span></h1>
+      <p class="lede">硬件接入是公共能力；执行单元是使用方</p>
+      <p class="principle">公共能力提供状态、命令、证据；执行单元负责任务归属、接收契约、负荷。</p>
+    </header>
+
+    </div>
+
+  <main class="grid">
+    <div class="split">
+      <h2>演示说明</h2>
+      <span class="split-line"></span>
+    </div>
+
+    <section class="card span-12" id="demo">
+      <div class="card-head"><span class="card-num">演示</span><h2>演示：怎么管硬件、怎么管执行单元</h2><span class="card-note">管理台 · 模拟 <span class="demo-badge">不接任务</span></span></div>
+      <p class="lead">硬件管理里有硬件台账、绑工位、故障影响；执行单元里有绑单元、换班；绑定关系把两侧对起来。有效硬件 = 终端 + 当前工位硬件。</p>
+      <div class="mpanes">
+        <section class="mpane">
+          <div class="mpane-head"><h3>硬件管理</h3><span class="mpane-note">台账 · 绑工位 · 故障影响</span><button type="button" class="mbtn mnew" id="m-hw-new">新建硬件</button></div>
+          <div class="mform" id="m-hw-form" hidden>
+            <label>硬件编号<input type="text" id="m-hw-id" placeholder="如 P2"></label>
+            <label>类型<select id="m-hw-type"><option>打印机</option><option>秤</option><option>摄像头</option><option>PC</option><option>扫码枪</option><option>PDA</option><option>AGV</option><option>流水线</option></select></label>
+            <label>序列号<input type="text" id="m-hw-sn" placeholder="如 PR2024-0001"></label>
+            <label>固件 / 版本<input type="text" id="m-hw-fw" placeholder="如 v2.8"></label>
+            <label>安装位置<select id="m-hw-loc"></select></label>
+            <label>适配器<select id="m-hw-adapter"></select></label>
+            <label>API / 本地地址<input type="text" id="m-hw-api" placeholder="如 http://127.0.0.1:8002/c-lodop"></label>
+            <label>鉴权<select id="m-hw-auth"><option>本机服务</option><option>本机驱动</option><option>App 登录态</option><option>Bearer ••••</option><option>无</option></select></label>
+            <label>状态<select id="m-hw-status"><option>在线</option><option>空闲</option><option>运行</option><option>校准中</option><option>离线</option></select></label>
+            <div class="mform-act"><button type="button" class="mbtn primary" id="m-hw-save">保存</button><button type="button" class="mbtn" id="m-hw-cancel">取消</button></div>
+          </div>
+          <div class="mlist" id="m-hw-list"></div>
+          <div class="mdetail" id="m-hw-detail"></div>
+        </section>
+        <section class="mpane">
+          <div class="mpane-head"><h3>执行单元</h3><span class="mpane-note">绑单元 · 换班</span><button type="button" class="mbtn mnew" id="m-un-new">新建单元</button></div>
+          <div class="mform" id="m-un-form" hidden>
+            <label>单元编号<input type="text" id="m-un-id" placeholder="如 EU-HP-004"></label>
+            <label>形态<select id="m-un-form-sel"><option>人 + 输入</option><option>工位</option><option>AGV</option></select></label>
+            <label>主体<input type="text" id="m-un-subject" placeholder="姓名 / 工位 / AGV 编号"></label>
+            <label>终端<select id="m-un-term"></select></label>
+            <label>当前工位<select id="m-un-station"></select></label>
+            <div class="mform-act"><button type="button" class="mbtn primary" id="m-un-save">保存</button><button type="button" class="mbtn" id="m-un-cancel">取消</button></div>
+          </div>
+          <div class="mlist" id="m-unit-list"></div>
+          <div class="mdetail" id="m-unit-detail"></div>
+        </section>
+        <section class="mpane mpane-wide">
+          <div class="mpane-head"><h3>绑定关系</h3><span class="mpane-note">硬件 ↔ 工位 ↔ 执行单元</span></div>
+          <div class="mdetail" id="m-rel-detail"></div>
+        </section>
+      </div>
+      <p class="note">演示只做管理台账与绑定，不做任务分配；外部接入显示示例 API 地址，token 脱敏。</p>
+    </section>
+
+    <div class="split">
+      <h2>方案说明</h2>
+      <span class="split-line"></span>
+    </div>
+
+    <section class="card span-12">
+      <div class="card-head"><span class="card-num">01</span><h2>两层关系</h2><span class="card-note">供给 → 使用 → 分配</span></div>
+      <svg class="diagram" viewBox="0 0 1520 720" role="img" aria-label="任务、执行单元、公共能力三层关系">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#5d6875"></path>
+          </marker>
+        </defs>
+
+        <rect x="40" y="40" width="1440" height="150" rx="20" class="layer layer-task"></rect>
+        <text x="70" y="120" class="layer-title">任务层</text>
+        <g>
+          <rect x="420" y="80" width="240" height="72" rx="12" class="chip"></rect><text x="540" y="125" class="chip-text">任务</text>
+          <rect x="684" y="80" width="240" height="72" rx="12" class="chip"></rect><text x="804" y="125" class="chip-text">动作</text>
+          <rect x="948" y="80" width="240" height="72" rx="12" class="chip"></rect><text x="1068" y="125" class="chip-text">证据</text>
+          <rect x="1212" y="80" width="240" height="72" rx="12" class="chip"></rect><text x="1332" y="125" class="chip-text">要求能力</text>
+        </g>
+
+        <line x1="520" y1="190" x2="520" y2="248" class="svg-arrow" marker-end="url(#arrow)"></line>
+        <text x="536" y="222" class="arrow-label" style="text-anchor:start">分配</text>
+        <line x1="1040" y1="248" x2="1040" y2="190" class="svg-arrow" marker-end="url(#arrow)"></line>
+        <text x="1024" y="222" class="arrow-label" style="text-anchor:end">回写证据</text>
+
+        <rect x="40" y="250" width="1440" height="180" rx="20" class="layer layer-unit"></rect>
+        <text x="70" y="340" class="layer-title">执行单元层 · 使用方</text>
+        <g>
+          <rect x="420" y="300" width="280" height="72" rx="12" class="chip"></rect><text x="560" y="345" class="chip-text">人 + 输入</text>
+          <rect x="728" y="300" width="280" height="72" rx="12" class="chip"></rect><text x="868" y="345" class="chip-text">AGV</text>
+          <rect x="1036" y="300" width="280" height="72" rx="12" class="chip"></rect><text x="1176" y="345" class="chip-text">工位</text>
+        </g>
+        <text x="420" y="405" class="chip-sub">引用硬件 · 接什么任务 · 负荷</text>
+
+        <line x1="520" y1="430" x2="520" y2="488" class="svg-arrow" marker-end="url(#arrow)"></line>
+        <text x="536" y="462" class="arrow-label" style="text-anchor:start">下发命令</text>
+        <line x1="1040" y1="488" x2="1040" y2="430" class="svg-arrow" marker-end="url(#arrow)"></line>
+        <text x="1024" y="462" class="arrow-label" style="text-anchor:end">状态 / 证据</text>
+
+        <rect x="40" y="490" width="1440" height="180" rx="20" class="layer layer-cap"></rect>
+        <text x="70" y="580" class="layer-title">公共能力层 · 供给方</text>
+        <g>
+          <rect x="360" y="540" width="170" height="72" rx="12" class="chip"></rect><text x="445" y="585" class="chip-text">设备类</text>
+          <rect x="542" y="540" width="170" height="72" rx="12" class="chip"></rect><text x="627" y="585" class="chip-text">实例</text>
+          <rect x="724" y="540" width="170" height="72" rx="12" class="chip"></rect><text x="809" y="585" class="chip-text">适配器</text>
+          <rect x="906" y="540" width="170" height="72" rx="12" class="chip"></rect><text x="991" y="585" class="chip-text">状态</text>
+          <rect x="1088" y="540" width="170" height="72" rx="12" class="chip"></rect><text x="1173" y="585" class="chip-text">命令</text>
+          <rect x="1270" y="540" width="170" height="72" rx="12" class="chip"></rect><text x="1355" y="585" class="chip-text">证据</text>
+        </g>
+        <text x="360" y="645" class="chip-sub">一个标准 · 多仓 · 多主体</text>
+      </svg>
+    </section>
+
+    <section class="card span-12">
+      <div class="card-head"><span class="card-num">02</span><h2>执行单元是什么</h2><span class="card-note">先讲使用方</span></div>
+      <p class="lead">执行单元是任务归属，不是硬件包。一个任务同一时刻只归一个单元。</p>
+      <div class="forms three">
+        <div class="form"><h3>人 + 输入</h3><p>人负责；终端是工具，移动用 PDA、工位用 PC + 扫码枪；换机不换单元。</p></div>
+        <div class="form"><h3>AGV</h3><p>设备负责；责任绑角色；资产与单元两条记录。</p></div>
+        <div class="form"><h3>工位</h3><p>工位负责；硬件聚合；人可在工位内轮换。</p></div>
+      </div>
+    </section>
+
+    <section class="card span-12">
+      <div class="card-head"><span class="card-num">03</span><h2>公共能力管什么</h2><span class="card-note">一个标准，多仓复用</span></div>
+      <div class="groups">
+        <div class="group"><div class="group-label">资产</div><p>设备类、设备实例</p></div>
+        <div class="group"><div class="group-label">接入</div><p>适配器、API、连接</p></div>
+        <div class="group"><div class="group-label">运行</div><p>状态、命令、证据</p></div>
+        <div class="group"><div class="group-label">异常</div><p>故障、兜底</p></div>
+        <div class="group"><div class="group-label">治理</div><p>版本、权限、审计</p></div>
+      </div>
+      <p class="note">资产回答有什么；接入回答怎么连；运行回答干了什么。</p>
+    </section>
+
+    <section class="card span-12">
+      <div class="card-head"><span class="card-num">04</span><h2>按仓库设置</h2><span class="card-note">标准一套，配置各建</span></div>
+      <div class="flow">
+        <div class="flow-step"><span class="flow-num">1</span><h3>全局标准</h3><p>设备类 · 能力 · 适配器 · 证据格式</p></div>
+        <div class="flow-step"><span class="flow-num">2</span><h3>仓库配置</h3><p>仓库画像 · 区域 · 班次 · 端点</p></div>
+        <div class="flow-step"><span class="flow-num">3</span><h3>设备实例</h3><p>序列号 · 位置 · 固件 · 状态</p></div>
+        <div class="flow-step"><span class="flow-num">4</span><h3>执行单元</h3><p>人 / AGV / 工位，引用实例</p></div>
+      </div>
+      <table class="table" style="margin-top:28px">
+        <thead><tr><th>项</th><th>仓库 A</th><th>仓库 B</th></tr></thead>
+        <tbody>
+          <tr><td>设备</td><td>PDA-X（有摄像头）、打印机 P1、秤 S1</td><td>PDA-Y（无摄像头）、打印机 P2</td></tr>
+          <tr><td>单元</td><td>人 + 输入、打包台</td><td>人 + 输入、质检台</td></tr>
+          <tr><td>差异</td><td>可拍照取证</td><td>拍照缺口：共享摄像头或人工</td></tr>
+        </tbody>
+      </table>
+      <p class="note">标准在全局，设备实例与执行单元在仓库。</p>
+    </section>
+
+    <section class="card span-12">
+      <div class="card-head"><span class="card-num">05</span><h2>多主体</h2><span class="card-note">同一套能力，不同单元形态</span></div>
+      <div class="table-scroll">
+        <table class="table">
+          <thead><tr><th>主体</th><th>单元形态</th><th>引用硬件</th><th>任务归属</th><th>责任绑定</th></tr></thead>
+          <tbody>
+            <tr><td>人</td><td>人 + 输入</td><td>PDA / PC + 扫码枪、打印机、秤、摄像头</td><td>人</td><td>本人 + 班组长</td></tr>
+            <tr><td>AGV</td><td>单体</td><td>AGV</td><td>AGV</td><td>调度 + 维护 + 安全</td></tr>
+            <tr><td>工位</td><td>设施</td><td>打印机、秤、摄像头</td><td>工位</td><td>工位长 + 维护</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card span-12">
+      <div class="card-head"><span class="card-num">06</span><h2>接入方式</h2></div>
+      <div class="table-scroll">
+        <table class="table">
+          <thead><tr><th>通道</th><th>怎么接</th><th>硬件</th></tr></thead>
+          <tbody>
+            <tr><td>本地</td><td>USB、串口；PC/代理</td><td>打印机、秤</td></tr>
+            <tr><td>局域网</td><td>Wi-Fi、网口；IP/端口</td><td>PDA、PLC</td></tr>
+            <tr><td>厂商</td><td>接口、VDA 5050；鉴权/回调</td><td>AGV、摄像头、WCS</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">打印机、秤不直连系统：系统到 PC/代理，PC 再到设备。摄像头走外部视频服务商，不自建监控管理。</p>
+      <h3 class="subhead">六类接入样例</h3>
+      <div class="examples">
+        <div class="example">
+          <div class="example-head"><h3>AGV</h3><span class="example-tag">厂商服务</span></div>
+          <p><b>接口</b>：车队接口或 VDA 5050。</p>
+          <p><b>地址</b>：https://fleet.example.com/api/v1</p>
+          <p><b>连接</b>：Wi-Fi / 5G，走车队服务。</p>
+          <p><b>动作</b>：下发搬运、取消、回充；收到达与位置。</p>
+          <p><b>要点</b>：地图、任务号映射、心跳、电量。</p>
+        </div>
+        <div class="example">
+          <div class="example-head"><h3>流水线</h3><span class="example-tag">WCS / PLC</span></div>
+          <p><b>接口</b>：WCS 或 PLC 网关，OPC UA / 点位表。</p>
+          <p><b>地址</b>：https://wcs.example.com/api/v1</p>
+          <p><b>连接</b>：工业网，固定线体。</p>
+          <p><b>动作</b>：下发道口、改道；收通过事件。</p>
+          <p><b>要点</b>：点位表、堵塞/急停、握手时序。</p>
+        </div>
+        <div class="example">
+          <div class="example-head"><h3>打印机</h3><span class="example-tag">本地 PC</span></div>
+          <p><b>接口</b>：PC/打印代理（C-Lodop 或 hiprint）。</p>
+          <p><b>地址</b>：http://127.0.0.1:8000/c-lodop</p>
+          <p><b>连接</b>：USB 到 PC，系统不直连。</p>
+          <p><b>动作</b>：提交模板 + 数据，取标签号。</p>
+          <p><b>要点</b>：模板版本、打印机名、队列。</p>
+        </div>
+        <div class="example">
+          <div class="example-head"><h3>称重机</h3><span class="example-tag">本地 PC</span></div>
+          <p><b>接口</b>：PC/称重代理，驱动或 SDK。</p>
+          <p><b>地址</b>：COM3 / 9600</p>
+          <p><b>连接</b>：串口 / USB 到 PC。</p>
+          <p><b>动作</b>：读重量，判稳定，取校准状态。</p>
+          <p><b>要点</b>：波特率、量程、校准、去皮。</p>
+        </div>
+        <div class="example">
+          <div class="example-head"><h3>摄像头</h3><span class="example-tag">外部服务</span></div>
+          <p><b>接口</b>：外部视频服务商接口。</p>
+          <p><b>地址</b>：https://video.example.com/api/v1</p>
+          <p><b>连接</b>：服务商连摄像头，系统只调服务。</p>
+          <p><b>动作</b>：抓拍、取片段，拿媒体号。</p>
+          <p><b>要点</b>：覆盖区域、鉴权、保留期。</p>
+        </div>
+        <div class="example">
+          <div class="example-head"><h3>PDA</h3><span class="example-tag">我们的 App</span></div>
+          <p><b>接口</b>：我们的 App，Wi-Fi 连系统。</p>
+          <p><b>地址</b>：wss://wms.example.com/pda</p>
+          <p><b>连接</b>：不依赖 PC，移动使用。</p>
+          <p><b>动作</b>：扫描、输入、确认，上报心跳。</p>
+          <p><b>要点</b>：App 版本、能力清单、离线队列。</p>
+        </div>
+      </div>
+      <h3 class="subhead">AGV 接入</h3>
+      <div class="table-scroll">
+        <table class="table">
+          <thead><tr><th>项</th><th>内容</th></tr></thead>
+          <tbody>
+            <tr><td>接口</td><td>车队接口或 VDA 5050（MQTT/JSON）；3.0.0 已发布，现场按车队支持版本。</td></tr>
+            <tr><td>身份</td><td>厂商 + 序列号；MQTT 主题按车队配置。</td></tr>
+            <tr><td>连接</td><td>Wi-Fi/5G；MQTT 代理或车队端点；心跳与连接状态。</td></tr>
+            <tr><td>任务</td><td>WMS 搬运单 → 搬运单（任务单号、更新号、节点/边/动作）；取消、暂停、充电走即时指令。</td></tr>
+            <tr><td>状态</td><td>状态报文：订单进度、最后节点、位置、电量、行驶状态、错误；可视化供地图展示。</td></tr>
+            <tr><td>地图</td><td>节点/边、区域限速、禁行区、电梯/门；交通管制由车队服务负责，VDA 5050 不管。</td></tr>
+            <tr><td>产出物</td><td>到达节点、位置、时间、电量、订单完成状态。</td></tr>
+            <tr><td>异常</td><td>离线、阻塞、低电、手动模式、车队服务不可用 → 改派另一台或转人工叉车。</td></tr>
+            <tr><td>与流水线不同</td><td>移动设备，走车队服务，要地图/电量/交通；固定设施，走 WCS/PLC，要点位表/堵塞/急停/握手。</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3 class="subhead">AGV 搬运链路</h3>
+      <div class="diagram-scroll">
+        <svg class="diagram" viewBox="0 0 1520 520" role="img" aria-label="AGV 搬运接入时序">
+          <defs>
+            <marker id="agvArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#5d6875"></path>
+            </marker>
+          </defs>
+
+          <rect x="170" y="30" width="260" height="90" rx="14" class="box lane-wms"></rect>
+          <text x="300" y="72" class="box-title">WMS</text>
+          <text x="300" y="98" class="box-sub">编排</text>
+
+          <rect x="630" y="30" width="260" height="90" rx="14" class="box lane-pc"></rect>
+          <text x="760" y="72" class="box-title">车队服务</text>
+          <text x="760" y="98" class="box-sub">车队接口 / VDA 5050</text>
+
+          <rect x="1090" y="30" width="260" height="90" rx="14" class="box lane-dev"></rect>
+          <text x="1220" y="72" class="box-title">AGV</text>
+          <text x="1220" y="98" class="box-sub">执行</text>
+
+          <line x1="300" y1="120" x2="300" y2="460" class="lifeline"></line>
+          <line x1="760" y1="120" x2="760" y2="460" class="lifeline"></line>
+          <line x1="1220" y1="120" x2="1220" y2="460" class="lifeline"></line>
+
+          <line x1="300" y1="170" x2="758" y2="170" class="svg-arrow" marker-end="url(#agvArrow)"></line>
+          <text x="530" y="158" class="arrow-label">创建搬运任务</text>
+
+          <line x1="760" y1="240" x2="1218" y2="240" class="svg-arrow" marker-end="url(#agvArrow)"></line>
+          <text x="990" y="228" class="arrow-label">搬运单 / 即时指令</text>
+
+          <line x1="1220" y1="310" x2="762" y2="310" class="svg-arrow svg-arrow-dash" marker-end="url(#agvArrow)"></line>
+          <text x="990" y="298" class="arrow-label">状态（位置 / 电量 / 进度）</text>
+
+          <line x1="760" y1="380" x2="302" y2="380" class="svg-arrow svg-arrow-dash" marker-end="url(#agvArrow)"></line>
+          <text x="530" y="368" class="arrow-label">到达 / 异常</text>
+
+          <text x="760" y="500" class="seq-note">交通、门、电梯由车队服务与现场联动；VDA 5050 只管接口，不管交通调度。</text>
+        </svg>
+      </div>
+      <p class="note"><b>相同与不同</b>　打印机和秤都挂 PC、都走本地口，但打印机是任务型（模板 + 标签号），秤是读数型（稳定 + 校准）；AGV 走车队接口或 VDA 5050，流水线走 WCS/PLC，两者接入方式不同；摄像头不接设备，接外部视频服务商。</p>
+    </section>
+
+    <section class="card span-12">
+      <div class="card-head"><span class="card-num">07</span><h2>适配器的四个动作</h2><span class="card-note">执行单元通过它调用硬件</span></div>
+      <div class="methods">
+        <div class="method">
+          <svg class="method-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="4" width="18" height="24" rx="2"></rect><path d="M11 10h10M11 16h10M11 22h6"></path></svg>
+          <h3 class="method-name">自报能力</h3>
+          <p>适配器把设备的能力说清楚：能做什么、要什么参数、回什么结果、是什么版本。建档和换型号时用。</p>
+        </div>
+        <div class="method">
+          <svg class="method-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16h6l3-8 4 16 3-8h6"></path></svg>
+          <h3 class="method-name">探活</h3>
+          <p>适配器问设备一句现在能不能用：在线、就绪、故障、心跳。派活前和定时巡检时用。</p>
+        </div>
+        <div class="method">
+          <svg class="method-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 6l14 10-14 10z"></path></svg>
+          <h3 class="method-name">执行</h3>
+          <p>执行单元把命令交给适配器，适配器下发给绑定的硬件：打印、称重、抓拍、搬运；设备干完，把结果和产出物带回来。</p>
+        </div>
+        <div class="method">
+          <svg class="method-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 22h16l-2-5v-5a6 6 0 0 0-12 0v5z"></path><path d="M14 26h4"></path></svg>
+          <h3 class="method-name">订阅</h3>
+          <p>适配器订阅设备状态，一变就主动告诉你：完成、故障、离线。不用一直问。</p>
+        </div>
+      </div>
+      <p class="order">先自报，再看能不能用；能用就下命令，变化靠订阅。</p>
+    </section>
+
+    <section class="card span-12">
+      <div class="card-head"><span class="card-num">08</span><h2>怎么用公共能力</h2><span class="card-note">四种取用面 + 一条完整链路</span></div>
+      <p class="lead">引用、继承、聚合、消费不是四个步骤，是每一步都会发生的四个取用面：先引用设备，再继承能力，聚合状态判断可用，最后消费产出物。下面用拣货 → 打印 → 称重 → 拍照走一遍。</p>
+      <div class="usage">
+        <div><b>引用</b><span>打印机、秤、摄像头</span></div>
+        <div><b>继承</b><span>扫描、打印、称重、取证</span></div>
+        <div><b>聚合</b><span>人的状态 + PC/设备状态</span></div>
+        <div><b>消费</b><span>标签、重量、照片</span></div>
+      </div>
+      <h3 class="subhead">打印 / 称重链路</h3>
+      <p class="note" style="margin:0 0 16px">时序图只画打印与称重；拣货与拍照见下表。</p>
+      <div class="diagram-scroll">
+        <svg class="diagram" viewBox="0 0 1520 700" role="img" aria-label="打印与称重的接入时序">
+          <defs>
+            <marker id="seqArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#5d6875"></path>
+            </marker>
+          </defs>
+
+          <rect x="60" y="30" width="260" height="90" rx="14" class="box lane-person"></rect>
+          <text x="190" y="72" class="box-title">人 / PDA</text>
+          <text x="190" y="98" class="box-sub">发起</text>
+
+          <rect x="440" y="30" width="260" height="90" rx="14" class="box lane-wms"></rect>
+          <text x="570" y="72" class="box-title">WMS</text>
+          <text x="570" y="98" class="box-sub">编排</text>
+
+          <rect x="820" y="30" width="260" height="90" rx="14" class="box lane-pc"></rect>
+          <text x="950" y="72" class="box-title">PC / 代理</text>
+          <text x="950" y="98" class="box-sub">C-Lodop 或 hiprint</text>
+
+          <rect x="1200" y="30" width="260" height="90" rx="14" class="box lane-dev"></rect>
+          <text x="1330" y="72" class="box-title">打印机 / 秤</text>
+          <text x="1330" y="98" class="box-sub">USB / 串口</text>
+
+          <line x1="190" y1="120" x2="190" y2="600" class="lifeline"></line>
+          <line x1="570" y1="120" x2="570" y2="600" class="lifeline"></line>
+          <line x1="950" y1="120" x2="950" y2="600" class="lifeline"></line>
+          <line x1="1330" y1="120" x2="1330" y2="600" class="lifeline"></line>
+
+          <line x1="190" y1="170" x2="568" y2="170" class="svg-arrow" marker-end="url(#seqArrow)"></line>
+          <text x="380" y="158" class="arrow-label">提交任务</text>
+
+          <line x1="570" y1="240" x2="948" y2="240" class="svg-arrow" marker-end="url(#seqArrow)"></line>
+          <text x="760" y="228" class="arrow-label">打印 / 称重命令</text>
+
+          <line x1="950" y1="310" x2="1328" y2="310" class="svg-arrow" marker-end="url(#seqArrow)"></line>
+          <text x="1140" y="298" class="arrow-label">USB / 串口</text>
+
+          <line x1="1330" y1="380" x2="952" y2="380" class="svg-arrow svg-arrow-dash" marker-end="url(#seqArrow)"></line>
+          <text x="1140" y="368" class="arrow-label">结果 / 状态</text>
+
+          <line x1="950" y1="450" x2="572" y2="450" class="svg-arrow svg-arrow-dash" marker-end="url(#seqArrow)"></line>
+          <text x="760" y="438" class="arrow-label">产出物（标签号 / 重量）</text>
+
+          <line x1="570" y1="520" x2="192" y2="520" class="svg-arrow svg-arrow-dash" marker-end="url(#seqArrow)"></line>
+          <text x="380" y="508" class="arrow-label">完成 / 异常</text>
+
+          <text x="760" y="640" class="seq-note">系统不直连打印机/秤；系统只到 PC/代理。摄像头另行走外部视频服务商。</text>
+        </svg>
+      </div>
+      <div class="table-scroll" style="margin-top:28px">
+        <table class="table">
+          <thead><tr><th>步骤</th><th>执行单元</th><th>链路与依赖</th><th>产出物</th><th>缺失兜底</th></tr></thead>
+          <tbody>
+            <tr><td>拣货</td><td>人 + 输入 · 扫描</td><td>PDA 经 Wi-Fi 连系统</td><td>扫描流水</td><td>手工录入</td></tr>
+            <tr><td>打印</td><td>打印站 · 打印</td><td>系统 → PC（C-Lodop/代理）→ USB 打印机</td><td>标签号</td><td>换机或手写</td></tr>
+            <tr><td>称重</td><td>称重站 · 称重</td><td>系统 → PC（代理）→ 串口/USB 秤</td><td>重量 + 稳定</td><td>换秤或复核</td></tr>
+            <tr><td>拍照</td><td>质检站 · 取证</td><td>系统 → 外部视频服务商 → 摄像头</td><td>媒体号 + 时间</td><td>人工拍照</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">打印机、秤不直连系统：系统到 PC/代理，PC 再到设备。摄像头走外部视频服务商的接口，不自建监控管理。产出物回写任务，成为证据。</p>
+    </section>
+
+    <section class="card span-12">
+      <div class="card-head"><span class="card-num">09</span><h2>共享与绑定</h2><span class="card-note">硬件不是单元私有</span></div>
+      <table class="table">
+        <thead><tr><th>关系</th><th>例子</th><th>怎么理解</th></tr></thead>
+        <tbody>
+          <tr><td>绑定</td><td>打包台的扫码枪坏了，换 SC-06</td><td>张伟还是同一个执行单元，任务不改派，只换扫码枪引用。</td></tr>
+          <tr><td>共享</td><td>一台打印机服务 3 个拣货员</td><td>打印机不属于任何一个人；三个人都引用它，打印任务排队，产出物带打印机编号。</td></tr>
+          <tr><td>自身</td><td>AGV-01 既是资产，也是单元</td><td>资产记录管序列号、固件、维护；单元记录管任务、负荷、班次；两条记录 1:1 关联。</td></tr>
+        </tbody>
+      </table>
+      <p class="note">共享设备不归单元所有，单元只是引用；绑定设备换机时只换引用，单元编号不变。</p>
+    </section>
+
+    <section class="card span-12">
+      <div class="card-head"><span class="card-num">10</span><h2>任务怎么落到硬件</h2></div>
+      <svg class="diagram" viewBox="0 0 1520 340" role="img" aria-label="任务到硬件的执行链">
+        <defs>
+          <marker id="arrow3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#5d6875"></path>
+          </marker>
+        </defs>
+
+        <rect x="50" y="60" width="260" height="130" rx="14" class="box"></rect>
+        <text x="180" y="105" class="box-title">任务</text>
+        <text x="180" y="138" class="box-sub">拣货 · 上架 · 移库</text>
+
+        <rect x="340" y="60" width="260" height="130" rx="14" class="box"></rect>
+        <text x="470" y="105" class="box-title">执行单元</text>
+        <text x="470" y="138" class="box-sub">人 · AGV · 工位</text>
+
+        <rect x="630" y="60" width="260" height="130" rx="14" class="box"></rect>
+        <text x="760" y="105" class="box-title">能力</text>
+        <text x="760" y="136" class="box-sub">扫描 · 打印 · 称重</text>
+        <text x="760" y="163" class="box-sub">取证 · 搬运 · 输送</text>
+
+        <rect x="920" y="60" width="260" height="130" rx="14" class="box"></rect>
+        <text x="1050" y="105" class="box-title">硬件</text>
+        <text x="1050" y="138" class="box-sub">PDA · 打印机 · 秤</text>
+
+        <rect x="1210" y="60" width="260" height="130" rx="14" class="box"></rect>
+        <text x="1340" y="105" class="box-title">产出物</text>
+        <text x="1340" y="138" class="box-sub">标签 · 重量 · 照片</text>
+
+        <line x1="310" y1="125" x2="338" y2="125" class="svg-arrow" marker-end="url(#arrow3)"></line>
+        <line x1="600" y1="125" x2="628" y2="125" class="svg-arrow" marker-end="url(#arrow3)"></line>
+        <line x1="890" y1="125" x2="918" y2="125" class="svg-arrow" marker-end="url(#arrow3)"></line>
+        <line x1="1180" y1="125" x2="1208" y2="125" class="svg-arrow" marker-end="url(#arrow3)"></line>
+
+        <text x="760" y="280" class="arrow-label">产出物回写任务，成为证据</text>
+        <text x="760" y="310" class="arrow-label">一个任务同一时刻只归一个执行单元</text>
+      </svg>
+    </section>
+
+    <section class="card span-12">
+      <div class="card-head"><span class="card-num">11</span><h2>一张表说清关系</h2></div>
+      <table class="table">
+        <thead><tr><th>维度</th><th>公共能力（硬件接入）</th><th>执行单元（使用方）</th></tr></thead>
+        <tbody>
+          <tr><td>回答</td><td>设备怎么连、什么状态、能下什么命令、返回什么证据</td><td>任务归谁、接什么任务、能力够不够、负荷多少</td></tr>
+          <tr><td>单位</td><td>设备类 / 设备实例</td><td>人 / 输入 / AGV / 工位</td></tr>
+          <tr><td>范围</td><td>全局标准 + 仓库实例</td><td>仓库编制 + 班次区域</td></tr>
+          <tr><td>产出</td><td>状态、命令、产出物</td><td>任务归属、接收契约、负荷</td></tr>
+          <tr><td>变化</td><td>型号、固件、协议</td><td>排班、契约、任务</td></tr>
+          <tr><td>关系</td><td><b>供给</b></td><td><b>使用</b></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+  </main>
+
+  <footer class="foot">
+    <span><b>完成判据</b>　任务 → 单元 → 能力 → 硬件 → 产出物 → 证据，闭环。</span>
+    <span><b>两层分工</b>　公共能力供给；执行单元使用。</span>
+  </footer>
+</div>
+<script>
+(function () {
+  var DATA = {
+    label: '仓库 A',
+    hardware: [
+      { id: 'AGV-01', type: 'AGV', role: '移动单元', location: '停靠位 A-01', sn: 'AGV2024-0187', fw: 'v3.2.1', api: 'https://fleet.example.com/api/v1', auth: 'Bearer ••••', adapter: 'agv-fleet-v1', status: '空闲', note: '电量 78%；移动单元，不绑固定工位。' },
+      { id: 'PC-01', type: 'PC', role: '固定硬件', location: '打包台 01', sn: 'PC2023-0451', fw: 'Win10 22H2', api: 'http://127.0.0.1:9100/agent', auth: '本机服务', adapter: 'pc-agent-v1', status: '在线', note: '打包台主机；扫码枪、打印机、秤都挂在它上面。' },
+      { id: 'SC-01', type: '扫码枪', role: '固定硬件', location: '打包台 01', sn: 'SC2024-0092', fw: 'HID 1.2', api: 'USB-HID / 键盘口', auth: '本机驱动', adapter: 'hid-scanner-v1', status: '在线', note: 'USB 接 PC；工位固定，不随身。' },
+      { id: 'P1', type: '打印机', role: '固定硬件', location: '打包台 01', sn: 'PR2023-0311', fw: 'v2.8', api: 'http://127.0.0.1:8000/c-lodop', auth: '本机服务', adapter: 'c-lodop-v1', status: '在线', note: 'USB 接 PC；系统不直连打印机。' },
+      { id: 'S1', type: '秤', role: '固定硬件', location: '打包台 01', sn: 'SCL2022-0045', fw: 'v1.9', api: 'COM3 / 9600', auth: '本机驱动', adapter: 'scale-driver-v1', status: '校准中', note: '串口接 PC；称重前看校准。' },
+      { id: 'C1', type: '摄像头', role: '固定硬件', location: '打包台 01', sn: 'CAM2024-0077', fw: 'v5.1', api: 'https://video.example.com/api/v1', auth: 'Bearer ••••', adapter: 'video-service-v1', status: '在线', note: '外部视频服务商；不自建监控。' },
+      { id: 'C-01', type: '流水线', role: '固定设施', location: '线体 L1 / 道口 3', sn: 'LINE-L1-D3', fw: 'PLC v4.0', api: 'https://wcs.example.com/api/v1', auth: 'Bearer ••••', adapter: 'wcs-v1', status: '运行', note: '走 WCS/PLC；系统不直连线体。' },
+      { id: 'PDA-01', type: 'PDA', role: '随身终端', location: '王芳', sn: 'PDA2024-0153', fw: 'App 3.6.2', api: 'wss://wms.example.com/pda', auth: 'App 登录态', adapter: 'pda-app-v1', status: '在线', note: '我们的 App；随身，不绑工位。' }
+    ],
+    units: [
+      { id: 'EU-HP-001', form: '人 + 输入', subject: '张伟', terminal: 'PC-01', station: '打包台 01', accepts: ['打包', '复核', '打印', '称重'], capabilities: ['扫描', '打印', '称重', '拍照'], status: '空闲', load: '0.62' },
+      { id: 'EU-HP-002', form: '人 + 输入', subject: '李娜', terminal: 'PC-01', station: '打包台 01', accepts: ['打包', '复核', '打印', '称重'], capabilities: ['扫描', '打印', '称重', '拍照'], status: '空闲', load: '0.18' },
+      { id: 'EU-STN-001', form: '工位', subject: '打包台 01', terminal: '—', station: '打包台 01', accepts: ['打包', '打印', '称重', '拍照'], capabilities: ['打印', '称重', '拍照'], status: '空闲', load: '0.40' },
+      { id: 'EU-HP-003', form: '人 + 输入', subject: '王芳', terminal: 'PDA-01', station: '拣货区 A', accepts: ['拣货', '上架'], capabilities: ['扫描'], status: '空闲', load: '0.35' },
+      { id: 'EU-AGV-001', form: 'AGV', subject: 'AGV-01', terminal: '—', station: '停靠位 A-01', accepts: ['搬运'], capabilities: ['搬运'], status: '空闲', load: '0.30' }
+    ]
+  };
+  var state = { hw: 'AGV-01', unit: 'EU-HP-001', noticeHw: '', noticeUnit: '' };
+  var els = {
+    hwList: document.getElementById('m-hw-list'),
+    hwDetail: document.getElementById('m-hw-detail'),
+    unitList: document.getElementById('m-unit-list'),
+    unitDetail: document.getElementById('m-unit-detail'),
+    relDetail: document.getElementById('m-rel-detail')
+  };
+  if (!els.hwList) return;
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function wh() { return DATA; }
+  function hw(id) {
+    var a = wh().hardware;
+    for (var i = 0; i < a.length; i++) if (a[i].id === id) return a[i];
+    return null;
+  }
+  function unit(id) {
+    var a = wh().units;
+    for (var i = 0; i < a.length; i++) if (a[i].id === id) return a[i];
+    return null;
+  }
+  function statusClass(s) {
+    if (/离线|故障|超时|不可用/.test(s)) return 'is-bad';
+    if (/校准|维护|降级/.test(s)) return 'is-warn';
+    return 'is-ok';
+  }
+  function statusTag(s) {
+    return '<span class="mstatus ' + statusClass(s) + '">' + esc(s) + '</span>';
+  }
+  function interfaceOwner(type) {
+    if (type === 'AGV' || type === '流水线' || type === '摄像头') return '厂商服务';
+    if (type === 'PDA') return '自有 App';
+    if (type === 'PC') return '本地服务';
+    if (type === '扫码枪') return '设备驱动';
+    if (type === '打印机') return '本地服务';
+    if (type === '秤') return '设备驱动';
+    return '—';
+  }
+  function chip(name, meta, tone) {
+    return '<div class="mchip ' + (tone || '') + '"><b>' + esc(name) + '</b> ' + esc(meta) + '</div>';
+  }
+  function btn(label, act, primary) {
+    return '<button type="button" class="mbtn ' + (primary ? 'primary' : '') + '" data-act="' + act + '">' + esc(label) + '</button>';
+  }
+  function select(act, options, current) {
+    return '<select data-act="' + act + '">' + options.map(function (o) {
+      return '<option' + (o === current ? ' selected' : '') + '>' + esc(o) + '</option>';
+    }).join('') + '</select>';
+  }
+  function stationOptions() {
+    return ['打包台 01', '打包台 02', '拣货区 A'];
+  }
+  function locationOptions(h) {
+    if (h.type === 'AGV') return ['停靠位 A-01', '充电位 CH-01'];
+    if (h.type === '流水线') return ['线体 L1 / 道口 3', '线体 L1 / 道口 5'];
+    return ['打包台 01', '打包台 02'];
+  }
+  function terminalOptions() {
+    return wh().hardware.filter(function (h) { return h.type === 'PDA' || h.type === 'PC'; }).map(function (h) { return h.id; });
+  }
+  function effectiveHardware(u) {
+    var list = [];
+    if (!u) return list;
+    if (u.form === 'AGV') {
+      var self = hw(u.subject);
+      if (self) list.push(self);
+      return list;
+    }
+    if (u.terminal && u.terminal !== '—') {
+      var term = hw(u.terminal);
+      if (term) list.push(term);
+    }
+    wh().hardware.forEach(function (h) {
+      if (h.location !== u.station) return;
+      var dup = list.some(function (x) { return x.id === h.id; });
+      if (!dup) list.push(h);
+    });
+    return list;
+  }
+  function unitsUsing(h) {
+    return wh().units.filter(function (u) {
+      return effectiveHardware(u).some(function (x) { return x.id === h.id; });
+    });
+  }
+  function relCard(title, meta, tone) {
+    return '<div class="mrel-card ' + (tone || '') + '"><b>' + esc(title) + '</b><span>' + esc(meta) + '</span></div>';
+  }
+
+  function renderHwList() {
+    var html = '<div class="mlist-title">硬件台账 · ' + esc(wh().label) + '</div>';
+    wh().hardware.forEach(function (h) {
+      var active = h.id === state.hw;
+      var bad = statusClass(h.status) === 'is-bad';
+      html += '<div class="mrow ' + (active ? 'is-active' : '') + (bad ? ' is-bad' : '') + '" data-hw="' + h.id + '">'
+        + '<b>' + esc(h.id + ' · ' + h.type) + '</b><span>' + esc(h.location + ' · ' + h.status) + '</span></div>';
+    });
+    els.hwList.innerHTML = html;
+  }
+
+  function renderUnitList() {
+    var html = '<div class="mlist-title">执行单元 · ' + esc(wh().label) + '</div>';
+    wh().units.forEach(function (u) {
+      var active = u.id === state.unit;
+      var bad = statusClass(u.status) === 'is-bad';
+      html += '<div class="mrow ' + (active ? 'is-active' : '') + (bad ? ' is-bad' : '') + '" data-unit="' + u.id + '">'
+        + '<b>' + esc(u.subject + ' · ' + u.form) + '</b><span>' + esc(u.station + ' · ' + u.status) + '</span></div>';
+    });
+    els.unitList.innerHTML = html;
+  }
+
+  function renderHardwareDetail(h) {
+    if (!h) return '<p class="mnotice">请选择一台硬件。</p>';
+    var users = unitsUsing(h);
+    var loc = h.type === 'PDA' ? esc(h.location) : select('location', locationOptions(h), h.location);
+    var html = '<div class="mhead"><h3>' + esc(h.id) + ' · ' + esc(h.type) + '</h3>' + statusTag(h.status) + '</div>';
+    if (state.noticeHw) html += '<p class="mnotice">' + esc(state.noticeHw) + '</p>';
+    html += '<dl class="mgrid">'
+      + '<div class="mfield"><dt>角色</dt><dd>' + esc(h.role) + '</dd></div>'
+      + '<div class="mfield"><dt>' + (h.type === 'AGV' ? '绑定位置' : '安装工位') + '</dt><dd>' + loc + '</dd></div>'
+      + '<div class="mfield"><dt>接口归属</dt><dd>' + esc(interfaceOwner(h.type)) + '</dd></div>'
+      + '<div class="mfield"><dt>适配器</dt><dd>' + esc(h.adapter) + '</dd></div>'
+      + '<div class="mfield"><dt>序列号</dt><dd>' + esc(h.sn || '—') + '</dd></div>'
+      + '<div class="mfield"><dt>固件 / 版本</dt><dd>' + esc(h.fw || '—') + '</dd></div>'
+      + '<div class="mfield"><dt>API / 本地地址</dt><dd><code>' + esc(h.api) + '</code></dd></div>'
+      + '<div class="mfield"><dt>鉴权</dt><dd>' + esc(h.auth) + '</dd></div>'
+      + '<div class="mfield"><dt>最后探活</dt><dd>2026-10-21 10:12</dd></div>'
+      + '</dl>';
+    html += '<div class="mactions">' + btn('连接测试', 'test', true) + btn(h.status === '离线' ? '恢复在线' : '模拟故障', 'fault') + '</div>';
+    html += '<div class="mimpact"><h4>影响</h4><p>'
+      + (users.length ? users.map(function (u) { return u.subject; }).join('、') + '的有效硬件包含这台设备。' + (h.status === '离线' ? '当前离线，相关能力不可用。' : '当前可用。')
+        : '暂无单元直接使用；它可能只是工位安装硬件。')
+      + '</p></div>';
+    html += '<p class="note">' + esc(h.note) + '</p>';
+    return html;
+  }
+
+  function renderUnitDetail(u) {
+    if (!u) return '<p class="mnotice">请选择一个执行单元。</p>';
+    var eff = effectiveHardware(u);
+    var term = u.form === '人 + 输入' ? select('terminal', terminalOptions(), u.terminal) : esc(u.terminal || '—');
+    var station = u.form === 'AGV'
+      ? select('station', locationOptions(hw(u.subject) || { type: 'AGV' }), u.station)
+      : select('station', stationOptions(), u.station);
+    var html = '<div class="mhead"><h3>' + esc(u.subject) + ' · ' + esc(u.form) + '</h3>' + statusTag(u.status) + '</div>';
+    if (state.noticeUnit) html += '<p class="mnotice">' + esc(state.noticeUnit) + '</p>';
+    html += '<dl class="mgrid">'
+      + '<div class="mfield"><dt>单元编号</dt><dd>' + esc(u.id) + '</dd></div>'
+      + '<div class="mfield"><dt>形态</dt><dd>' + esc(u.form) + '</dd></div>'
+      + '<div class="mfield"><dt>主体</dt><dd>' + esc(u.subject) + '</dd></div>'
+      + '<div class="mfield"><dt>终端</dt><dd>' + term + '</dd></div>'
+      + '<div class="mfield"><dt>当前工位</dt><dd>' + station + '</dd></div>'
+      + '<div class="mfield"><dt>负荷</dt><dd>' + esc(u.load) + '</dd></div>'
+      + '</dl>';
+    html += '<p class="demo-label">可接任务</p><div class="mchips">' + u.accepts.map(function (x) { return '<span class="mchip">' + esc(x) + '</span>'; }).join('') + '</div>';
+    html += '<p class="demo-label">能力</p><div class="mchips">' + u.capabilities.map(function (x) { return '<span class="mchip">' + esc(x) + '</span>'; }).join('') + '</div>';
+    html += '<p class="demo-label">有效硬件（终端 + 当前工位）</p><div class="mchips">'
+      + (eff.length ? eff.map(function (h) { return chip(h.id + ' · ' + h.type, h.status, statusClass(h.status)); }).join('') : '<span class="mnotice">无</span>')
+      + '</div>';
+    var missing = [];
+    function has(type) {
+      return eff.some(function (h) { return h.type === type && !/离线|校准/.test(h.status); });
+    }
+    if (u.capabilities.indexOf('拍照') >= 0 && !has('摄像头')) missing.push('拍照（工位无摄像头）');
+    if (u.capabilities.indexOf('打印') >= 0 && !has('打印机')) missing.push('打印（打印机离线/缺失）');
+    if (u.capabilities.indexOf('称重') >= 0 && !has('秤')) missing.push('称重（秤校准/离线）');
+    if (u.capabilities.indexOf('搬运') >= 0 && !has('AGV')) missing.push('搬运（AGV 离线）');
+    var stationExtra = eff.filter(function (x) { return x.id !== u.terminal; });
+    var okText = stationExtra.length ? '终端和当前工位硬件都在线。' : '随身终端在线；移动单元不占工位硬件。';
+    html += '<div class="mimpact"><h4>' + (missing.length ? '能力缺口' : '有效硬件齐全') + '</h4><p>'
+      + (missing.length ? esc(missing.join('；')) + '。' : okText)
+      + '</p></div>';
+    var acts = btn('保存绑定', 'save', true) + btn(u.status === '离线' ? '启用单元' : '停用单元', 'toggle-unit');
+    if (u.subject === '张伟' && wh().units.some(function (x) { return x.subject === '李娜'; })) acts += btn('换班：李娜接替', 'shift');
+    html += '<div class="mactions">' + acts + '</div>';
+    html += '<p class="note">有效硬件不直接挂在单元上：终端由单元引用，扫码枪/打印机/秤/摄像头随工位。</p>';
+    return html;
+  }
+
+  function renderRelation() {
+    var w = wh();
+    var fixed = w.hardware.filter(function (h) { return h.type !== 'PDA'; });
+    var locs = [];
+    fixed.forEach(function (h) { if (locs.indexOf(h.location) < 0) locs.push(h.location); });
+    var html = '';
+    html += '<div class="mrelation">';
+    html += '<div class="mrel-col"><h4>硬件</h4>' + w.hardware.map(function (h) {
+      return relCard(h.id, h.type + ' · ' + h.status, statusClass(h.status) === 'is-bad' ? 'is-bad' : '');
+    }).join('') + '</div>';
+    html += '<div class="mrel-col"><h4>工位 / 位置</h4>' + locs.map(function (loc) {
+      var ids = fixed.filter(function (h) { return h.location === loc; }).map(function (h) { return h.id; }).join(' / ');
+      return relCard(loc, ids || '无硬件');
+    }).join('') + '</div>';
+    html += '<div class="mrel-col"><h4>执行单元</h4>' + w.units.map(function (u) {
+      return relCard(u.subject, u.form + ' · ' + u.station);
+    }).join('') + '</div>';
+    html += '</div>';
+    html += '<p class="note">共享的是工位，不是硬件归属；终端由单元引用，AGV 绑停靠/充电位。</p>';
+    return html;
+  }
+
+  function renderAll() {
+    renderHwList();
+    els.hwDetail.innerHTML = renderHardwareDetail(hw(state.hw));
+    renderUnitList();
+    els.unitDetail.innerHTML = renderUnitDetail(unit(state.unit));
+    els.relDetail.innerHTML = renderRelation();
+  }
+
+  function actHardware(name) {
+    var h = hw(state.hw);
+    if (!h) return;
+    if (name === 'test') {
+      h.status = h.type === '秤' ? '就绪' : '在线';
+      state.noticeHw = h.id + ' 连接成功：在线 / 就绪。';
+    } else if (name === 'fault') {
+      if (h.status === '离线') {
+        h.status = h.type === '秤' ? '就绪' : '在线';
+        state.noticeHw = h.id + ' 已恢复。';
+      } else {
+        h.status = '离线';
+        state.noticeHw = h.id + ' 离线；相关单元的有效硬件会少一项。';
+        if (h.id === 'P1') {
+          state.unit = 'EU-HP-001';
+          state.noticeUnit = 'P1 离线：张伟的有效硬件少了打印机；兜底改绑另一台打印机，或手写标签。';
+        }
+      }
+    }
+    renderAll();
+  }
+
+  function actUnit(name) {
+    var u = unit(state.unit);
+    if (!u) return;
+    if (name === 'toggle-unit') {
+      u.status = u.status === '离线' ? '空闲' : '离线';
+      state.noticeUnit = u.subject + (u.status === '离线' ? ' 已停用。' : ' 已启用。');
+    } else if (name === 'shift') {
+      var target = wh().units.filter(function (x) { return x.subject === '李娜'; })[0];
+      if (target) {
+        state.unit = target.id;
+        state.noticeUnit = '换班：李娜接替张伟；打包台 01 与工位硬件都不动。';
+      }
+    } else if (name === 'save') {
+      state.noticeUnit = '绑定已保存；有效硬件已刷新。';
+    }
+    renderAll();
+  }
+
+  els.hwList.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-hw]');
+    if (!b) return;
+    state.hw = b.getAttribute('data-hw');
+    state.noticeHw = '';
+    renderAll();
+  });
+  els.unitList.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-unit]');
+    if (!b) return;
+    state.unit = b.getAttribute('data-unit');
+    state.noticeUnit = '';
+    renderAll();
+  });
+  els.hwDetail.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-act]');
+    if (!b || b.tagName === 'SELECT') return;
+    actHardware(b.getAttribute('data-act'));
+  });
+  els.unitDetail.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-act]');
+    if (!b || b.tagName === 'SELECT') return;
+    actUnit(b.getAttribute('data-act'));
+  });
+  els.hwDetail.addEventListener('change', function (e) {
+    var el = e.target.closest('[data-act]');
+    if (!el || el.getAttribute('data-act') !== 'location') return;
+    var h = hw(state.hw);
+    if (h) {
+      h.location = el.value;
+      state.noticeHw = h.id + ' 已绑到 ' + h.location + '；相关单元的有效硬件已刷新。';
+    }
+    renderAll();
+  });
+  els.unitDetail.addEventListener('change', function (e) {
+    var el = e.target.closest('[data-act]');
+    if (!el) return;
+    var a = el.getAttribute('data-act');
+    var u = unit(state.unit);
+    if (!u) return;
+    if (a === 'station') {
+      u.station = el.value;
+      state.noticeUnit = u.subject + ' 已绑到 ' + u.station + '；有效硬件已刷新。';
+    } else if (a === 'terminal') {
+      u.terminal = el.value;
+      state.noticeUnit = u.subject + ' 的终端已改为 ' + u.terminal + '。';
+    }
+    renderAll();
+  });
+
+  var newHw = {
+    root: document.getElementById('m-hw-form'),
+    id: document.getElementById('m-hw-id'),
+    type: document.getElementById('m-hw-type'),
+    sn: document.getElementById('m-hw-sn'),
+    fw: document.getElementById('m-hw-fw'),
+    loc: document.getElementById('m-hw-loc'),
+    adapter: document.getElementById('m-hw-adapter'),
+    api: document.getElementById('m-hw-api'),
+    auth: document.getElementById('m-hw-auth'),
+    status: document.getElementById('m-hw-status')
+  };
+  var ADAPTERS = {
+    '打印机': ['c-lodop-v1', 'hiprint-v1', 'zpl-direct-v1'],
+    '秤': ['scale-driver-v1', 'scale-sdk-v1'],
+    '摄像头': ['video-service-v1', 'onvif-v1'],
+    'PC': ['pc-agent-v1'],
+    '扫码枪': ['hid-scanner-v1', 'serial-scanner-v1'],
+    'PDA': ['pda-app-v1'],
+    'AGV': ['agv-fleet-v1', 'vda5050-v1'],
+    '流水线': ['wcs-v1', 'plc-opcua-v1']
+  };
+  var AUTH_BY_TYPE = { '打印机': '本机服务', 'PC': '本机服务', '秤': '本机驱动', '扫码枪': '本机驱动', 'PDA': 'App 登录态' };
+  var STATUS_BY_TYPE = { 'AGV': '空闲', '流水线': '运行' };
+  var newUn = {
+    root: document.getElementById('m-un-form'),
+    id: document.getElementById('m-un-id'),
+    form: document.getElementById('m-un-form-sel'),
+    subject: document.getElementById('m-un-subject'),
+    term: document.getElementById('m-un-term'),
+    station: document.getElementById('m-un-station')
+  };
+
+  function fillSelect(sel, options, current) {
+    sel.innerHTML = options.map(function (o) {
+      return '<option' + (o === current ? ' selected' : '') + '>' + esc(o) + '</option>';
+    }).join('');
+  }
+  function hwLocations(type) {
+    if (type === 'AGV') return ['停靠位 A-01', '充电位 CH-01'];
+    if (type === '流水线') return ['线体 L1 / 道口 3', '线体 L1 / 道口 5'];
+    if (type === 'PDA') return ['张伟', '李娜', '王芳'];
+    return ['打包台 01', '打包台 02', '拣货区 A'];
+  }
+  function showHwNotice(msg) {
+    state.noticeHw = msg;
+    els.hwDetail.innerHTML = renderHardwareDetail(hw(state.hw));
+  }
+  function showUnNotice(msg) {
+    state.noticeUnit = msg;
+    els.unitDetail.innerHTML = renderUnitDetail(unit(state.unit));
+  }
+
+  function syncHwForm() {
+    var t = newHw.type.value;
+    fillSelect(newHw.loc, hwLocations(t));
+    fillSelect(newHw.adapter, ADAPTERS[t]);
+    newHw.auth.value = AUTH_BY_TYPE[t] || 'Bearer ••••';
+    newHw.status.value = STATUS_BY_TYPE[t] || '在线';
+  }
+  document.getElementById('m-hw-new').addEventListener('click', function () {
+    newHw.root.hidden = false;
+    newHw.id.value = '';
+    newHw.sn.value = '';
+    newHw.fw.value = '';
+    newHw.api.value = '';
+    syncHwForm();
+    newHw.id.focus();
+  });
+  newHw.type.addEventListener('change', syncHwForm);
+  document.getElementById('m-hw-cancel').addEventListener('click', function () {
+    newHw.root.hidden = true;
+  });
+  document.getElementById('m-hw-save').addEventListener('click', function () {
+    var id = (newHw.id.value || '').trim();
+    var type = newHw.type.value;
+    if (!id) { showHwNotice('先填硬件编号。'); return; }
+    if (hw(id)) { showHwNotice('编号 ' + id + ' 已存在，换一个。'); return; }
+    var roleMap = { 'AGV': '移动单元', 'PDA': '随身终端', '流水线': '固定设施' };
+    var loc = newHw.loc.value;
+    wh().hardware.push({
+      id: id,
+      type: type,
+      role: roleMap[type] || '固定硬件',
+      sn: (newHw.sn.value || '').trim() || '—',
+      fw: (newHw.fw.value || '').trim() || '—',
+      location: loc,
+      api: (newHw.api.value || '').trim() || '—',
+      auth: newHw.auth.value,
+      adapter: newHw.adapter.value,
+      status: newHw.status.value,
+      note: '新建实例：资产与接入已登记，下一步把它绑到工位。'
+    });
+    state.hw = id;
+    state.noticeHw = '已新建 ' + id + ' · ' + type + '；位置 ' + loc + '。';
+    newHw.root.hidden = true;
+    renderAll();
+  });
+
+  document.getElementById('m-un-new').addEventListener('click', function () {
+    newUn.root.hidden = false;
+    newUn.id.value = '';
+    newUn.subject.value = '';
+    fillSelect(newUn.term, terminalOptions());
+    fillSelect(newUn.station, stationOptions());
+    newUn.id.focus();
+  });
+  document.getElementById('m-un-cancel').addEventListener('click', function () {
+    newUn.root.hidden = true;
+  });
+  document.getElementById('m-un-save').addEventListener('click', function () {
+    var id = (newUn.id.value || '').trim();
+    var form = newUn.form.value;
+    var subject = (newUn.subject.value || '').trim();
+    if (!id) { showUnNotice('先填单元编号。'); return; }
+    if (unit(id)) { showUnNotice('编号 ' + id + ' 已存在，换一个。'); return; }
+    if (!subject) { showUnNotice('先填主体：姓名、工位或 AGV 编号。'); return; }
+    var preset = {
+      '人 + 输入': { accepts: ['拣货', '上架'], capabilities: ['扫描'] },
+      '工位': { accepts: ['打包', '复核', '打印', '称重'], capabilities: ['打印', '称重', '拍照'] },
+      'AGV': { accepts: ['搬运'], capabilities: ['搬运'] }
+    }[form];
+    var terminal = form === '人 + 输入' ? newUn.term.value : '—';
+    var station = newUn.station.value;
+    wh().units.push({
+      id: id,
+      form: form,
+      subject: subject,
+      terminal: terminal,
+      station: station,
+      accepts: preset.accepts,
+      capabilities: preset.capabilities,
+      status: '空闲',
+      load: '0.00'
+    });
+    state.unit = id;
+    state.noticeUnit = '已新建 ' + subject + ' · ' + form + '；有效硬件按终端与工位自动算出。';
+    newUn.root.hidden = true;
+    renderAll();
+  });
+
+  renderAll();
+})();
+</script>
+</body>
+</html>

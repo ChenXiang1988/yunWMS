@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>任务中心看板 · 行业做法与跨仓监管</title>
+<style>
+:root{
+  --bg:#f5f5f5; --surface:#ffffff; --ink:#171717; --ink-2:#414753; --muted:#687386;
+  --line:#e5e5e5; --line-soft:#f1f2f4;
+  --primary:#6424fe; --primary-50:#f3efff; --primary-100:#ece4ff; --primary-700:#4f1bcc;
+  --ok:#1f9d65; --ok-soft:#eaf8f1;
+  --warn:#d97706; --warn-soft:#fff7e6;
+  --err:#e5484d; --err-soft:#fff0f0;
+  --radius:8px; --radius-sm:6px;
+  --shadow:0 1px 2px rgba(0,0,0,.05);
+  --warn-ink:#703d00; --warn-ink-2:#8a4b00;
+  --ok-ink:#0f5c3b; --th-bg:#fafafa;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  font-size:14px; line-height:1.7; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:0 32px 80px}
+
+.topbar{
+  position:sticky;top:0;z-index:20;height:54px;
+  background:rgba(255,255,255,.92);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);display:flex;align-items:center;
+}
+.topbar .wrap{width:100%;display:flex;align-items:center;justify-content:space-between;padding-top:0;padding-bottom:0}
+.brand{display:flex;align-items:center;gap:10px;font-weight:600}
+.brand-mark{
+  width:24px;height:24px;border-radius:var(--radius-sm);background:var(--primary);
+  color:var(--surface);display:grid;place-items:center;font-size:13px;font-weight:700;
+}
+.toc{display:flex;gap:4px;flex-wrap:wrap}
+.toc a{
+  padding:5px 10px;border-radius:var(--radius-sm);color:var(--ink-2);
+  text-decoration:none;font-size:13px;
+}
+.toc a:hover{background:var(--primary-50);color:var(--primary-700)}
+
+.hero{padding:56px 0 36px;border-bottom:1px solid var(--line)}
+.hero h1{margin:0 0 12px;font-size:32px;line-height:1.3;font-weight:700;letter-spacing:-.3px}
+.hero .lead{margin:0;font-size:17px;color:var(--ink-2);max-width:840px}
+.hero .meta{margin-top:20px;display:flex;gap:20px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.hero .meta b{color:var(--ink);font-weight:600}
+
+.conclusion{
+  margin-top:28px;padding:20px 24px;border-radius:var(--radius);
+  background:var(--primary-50);border-left:3px solid var(--primary);
+}
+.conclusion h2{margin:0 0 8px;font-size:15px;color:var(--primary-700);font-weight:600}
+.conclusion p{margin:0;font-size:15px;color:var(--ink-2)}
+.conclusion p+p{margin-top:6px}
+
+section{padding:44px 0;border-bottom:1px solid var(--line)}
+section:last-of-type{border-bottom:0}
+h2.sec{
+  margin:0 0 6px;font-size:22px;font-weight:700;letter-spacing:-.2px;
+  display:flex;align-items:center;gap:10px;
+}
+h2.sec .num{
+  flex:none;width:26px;height:26px;border-radius:50%;background:var(--primary);
+  color:var(--surface);font-size:13px;display:grid;place-items:center;font-weight:600;
+}
+.sec-sub{margin:0 0 24px;color:var(--muted);font-size:14px}
+h3{margin:28px 0 12px;font-size:16px;font-weight:600}
+h3:first-of-type{margin-top:0}
+p{margin:0 0 14px;color:var(--ink-2)}
+
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:880px){.g2,.g3,.g4{grid-template-columns:1fr}}
+.card{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:18px 20px;box-shadow:var(--shadow);
+}
+.card h4{margin:0 0 8px;font-size:14px;font-weight:600}
+.card p{margin:0;font-size:13px;color:var(--muted);line-height:1.65}
+.card .big{display:block;font-size:28px;font-weight:700;color:var(--primary);line-height:1.2;margin-bottom:4px}
+.card .big small{font-size:14px;font-weight:500;color:var(--muted);margin-left:4px}
+
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;font-size:13.5px}
+th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line-soft);vertical-align:top}
+th{background:var(--th-bg);font-weight:600;color:var(--ink-2);font-size:13px}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+code{
+  font-family:ui-monospace,Menlo,monospace;font-size:12.5px;
+  background:var(--line-soft);padding:1px 6px;border-radius:var(--radius-sm);color:var(--primary-700);
+}
+
+.tag{display:inline-block;padding:1px 8px;border-radius:var(--radius-sm);font-size:12px;line-height:20px;font-weight:500}
+.tag.ok{background:var(--ok-soft);color:var(--ok)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.tag.err{background:var(--err-soft);color:var(--err)}
+.tag.pri{background:var(--primary-50);color:var(--primary-700)}
+
+.note{
+  padding:14px 18px;border-radius:var(--radius);background:var(--warn-soft);
+  border-left:3px solid var(--warn);font-size:13.5px;color:var(--warn-ink-2);margin:16px 0;
+}
+.note b{color:var(--warn-ink)}
+.tip{
+  padding:14px 18px;border-radius:var(--radius);background:var(--ok-soft);
+  border-left:3px solid var(--ok);font-size:13.5px;color:var(--ok-ink);margin:16px 0;
+}
+
+.flow{display:flex;align-items:stretch;gap:0;margin:20px 0;flex-wrap:wrap}
+.flow-step{
+  flex:1;min-width:150px;position:relative;padding:16px 18px 16px 26px;
+  background:var(--surface);border:1px solid var(--line);
+}
+.flow-step:first-child{border-radius:var(--radius) 0 0 var(--radius);padding-left:18px}
+.flow-step:last-child{border-radius:0 var(--radius) var(--radius) 0}
+.flow-step+.flow-step{border-left:0}
+.flow-step .n{font-size:11px;color:var(--muted);font-weight:600}
+.flow-step b{display:block;font-size:14px;margin:2px 0 4px}
+.flow-step small{font-size:12px;color:var(--muted);line-height:1.5;display:block}
+.flow-step::after{
+  content:'';position:absolute;right:-7px;top:50%;width:12px;height:12px;
+  background:var(--surface);border-right:1px solid var(--line);border-top:1px solid var(--line);
+  transform:translateY(-50%) rotate(45deg);z-index:1;
+}
+.flow-step:last-child::after{display:none}
+
+.tree{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:20px 24px;font-family:ui-monospace,Menlo,monospace;font-size:13px;
+  line-height:1.9;color:var(--ink-2);overflow-x:auto;
+}
+.tree .k{color:var(--primary-700);font-weight:600}
+.tree .m{color:var(--muted)}
+
+.bar{height:8px;border-radius:var(--radius-sm);background:var(--line-soft);overflow:hidden;min-width:90px}
+.bar>i{display:block;height:100%;background:var(--primary);border-radius:var(--radius-sm)}
+.bar.is-err>i{background:var(--err)}
+.bar.is-warn>i{background:var(--warn)}
+
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);
+  border-radius:var(--radius);overflow:hidden;background:var(--surface)}
+@media(max-width:720px){.vs{grid-template-columns:1fr}}
+.vs>div{padding:18px 20px}
+.vs>div+div{border-left:1px solid var(--line)}
+@media(max-width:720px){.vs>div+div{border-left:0;border-top:1px solid var(--line)}}
+.vs h4{margin:0 0 10px;font-size:14px}
+.vs ul{margin:0;padding-left:18px;font-size:13px;color:var(--ink-2);line-height:1.8}
+
+footer{padding:36px 0;color:var(--muted);font-size:13px;border-top:1px solid var(--line)}
+.src{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--ink-2);word-break:break-all}
+footer .links{display:flex;gap:20px;flex-wrap:wrap;margin-top:8px}
+footer a{color:var(--primary-700);text-decoration:none}
+footer a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand"><span class="brand-mark">西</span> 西之月 WMS · 任务中心看板</div>
+    <nav class="toc">
+      <a href="#s1">行业骨架</a>
+      <a href="#s2">跨仓难点</a>
+      <a href="#s3">汇总方式</a>
+      <a href="#s4">监管指标</a>
+      <a href="#s5">异常机制</a>
+      <a href="#s6">权限分工</a>
+      <a href="#s7">本项目落地</a>
+      <a href="#s8">结论</a>
+      <a href="#s9">参考资料</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header class="hero">
+    <h1>任务中心看板：行业做法与跨仓监管</h1>
+    <p class="lead">
+      数据按单仓统计不是障碍。缺的是<strong>带仓库维度的事实表</strong>和<strong>口径注册表</strong>——
+      有了这两样，跨仓监管是在同一套管径上做加权；没有这两样，只能靠拼报表，而拼出来的数谁都不信。
+    </p>
+    <div class="meta">
+      <span>范围：<b>任务中心 › 执行看板</b></span>
+      <span>数据：<b>136 条任务 · 5 个仓 · 101 个执行单元</b></span>
+      <span>更新：<b>2026-10-30</b></span>
+    </div>
+
+    <div class="conclusion">
+      <h2>一句话结论</h2>
+      <p><strong>看板不是大屏，是「异常 → 责任人 → 闭环」。</strong>行业把它叫控制塔，价值在处置，不在视觉。</p>
+      <p>跨仓比较守三条：<strong>先归一化、同行分组、比改善幅度</strong>。直接比绝对值必然失真，而且会把数据缺陷放大成管理结论。</p>
+    </div>
+  </header>
+
+  <!-- 一 -->
+  <section id="s1">
+    <h2 class="sec"><span class="num">1</span>行业通用骨架</h2>
+    <p class="sec-sub">Gartner 的定义、三层的分工、指标的三类分法，这三件事在多个独立来源上互相印证。</p>
+
+    <h3>1.1 控制塔不是 BI 报表</h3>
+    <p>
+      Gartner 把控制塔定义为「人、流程、数据、组织 + 一组技术能力」的组合，核心是<strong>透明与协同</strong>，
+      能力链是 Sense（感知）→ Analyze（分析）→ Predict（预测）→ Solve（处置）→ Learn（学习）。
+      它有几个容易被忽略的前提判断：
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:200px">判断</th><th>含义</th><th style="width:260px">对本项目的意义</th></tr></thead>
+        <tbody>
+          <tr><td>不替代 WMS</td><td>执行系统是数据源与动作回流点，控制塔不承接库内作业</td><td>任务中心只读任务行，不在看板上执行作业动作</td></tr>
+          <tr><td>与 BI 的区别</td><td>BI 偏事后分析报表，控制塔偏实时预警 + 协同处置</td><td>看板要有「去处置」的出口，不能只给数</td></tr>
+          <tr><td>前提条件</td><td>主数据未治理、执行系统不回传，不要上大屏</td><td><span class="tag err">当前未满足</span> 时效与超期口径存在冲突，见第 7 节</td></tr>
+          <tr><td>失败信号</td><td>把控制塔当形象工程，只做参观大屏</td><td>指标必须能指向一个具体动作</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>1.2 三层看板：每层只回答一个问题</h3>
+    <p>行业实践的共识是<strong>一个页面只回答一个管理问题</strong>。「哪里有风险」和「谁去处理」不要塞进同一屏，否则管理者看到很多数据却不知道下一步做什么。</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:130px">层级</th><th style="width:170px">使用者</th><th>回答的问题</th><th>内容形态</th></tr></thead>
+        <tbody>
+          <tr><td>总部 / 集团</td><td>运营总监、供应链负责人</td><td>哪几个仓在恶化？网络哪里结构性失衡？</td><td>仓间对比、覆盖缺口、趋势偏离</td></tr>
+          <tr><td>区域 / 多仓</td><td>区域经理</td><td>我管的这几个仓，差距来自哪里？</td><td>同类仓对标、瓶颈环节定位</td></tr>
+          <tr><td>单仓</td><td>仓主管、派工员</td><td>今天我该先处理什么？</td><td>异常队列、待指派、超期清单</td></tr>
+          <tr><td>操作员</td><td>作业员本人</td><td>我手上这张做完了，下一张是什么？</td><td>自己的待办，不进统计看板</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tip">
+      <b>第四层不进看板。</b>操作员视角已经由 APP 端的「当前在做 + 待做队列」承担，
+      放进统计看板只会造成第二条路径。
+    </div>
+
+    <h3>1.3 指标分三层：结果 / 过程 / 异常</h3>
+    <p>这是最实用的一条分法。它的作用不是分类好看，而是<strong>决定每个指标该带什么、该由谁看</strong>。</p>
+    <div class="grid g3">
+      <div class="card">
+        <h4>结果指标</h4>
+        <p>判断整体是否健康。准确率、及时率、周转天数。<b>给总部和区域看</b>，需要归一化后才能跨仓比较。</p>
+      </div>
+      <div class="card">
+        <h4>过程指标</h4>
+        <p>判断哪个环节在变慢。待指派量、积压时长、临期占比。<b>给仓主管和派工员看</b>，用于当天调人。</p>
+      </div>
+      <div class="card">
+        <h4>异常指标</h4>
+        <p>今天先处理什么。<b>必须直接带责任人和截止时间</b>，否则只是报表噪音，不是异常指标。</p>
+      </div>
+    </div>
+
+    <h3>1.4 行业指标池（可作选取来源）</h3>
+    <p>
+      WERC 的 <em>DC Measures</em> 年度基准研究是这行的通用参照系，反复出现的核心指标包括：
+      订单准确率、准时发货率、库存准确率（按库位）、仓库容量利用率（均值 / 峰值）、每工时产出、
+      订单履行周期、码头到上架时长、内部订单周期、破损率、安全事故率、单均成本。
+      APQC 提供另一套带开源定义的度量库，价值在于<strong>每个度量都有明确的计算范围</strong>，结构可以直接借用。
+    </p>
+    <div class="note">
+      <b>引用纪律。</b>本节 WERC / APQC 的具体数值均来自厂商博客与中文媒体的<strong>二手转述</strong>，
+      未取得原始报告。结构性结论可信，具体数字不要写进目标值或汇报口径。
+    </div>
+  </section>
+
+  <!-- 二 -->
+  <section id="s2">
+    <h2 class="sec"><span class="num">2</span>跨仓对比的核心难题：不可比</h2>
+    <p class="sec-sub">这是整个题目的真正难点，也是行业里翻车最多的地方。</p>
+
+    <h3>2.1 直接比绝对值必然失真</h3>
+    <p>
+      一个反复被指出的问题：大多数配送中心管理者默认去取系统里最容易取的数——总工时、各班次人数、加班率。
+      这些不是绩效数据，是<strong>结构数据伪装成绩效数据</strong>。
+    </p>
+    <div class="grid g2">
+      <div class="card">
+        <h4>让两个仓不可比的五个变量</h4>
+        <p>① 自动化水平（输送线、货到人、AS/RS）　② 厂房年龄与布局　③ SKU 复杂度与数量　④ 订单结构（单行电商 vs 多行批发）　⑤ 用工模型（全正式 vs 高临时工比例）</p>
+      </div>
+      <div class="card">
+        <h4>叠起来会怎样</h4>
+        <p>这五个变量叠加，足以让运营最好的仓看起来像最差的仓。而排名的反作用不是「激励」，是让被排名的人开始找理由。</p>
+      </div>
+    </div>
+
+    <h3>2.2 归一化的三个手段</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:130px">手段</th><th>做法</th><th style="width:300px">在任务中心怎么用</th></tr></thead>
+        <tbody>
+          <tr><td>换分母</td><td>不比总量，比强度：工时 / 千件、单均成本、行 / 小时、每人日处理单量</td><td>不比「谁任务多」，比「未终态任务 ÷ 在岗单元」</td></tr>
+          <tr><td>复杂度加权</td><td>单行单件订单记 1.0，12 行含增值服务记 2.4，用权重折算产出</td><td>盘点按 SKU 行计、移库按托 / 箱计，不能直接相加，需换算系数</td></tr>
+          <tr><td>同行分组</td><td>按「自动化水平 × SKU 结构 × 订单结构」分组，<b>组内设基准、组内考核</b></td><td>实体仓一组；虚拟仓、三方仓不进运营组，单列覆盖维度</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>2.3 一个能说明问题的真实案例</h3>
+    <div class="vs">
+      <div>
+        <h4>看原始数据</h4>
+        <ul>
+          <li>A 仓人均每日 420 件</li>
+          <li>B 仓人均每日 285 件</li>
+          <li>排名差距明显，结论是「B 仓人效不行」</li>
+        </ul>
+      </div>
+      <div>
+        <h4>按订单复杂度换算后</h4>
+        <ul>
+          <li>A 仓达到标准工时的 98%</li>
+          <li>B 仓达到 96%</li>
+          <li>实际差距很小。B 仓真问题是补货等待 + 复核设备故障吃掉了约 14% 有效班次</li>
+        </ul>
+      </div>
+    </div>
+    <p style="margin-top:14px">
+      这个案例的教训不是「数据要更细」，而是：<strong>未经归一化的排名会指向错误的改进方向</strong>——
+      本该去修设备，结果去压人。
+    </p>
+
+    <h3>2.4 比改善幅度，不比绝对值</h3>
+    <p>
+      集团级看板按区域 / 仓型 / 品类下钻，支持横向对标，但<strong>禁止直接比较绝对数值，聚焦改善幅度排名</strong>。
+      有一种实践是先统一各仓的「基础指标 + 场景修正」模型：基础指标公式全公司一致，
+      场景修正体现在订单复杂度、设备可用率、临时任务与异常等待时长中，不做「每仓一套公式」。
+    </p>
+  </section>
+
+  <!-- 三 -->
+  <section id="s3">
+    <h2 class="sec"><span class="num">3</span>数据汇总方式：单仓统计如何支撑跨仓监管</h2>
+    <p class="sec-sub">这是本项目最实际的一问。稳的做法是「事实表带维度 + 口径注册表 + 两层聚合」。</p>
+
+    <div class="flow">
+      <div class="flow-step">
+        <span class="n">STEP 1</span>
+        <b>按仓采集</b>
+        <small>任务行带 warehouse 维度入库，不做任何跨仓合并</small>
+      </div>
+      <div class="flow-step">
+        <span class="n">STEP 2</span>
+        <b>单仓独立计算</b>
+        <small>每仓按同一套公式算，互不依赖，结果落事实表</small>
+      </div>
+      <div class="flow-step">
+        <span class="n">STEP 3</span>
+        <b>按维度上卷</b>
+        <small>区域 / 网络层只做加权合并，不重新定义公式</small>
+      </div>
+      <div class="flow-step">
+        <span class="n">STEP 4</span>
+        <b>对比与偏离</b>
+        <small>组内中位数、四分位、改善幅度，不输出绝对值排名</small>
+      </div>
+    </div>
+
+    <div class="note">
+      <b>铁律：</b>汇总层只做加权与合并，<strong>不重新定义公式</strong>。
+      否则单仓和总部会出现两个数，一旦出现两个数，整套指标体系就不再被信任。
+    </div>
+
+    <h3>3.1 事实表至少要有的键</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:190px">字段</th><th>作用</th></tr></thead>
+        <tbody>
+          <tr><td><code>warehouse</code></td><td>汇总维度，同时是行级权限的过滤键</td></tr>
+          <tr><td><code>metricCode</code> + <code>metricVersion</code></td><td>口径标识与版本。指标改定义必须留痕</td></tr>
+          <tr><td><code>periodStart</code> / <code>periodEnd</code></td><td>时间窗，支持日 / 周 / 月同源</td></tr>
+          <tr><td><code>numerator</code> / <code>denominator</code></td><td><b>分子分母分列存</b>，不能只存比率</td></tr>
+          <tr><td><code>coverage</code></td><td>该仓数据是否完整，缺失时显式标记</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <b>只存比率是跨仓汇总最常见的致命错误。</b>三个仓各 90% 无法加权成 90%——
+      分子分母不同，权重就不同。必须回到分子分母重算。
+    </div>
+
+    <h3>3.2 缺失与延迟必须显式暴露</h3>
+    <div class="grid g3">
+      <div class="card">
+        <h4>覆盖数写在旁边</h4>
+        <p>「覆盖 3/5 仓」。缺数据的仓不能被静默当 0 参与平均，否则一个仓的故障会变成全网的「改善」。</p>
+      </div>
+      <div class="card">
+        <h4>新鲜度单列一列</h4>
+        <p>最近回传时间。过期要打标。业内说法是：第一个要预测的失败，是你度量系统自身的失败。</p>
+      </div>
+      <div class="card">
+        <h4>事件会迟到、重复、乱序</h4>
+        <p>这是常态不是边界情况。适配层要幂等且时间感知，UI 对过期数据要标不确定性，而不是假装精确。</p>
+      </div>
+    </div>
+
+    <h3>3.3 口径注册表</h3>
+    <p>
+      把每个指标写成一条可查记录：名称、业务含义、分子、分母、时间窗、数据源、排除规则、责任人、生效日、历史版本。
+      旺季与日常不共享同一套目标值；仓库扩容或设备上线后标准要重新校准。
+      <strong>系统若不能保留指标版本、变更人和生效时间，月底一定变成口径争议。</strong>
+    </p>
+  </section>
+
+  <!-- 四 -->
+  <section id="s4">
+    <h2 class="sec"><span class="num">4</span>监管指标建议</h2>
+    <p class="sec-sub">四组指标，每组都标注了在本工作区数据上的可算性——实测，不是设想。</p>
+
+    <h3>4.1 结果层（可跨仓对比，但需归一化）</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:150px">指标</th><th>计算</th><th style="width:150px">本项目状态</th></tr></thead>
+        <tbody>
+          <tr><td>准时完成率</td><td>未超期完成任务 ÷ 未取消任务</td><td><span class="tag err">不可用</span> 口径冲突，见 §7.3</td></tr>
+          <tr><td>一次做对率</td><td>无异常完成任务 ÷ 完成任务</td><td><span class="tag ok">可算</span> 34/54 = 63.0%</td></tr>
+          <tr><td>异常关闭时长</td><td>Σ(关闭时间 − 发生时间) ÷ 异常数</td><td><span class="tag warn">部分</span> 缺失关闭时间戳</td></tr>
+          <tr><td>单任务处理时长</td><td>Σ(完成 − 开始) ÷ 样本数</td><td><span class="tag err">不可用</span> 时间戳跨三周</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>4.2 过程层（看瓶颈在哪个环节）</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:150px">指标</th><th>计算</th><th style="width:200px">本项目实测</th></tr></thead>
+        <tbody>
+          <tr><td>待指派率</td><td>待指派任务 ÷ 未终态任务</td><td><span class="tag ok">可算</span> 11/77 = 14.3%</td></tr>
+          <tr><td>在办负荷</td><td>未终态任务 ÷ 在岗单元</td><td><span class="tag ok">可算</span> 三实体仓 0.53 / 1.20 / 1.36</td></tr>
+          <tr><td>异常密度</td><td>异常任务 ÷ 未终态任务</td><td><span class="tag ok">可算</span> 25/77 = 32.5%</td></tr>
+          <tr><td>临期占比</td><td>临期 ÷ 未终态</td><td><span class="tag warn">部分</span> 依字段直读，口径待统一</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>4.3 异常层（必须带责任人与时限）</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:190px">观察点</th><th>本项目实测</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>类型集中度</td><td>前四类 <b>15/25 = 60.0%</b></td><td>数量不符、条码无法识别、温区不匹配、库位容量不足各 4 条</td></tr>
+          <tr><td>等级分布</td><td>高 17 / 中 6 / 低 3</td><td>高等级占 65%，但 17 条里只有 6 条有接管时间</td></tr>
+          <tr><td>责任人到位率</td><td><span class="tag warn">待修</span></td><td>17 条未终态任务无作业员</td></tr>
+          <tr><td>关闭留痕</td><td>51 条异常记录中 25 条已关闭（含已随任务完成闭环的记录）</td><td>关闭无时间戳，只有「是 / 否」标记</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      类型集中度这一项最有行动价值：四个类型覆盖六成异常，改进清单可以直接从这四个入手，
+      而不是「把异常率降低」这种无法执行的指令。
+    </p>
+
+    <h3>4.4 跨仓专有指标（单仓看板看不到的）</h3>
+    <div class="grid g4">
+      <div class="card">
+        <h4>仓间偏离度</h4>
+        <p>本仓某指标 vs 同组中位数，标准化后比较。单仓的「正常区间」可能整体就是偏差。</p>
+      </div>
+      <div class="card">
+        <h4>改善幅度</h4>
+        <p>环比 / 同比变化，替代绝对值排名。规模差一个数量级时，这是唯一公平的比法。</p>
+      </div>
+      <div class="card">
+        <h4>覆盖缺口</h4>
+        <p>有任务但无可用单元、无设备、无配置的仓。这是配置问题，不是运营问题。</p>
+      </div>
+      <div class="card">
+        <h4>不均衡度</h4>
+        <p>各仓负荷的离散程度，判断资源是否错配。三实体仓载荷比 CV = 0.35。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 五 -->
+  <section id="s5">
+    <h2 class="sec"><span class="num">5</span>异常发现机制：从阈值到统计到横向偏离</h2>
+    <p class="sec-sub">三级递进。越往后越能发现「单仓自己看不出来」的问题。</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:120px">层级</th><th>方法</th><th style="width:330px">关键约束</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>① 阈值规则</td>
+            <td>单一指标越线即告警。最先上，最好懂</td>
+            <td>用历史分布校准，不照搬行业均值；同规则对不同对象用不同阈值；低频对象套高频阈值 = 制造噪音</td>
+          </tr>
+          <tr>
+            <td>② 统计过程控制</td>
+            <td>移动平均 + 标准差控制带；EWMA / CUSUM 抓均值小幅持续偏移</td>
+            <td>二值红绿灯要么漏慢漂移，要么制造告警疲劳。可借用经典判异规则：单点出 3σ、连续 9 点同侧、连续 6 点递增递减</td>
+          </tr>
+          <tr>
+            <td>③ 跨仓横向偏离</td>
+            <td>组内中位数与四分位，标记持续低于 P25 的仓</td>
+            <td><b>只有对比才能发现</b>：某仓连续三个月 92% 在自己历史区间内波动正常，但同组其他仓都在 97%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip">
+      <b>一个反直觉的判异规则值得留意：</b>连续 15 个点全部挤在 1σ 内，看似极稳定，
+      实则可能是数据被人工干预或方差被人为压缩。稳定到不正常，本身就是异常。
+    </div>
+
+    <h3>5.1 分级与闭环比算法更重要</h3>
+    <p>行业反复提到的失败模式：大屏一片红，没人响应，几周后全员忽略。可执行的设计有七条：</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:130px">环节</th><th>要求</th></tr></thead>
+        <tbody>
+          <tr><td>分级</td><td>一般 → 责任人；重要 → 部门负责人；重大 → 管理层。按业务影响（金额、时效、客户）与紧急度组合判定</td></tr>
+          <tr><td>路由</td><td><b>按异常类型路由到角色</b>，不丢进一个公共收件箱。库存归计划、延误归调度、影响承诺归客服</td></tr>
+          <tr><td>责任人</td><td><b>一类型一责任人</b>。责任落在两人之间就会蒸发</td></tr>
+          <tr><td>关闭条件</td><td>不能「已读即关闭」。调拨异常须货物签收 + 数量核对 + 系统入库才算关闭，否则看板好看、实物没落位</td></tr>
+          <tr><td>抑制</td><td>重复上报去重；已启动恢复计划的可带原因静默</td></tr>
+          <tr><td>升级 SLA</td><td>各档告警的响应与关闭时限要匹配业务影响</td></tr>
+          <tr><td>复盘</td><td>按月统计预警分布、响应时长、关闭率，反推规则改进</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>5.2 先上几类</h3>
+    <p>
+      有明确的数量建议：<strong>先上 2~3 类最关心的，跑通阈值、分级、留痕，再逐步扩</strong>。
+      一次上几十条规则，噪音淹没信号，机制会很快失效。有团队配了 40 多条提醒、每天上百条消息，
+      最后员工全部忽略——这不是员工的问题，是设计的问题。
+    </p>
+  </section>
+
+  <!-- 六 -->
+  <section id="s6">
+    <h2 class="sec"><span class="num">6</span>权限分工</h2>
+    <p class="sec-sub">直接挂在本项目已有的「权限点 + 数据范围」模型上，不另造一套。</p>
+
+    <h3>6.1 四类角色 × 数据范围</h3>
+    <p>
+      本项目 PRD 已经定了数据范围三值：<code>主体全部</code> / <code>指定仓</code> / <code>本人</code>，
+      且<strong>范围独立于角色</strong>，多角色取并集。看板不需要新模型。
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:150px">角色</th><th style="width:150px">数据范围</th><th>可见</th><th style="width:210px">不可见</th></tr></thead>
+        <tbody>
+          <tr><td>总部运营 / 供应链总监</td><td>主体全部</td><td>全部仓汇总、仓间对比、改善幅度排名</td><td>—</td></tr>
+          <tr><td>区域经理</td><td>指定仓（本区域集合）</td><td>所辖仓对比、区域汇总</td><td>其他区域明细</td></tr>
+          <tr><td>仓主管</td><td>指定仓（单仓）</td><td>本仓全部、本仓在区域内的位置</td><td>其他仓明细、跨仓排名明细</td></tr>
+          <tr><td>派工员</td><td>指定仓（单仓）</td><td>本仓异常队列、待指派、在岗单元</td><td>跨仓数据</td></tr>
+          <tr><td>操作员</td><td>本人</td><td>自己的待办（APP 端）</td><td>一切统计</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>6.2 权限实现上的三个坑</h3>
+    <div class="grid g3">
+      <div class="card">
+        <h4>不要一人一角色</h4>
+        <p>按地区建角色，第二个月就出现「管两个区的人」；一年后几十个角色、每个带手写过滤条件，没人知道谁有什么。正确做法是一张映射表：用户 → 可见仓集合，规则写成「显示 warehouse ∈ 该用户的列表」。改权限 = 改一行数据。</p>
+      </div>
+      <div class="card">
+        <h4>权限从权威系统派生</h4>
+        <p>映射表尽量由组织架构生成，人转岗自动生效，而不是靠人记得去改报表权限。层级也按组织结构驱动：总监看全部、区域看本区域、主管看本仓。</p>
+      </div>
+      <div class="card">
+        <h4>预聚合表要单独授权</h4>
+        <p>最隐蔽的泄漏点。总部排名表如果没被行级规则覆盖，会把全公司数据透给本不该看的人。<b>每张预聚合表都要显式决定：谁可以看全公司对比。</b></p>
+      </div>
+    </div>
+
+    <h3>6.3 一个组织行为上的提醒</h3>
+    <p>
+      跨仓排名一旦公开，会迅速从「找问题」变成「找理由」。行业建议把比较定位为<strong>诊断工具而非考核工具</strong>：
+      组内对标、看改善幅度、附上结构差异说明。当一位仓经理因为仓里订单结构更难而排名靠后、
+      他自己又无法快速证明时，你已经破坏了让数据被信任的基础。
+    </p>
+  </section>
+
+  <!-- 七 -->
+  <section id="s7">
+    <h2 class="sec"><span class="num">7</span>落到本项目：现状体检与建议</h2>
+    <p class="sec-sub">以下数字均为本次对 <code>proto-next/shared/data/</code> 三份任务源的实测结果。</p>
+
+    <h3>7.1 现有数据能支撑什么</h3>
+    <div class="grid g4">
+      <div class="card"><span class="big">136</span><p>任务行合计<br>上架 55 · 移库 57 · 盘点 24</p></div>
+      <div class="card"><span class="big">77</span><p>未终态<br>待办 48 · 在办 4 · 异常 25</p></div>
+      <div class="card"><span class="big">25</span><p>异常待处理<br>高 16 / 中 6 / 低 3</p></div>
+      <div class="card"><span class="big">11</span><p>待指派<br>占未终态 14.3%</p></div>
+    </div>
+
+    <h3>7.2 分仓实测面板</h3>
+    <p>这张表本身就是跨仓监管的雏形：它暴露的第一个结论不是「谁最能干」，而是<strong>两个仓没有执行单元</strong>。</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th style="width:110px">仓</th>
+          <th class="num">任务</th><th class="num">未终态</th><th class="num">异常</th>
+          <th class="num">超期</th><th class="num">待指派</th>
+          <th class="num">一次做对</th><th class="num">单元</th><th class="num">在岗</th><th class="num">载荷比</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>华东仓</td><td class="num">67</td><td class="num">26</td><td class="num">10</td><td class="num">3</td><td class="num">2</td><td class="num">63.2%</td><td class="num">59</td><td class="num">51</td><td class="num">0.51</td></tr>
+          <tr><td>华南仓</td><td class="num">37</td><td class="num">27</td><td class="num">8</td><td class="num">1</td><td class="num">4</td><td class="num">60.0%</td><td class="num">27</td><td class="num">22</td><td class="num">1.23</td></tr>
+          <tr><td>华北仓</td><td class="num">20</td><td class="num">15</td><td class="num">2</td><td class="num">3</td><td class="num">3</td><td class="num">66.7%</td><td class="num">15</td><td class="num">12</td><td class="num">1.25</td></tr>
+          <tr><td>华西仓 <span class="tag warn">虚拟仓</span></td><td class="num">8</td><td class="num">5</td><td class="num">3</td><td class="num">1</td><td class="num">1</td><td class="num">66.7%</td><td class="num">0</td><td class="num">0</td><td class="num">—</td></tr>
+          <tr><td>西南仓 <span class="tag warn">三方仓</span></td><td class="num">4</td><td class="num">4</td><td class="num">2</td><td class="num">4</td><td class="num">1</td><td class="num">—</td><td class="num">0</td><td class="num">0</td><td class="num">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <b>三个必须注意的边界。</b>
+      ① 华西仓与西南仓 <b>0 个执行单元</b>，是配置缺口不是运营问题，不能判为「表现差」，应单列覆盖维度或排除在运营组之外。
+      ② 华东 88 条任务 / 67 个单元 vs 华西 8 条 / 0 个，<b>绝对值排名毫无意义</b>。
+      ③ 西南仓「一次做对 100%」只有 1 个完成样本，<b>不能进排名</b>，样本量门槛要先定。
+    </div>
+
+    <h3>7.3 阻断项：三个必须先在数据层解决</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:170px">问题</th><th>实测</th><th style="width:300px">影响</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>超期口径冲突</td>
+            <td>未终态 77 条，字段标「已超期」12 条 / 「临期」17 条 / 「正常」48 条；
+                按源数据内自带的判定规则重算，31 条不一致</td>
+            <td>任何「准时率」都不可信。跨仓对比会把这个矛盾乘以仓数</td>
+          </tr>
+          <tr>
+            <td>时长不可用</td>
+            <td>54 条已完成任务，<b>100% 晚于截止时间</b>；中位时长 500.8 小时（约 21 天）</td>
+            <td>节拍、产能、达成率类指标全部失效。根因是完成时间被整体挪到最近七天，开始时间仍是十月初</td>
+          </tr>
+          <tr>
+            <td>状态与派工字段互驳</td>
+            <td>2 条未终态任务的派工状态已是「已完成」；6 条「已推送·待领取」却无作业员</td>
+            <td>「待指派」口径不可用，过程指标第一项就站不住</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>7.4 建议的页面结构</h3>
+    <div class="tree">
+<span class="k">任务中心</span> › 执行看板
+├─ <span class="k">单仓视图</span> <span class="m">（默认，随页头仓库下拉）</span>  ← 仓主管 / 派工员
+│    结论行 · 三类工序负载 · 异常队列 · 待指派
+└─ <span class="k">全网视图</span> <span class="m">（仅「主体全部」范围可见）</span>  ← 总部 / 区域
+     仓间对比表 <span class="m">（组内 · 改善幅度排序 · 带样本量门槛）</span>
+     覆盖缺口卡 <span class="m">（有任务无单元 / 无设备的仓）</span>
+     跨仓偏离预警 <span class="m">（低于组内 P25 且持续 N 期）</span>
+    </div>
+
+    <div class="tip">
+      <b>一个实现前提。</b>页头仓库下拉目前没有绑定事件监听，
+      产物里是一个静态选择框。做单仓 / 全网切换前需要先接上
+      <code>change</code> 事件，这会动到跨会话共用的组件，需先确认改动范围。
+    </div>
+  </section>
+
+  <!-- 八 -->
+  <section id="s8">
+    <h2 class="sec"><span class="num">8</span>结论与待确认</h2>
+
+    <h3>8.1 关键要点</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:40px">#</th><th style="width:230px">要点</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>看板是控制塔的一部分，不是大屏</td><td>价值在「异常 → 责任人 → 闭环」，不在视觉</td></tr>
+          <tr><td>2</td><td>三层角色 × 一个问题</td><td>总部看差异、区域看瓶颈、单仓看动作，不混在一屏</td></tr>
+          <tr><td>3</td><td>先归一化再排名</td><td>换分母 → 复杂度加权 → 同行分组，三步缺一不可</td></tr>
+          <tr><td>4</td><td>比改善幅度，不比绝对值</td><td>各仓规模差一个数量级时，这是唯一公平的比法</td></tr>
+          <tr><td>5</td><td>汇总只加权、不重算</td><td>事实表必须存分子分母和口径版本，只存比率无法汇总</td></tr>
+          <tr><td>6</td><td>缺失要显式</td><td>「覆盖 3/5 仓」比一个漂亮的合计数有用</td></tr>
+          <tr><td>7</td><td>异常必须带责任人和关闭条件</td><td>已读即关闭是最常见的失效点</td></tr>
+          <tr><td>8</td><td>权限用映射表 + 层级派生</td><td>不要一人一角色；预聚合表单独授权</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>8.2 注意事项</h3>
+    <div class="note">
+      <b>六条容易翻车的地方。</b><br>
+      ① 别用 WERC / APQC 的具体数值当目标值——那是跨行业统计中位数，且本次引用为二手来源。<br>
+      ② 别在脏数据上做跨仓对比——超期口径与时长两条不修，结果会被用来质疑整套体系。<br>
+      ③ 别把排名做成考核榜——会立刻从诊断工具退化为辩护工具，并掩盖结构差异。<br>
+      ④ 别一次上几十条告警——先 2~3 类跑通闭环，观察两周误报率再扩。<br>
+      ⑤ 别忽略数据回传失败——新鲜度、空值率、字段校验要单独监控。<br>
+      ⑥ 别把跨仓功能做成权限后门——单仓数据范围是安全边界，全网视图须由「主体全部」显式授权，不能靠前端隐藏按钮。
+    </div>
+
+    <h3>8.3 待确认</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:70px">编号</th><th style="width:260px">问题</th><th>建议</th></tr></thead>
+        <tbody>
+          <tr><td>Q-01</td><td>超期口径读字段还是重算</td><td>建议重算并修数据。读字段虽可复现，但与事实矛盾，无法支撑准时率</td></tr>
+          <tr><td>Q-02</td><td>节拍类指标是否本期上</td><td>建议不上。先修时间戳，否则任何时长类数字都会被追问到无法回答</td></tr>
+          <tr><td>Q-03</td><td>看板是否套用列表页骨架</td><td>看板不是列表页，建议按「单仓 / 全网」两视图自定义，但配色字号仍取规范令牌</td></tr>
+          <tr><td>Q-04</td><td>全网视图的授权范围</td><td>建议仅「主体全部」范围可见，且预聚合表单独授权</td></tr>
+          <tr><td>Q-05</td><td>样本量门槛</td><td>建议单仓单指标样本 &lt; 5 时不进排名，只显示原始值</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 九 -->
+  <section id="s9">
+    <h2 class="sec"><span class="num">9</span>参考资料</h2>
+    <p class="sec-sub">按引用顺序列出，附本材料引用的具体判断。URL 以纯文本给出，不设为可点链接，以保持单文件零外链。</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:250px">来源</th><th style="width:300px">地址</th><th>本材料引用它的哪条判断</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Gartner 分析师观点：控制塔五要素与能力链</td>
+            <td class="src">supplychaindive.com/news/gartner-what-supply-chain-managers-should-know-about-control-towers/574098/</td>
+            <td>控制塔定义；Sense→Learn 能力链；「没有统一市场定义」的提醒</td>
+          </tr>
+          <tr>
+            <td>通天晓：供应链控制塔定义与作用</td>
+            <td class="src">ittx.com.cn/article/what-is-supply-chain-control-tower.html</td>
+            <td>控制塔不替代 WMS；与 BI 的区别；「主数据未治理勿上大屏」的失败信号</td>
+          </tr>
+          <tr>
+            <td>Supply Chain Brain：控制塔实现真正可视性</td>
+            <td class="src">supplychainbrain.com/blogs/1-think-tank/post/35364-achieving-true-visibility-through-a-supply-chain-control-tower</td>
+            <td>控制塔是组织级项目；价值需被明确表达，否则结果看似随机</td>
+          </tr>
+          <tr>
+            <td>CognitOps：Multi-DC Labor Benchmarking Beyond Raw Headcount</td>
+            <td class="src">cognitops.com/multi-dc-labor-benchmarking-peer-clustering/</td>
+            <td>五个结构性变量；「结构数据伪装成绩效数据」；同行分组；加权单位概念</td>
+          </tr>
+          <tr>
+            <td>CognitOps：Multi-DC Labor Benchmarking — Avoid False Rankings</td>
+            <td class="src">cognitops.com/multi-dc-labor-benchmarking-best-practices/</td>
+            <td>内部对标与行业对标的分工；工时为分母的归一化指标集；排名破坏信任的机制</td>
+          </tr>
+          <tr>
+            <td>CognitOps：UPH Benchmarks for Warehouses</td>
+            <td class="src">cognitops.com/?p=6761/</td>
+            <td>分段计算 + 加权视图；间接工时与直接工时分开</td>
+          </tr>
+          <tr>
+            <td>九数云：多仓企业对比指南</td>
+            <td class="src">eshutong.com/archives/160471.html</td>
+            <td>三层看板（总部 / 主管 / 班组）；「一页只答一个问题」；指标版本管理</td>
+          </tr>
+          <tr>
+            <td>九数云：仓库主管怎么用</td>
+            <td class="src">eshutong.com/archives/158244.html</td>
+            <td>结果 / 过程 / 异常三层指标；阈值按业务波动设定；告警带下一步动作；关闭条件</td>
+          </tr>
+          <tr>
+            <td>九数云：多仓协同应重点评估绩效管理</td>
+            <td class="src">eshutong.com/archives/158834.html</td>
+            <td><b>420 件 vs 285 件按复杂度折算后 98% vs 96% 的案例</b>；补货等待与设备故障吃掉 14% 班次</td>
+          </tr>
+          <tr>
+            <td>智邦国际：仓库数据看板落地</td>
+            <td class="src">zbintel.com/erpclub/yitihua/article-419722.shtml</td>
+            <td>「禁止直接比较绝对数值，聚焦改善幅度排名」；12 区域仓统管案例</td>
+          </tr>
+          <tr>
+            <td>智邦国际：分公司库存统一查看</td>
+            <td class="src">zbintel.com/erpclub/yitihua/article-468266.shtml</td>
+            <td>四级颗粒度权限（仓库级 / 商品级 / 单据级 / 时间级）；主数据先行</td>
+          </tr>
+          <tr>
+            <td>易境通：多站点集运多仓管理</td>
+            <td class="src">yejoin.com/mobile/article/newDetail?id=40575</td>
+            <td><b>跨仓汇总 + 切换单仓视图；总管理员 / 分仓主管 / 操作员 / 财务的分层权限实例</b></td>
+          </tr>
+          <tr>
+            <td>Cleverence：Early-Warning KPIs</td>
+            <td class="src">cleverence.com/articles/business-blogs/operational-metrics-that-predict-failure-before-it-happens-4837</td>
+            <td>控制带优于红绿灯；EWMA / CUSUM；「第一个要预测的失败是度量系统的失败」</td>
+          </tr>
+          <tr>
+            <td>支道：SPC 控制图判异规则</td>
+            <td class="src">zdsztech.com/blog/erp-system-inventory-alert-spc-control-chart/</td>
+            <td>八条判异规则；「连续 15 点在 1σ 内反映数据不真实」</td>
+          </tr>
+          <tr>
+            <td>通天晓：异常预警机制（阈值 / 分级 / 留痕）</td>
+            <td class="src">ittx.com.cn/article/scv-exception-alert-mechanism.html</td>
+            <td>阈值按历史分布校准；分级通知；「任意一条预警都能查到全过程」</td>
+          </tr>
+          <tr>
+            <td>Solvemotive：控制塔日志与异常队列设计</td>
+            <td class="src">solvemotive.com/use-cases/logistics-ops-control-tower</td>
+            <td>告警须可执行、带 owner；事件迟到重复乱序是常态；新鲜度要显式展示</td>
+          </tr>
+          <tr>
+            <td>Cloudswitched：报表行级安全指南</td>
+            <td class="src">cloudswitched.com/blog/database-reporting-security-row-level-access-uk-guide-2026</td>
+            <td>映射表替代一人一角色；权限从权威系统派生；预聚合表绕过行级过滤的风险</td>
+          </tr>
+          <tr>
+            <td>WERC DC Measures 中文解读（二手）</td>
+            <td class="src">56ok.com/topic/detail-875951-12-key-kpis-for-optimizing-warehouse-operations.html</td>
+            <td>12 项核心指标清单。<b>数值为二手转述，不作目标值</b></td>
+          </tr>
+          <tr>
+            <td>RF-SMART：WERC 指标摘要（二手）</td>
+            <td class="src">rfsmart.com/blog/warehouse-metrics-that-matter-for-netsuite-customers</td>
+            <td>订单准确率、库存准确率（按库位）、容量利用率的行业等级划分</td>
+          </tr>
+          <tr>
+            <td>APQC：Warehouse slot utilization 度量定义</td>
+            <td class="src">apqc.org/what-we-do/benchmarking/open-standards-benchmarking/measures/warehouse-slot-utilization</td>
+            <td>「已用货位 ÷ 总货位」的官方定义结构与计算范围</td>
+          </tr>
+          <tr>
+            <td>XoroSoft：Warehouse KPI Benchmarks（二手汇总）</td>
+            <td class="src">xorosoft.com/warehouse-kpi-benchmarks/</td>
+            <td>APQC 库存准确率 95%、dock-to-stock 15 小时等参照值。<b>二手，仅作结构参照</b></td>
+          </tr>
+          <tr>
+            <td>大麦云仓：供应链控制塔运营中枢</td>
+            <td class="src">damaiyuncang.com/newsdetails/id/6720.html</td>
+            <td>根因下钻；指标与团队绩效挂钩的闭环</td>
+          </tr>
+          <tr>
+            <td>GoCubic：AI 控制塔异常分级框架</td>
+            <td class="src">gocubic.io/guides/technology/ai-control-tower-peak-season-2026</td>
+            <td>三级异常框架；按异常类型路由到不同角色；置信度低时默认升级到人</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <b>证据等级说明。</b>本材料引用的 Gartner、WERC、APQC 结论均经由厂商博客或中文媒体转述获得，
+      未取得原始报告全文。因此：结构性判断（分层、归一化、同行分组、闭环）在多个独立来源上互相印证，
+      可作设计依据；<strong>具体数值（准确率、利用率、时长基准）只作参照，不作目标值</strong>。
+      本工作区原始数据见第 7 节，均由本次直接读取 <code>proto-next/shared/data/</code> 计算得出。
+    </div>
+  </section>
+
+  <footer>
+    <div>西之月 WMS · 任务中心看板调研 · 2026-10-30 · 单文件零外链</div>
+    <div class="links">
+      <a href="任务中心看板-跨仓指标口径表.md">跨仓指标口径定义表（Markdown）</a>
+      <a href="../PRD/执行单元PRD.md">执行单元 PRD</a>
+      <a href="../PRD/硬件管理PRD.md">硬件管理 PRD</a>
+      <a href="../产品边界.md">产品边界</a>
+    </div>
+  </footer>
+
+</div>
+</body>
+</html>
