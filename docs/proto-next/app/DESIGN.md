@@ -1,8 +1,8 @@
 # APP 手持端 · DESIGN.md
 
 > 适用范围：`proto-next/app/` 下的所有页面与样式。
-> 取值权威：`docs/pda-ui-tokens.json`（结构化令牌，52 项）+ `app-shell.mjs` 的 `:root` 块。
-> 规范上限：`docs/specs/02-APP端设计规范.md`。冲突时以规范为准，本文件只做索引。
+> 取值权威：`proto-next/pda-ui-tokens.json`（结构化令牌，52 项）+ `app-shell.mjs` 的 `:root` 块。
+> 规范上限：`proto-next/02-APP端设计规范.md`（同目录）。冲突时以规范为准，本文件只做索引。
 
 ---
 
@@ -162,7 +162,7 @@ APP 产物是「浏览器里的一台模拟 PDA」，这层外壳有独立规则
 现状：这些值以裸数字直接写在样式里（例如 `font-size:15px`、`border-radius:8px`）。
 写新样式时**优先按上表用令牌名**；已有硬编码不要求立刻改，但不要新增。
 
-`node docs/tools/check-design.mjs` 会把这份缺口清单打印出来。
+`node docs/proto-next/check-design.mjs` 会把这份缺口清单打印出来。
 
 ## 9. Do / Don't
 
@@ -181,6 +181,6 @@ APP 产物是「浏览器里的一台模拟 PDA」，这层外壳有独立规则
 ## 10. 构建
 
 ```bash
-cd proto-next/app && node src/build.mjs          # 构建
-cd proto-next/app && node src/build.mjs --check  # 只校验产物漂移
+cd docs/proto-next/app && node src/build.mjs          # 构建
+cd docs/proto-next/app && node src/build.mjs --check  # 只校验产物漂移
 ```
