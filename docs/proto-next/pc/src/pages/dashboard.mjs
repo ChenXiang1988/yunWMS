@@ -4,7 +4,7 @@
  * 数据的唯一来源是 shared/data 的三份任务表与 exec-units，**页面里不写任何数字**。
  * 任何统计值都由 computeMetrics() 在构建期算出，数据一改看板自动跟着变。
  *
- * 口径（与 docs/reports/任务中心看板-跨仓指标口径表.md 一致）：
+ * 口径（与 reports/任务中心看板-跨仓指标口径表.md 一致）：
  *   未终态 = status ∉ { completed, cancelled }
  *   待指派 = dispatchStatus = 待指派 且未取消
  *   在办负荷 = 未终态任务数 ÷ 在岗单元数

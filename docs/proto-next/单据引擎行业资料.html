@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>单据引擎：四种行业解法与本工作区的对照</title>
+<style>
+  :root{
+    --ink:#14161c;
+    --text:#2a2f3a;
+    --muted:#666e7c;
+    --faint:#8b93a1;
+    --line:#e3e6ed;
+    --line-strong:#d3d8e2;
+    --bg:#f5f6f9;
+    --card:#ffffff;
+    --accent:#4f46e5;
+    --accent-soft:#eef0ff;
+    --accent-line:#c9cdfb;
+    --green:#0f766e;
+    --green-soft:#e8f5f2;
+    --amber:#a15c07;
+    --amber-soft:#fdf3e3;
+    --red:#b42318;
+    --red-soft:#fdeceb;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --shadow:0 1px 2px rgba(20,22,28,.04),0 8px 24px rgba(20,22,28,.04);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    font-size:15px;
+    line-height:1.85;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline;text-underline-offset:3px}
+  code{
+    font-family:var(--mono);
+    font-size:.86em;
+    background:#f2f4f8;
+    border:1px solid var(--line);
+    border-radius:4px;
+    padding:.1em .38em;
+    color:#3b4150;
+    word-break:break-all;
+  }
+  .wrap{max-width:1120px;margin:0 auto;padding:0 32px}
+
+  /* ---------- masthead ---------- */
+  .masthead{
+    position:relative;
+    background:
+      radial-gradient(900px 360px at 8% -12%,#e9ebff 0%,rgba(233,235,255,0) 62%),
+      #ffffff;
+    border-bottom:1px solid var(--line);
+    padding:72px 0 44px;
+    overflow:hidden;
+  }
+  .masthead::after{
+    content:"";
+    position:absolute;
+    right:-120px;top:-140px;
+    width:420px;height:420px;
+    border:1px solid #e8eaf2;
+    border-radius:50%;
+    pointer-events:none;
+  }
+  .kicker{
+    display:flex;align-items:center;gap:10px;
+    font-size:12px;letter-spacing:.16em;
+    color:var(--accent);font-weight:600;
+    margin-bottom:22px;
+  }
+  .kicker .dot{
+    width:7px;height:7px;border-radius:50%;
+    background:var(--accent);
+    box-shadow:0 0 0 4px var(--accent-soft);
+  }
+  h1{
+    margin:0 0 22px;
+    max-width:940px;
+    font-size:clamp(32px,4.6vw,52px);
+    line-height:1.18;
+    letter-spacing:-.022em;
+    font-weight:650;
+    color:var(--ink);
+  }
+  h1 .thin{color:var(--faint);font-weight:400}
+  .lead{
+    margin:0;
+    max-width:790px;
+    font-size:17px;
+    line-height:1.95;
+    color:#3f4552;
+  }
+  .meta{
+    display:flex;flex-wrap:wrap;gap:10px;
+    margin-top:30px;
+  }
+  .chip{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:5px 11px;
+    border:1px solid var(--line);
+    border-radius:999px;
+    background:#fff;
+    font-size:12px;
+    color:var(--muted);
+    letter-spacing:.02em;
+  }
+  .chip strong{color:var(--ink);font-weight:600}
+  .print-btn{
+    position:absolute;
+    right:32px;bottom:44px;
+    border:1px solid var(--line-strong);
+    background:#fff;
+    color:var(--text);
+    font-family:inherit;
+    font-size:12px;
+    padding:8px 14px;
+    border-radius:8px;
+    cursor:pointer;
+    transition:border-color .15s,color .15s,background .15s;
+  }
+  .print-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+
+  /* ---------- nav ---------- */
+  nav{
+    position:sticky;top:0;z-index:50;
+    background:rgba(255,255,255,.9);
+    backdrop-filter:saturate(180%) blur(12px);
+    -webkit-backdrop-filter:saturate(180%) blur(12px);
+    border-bottom:1px solid var(--line);
+  }
+  .nav-inner{
+    max-width:1120px;margin:0 auto;padding:0 32px;
+    display:flex;gap:26px;
+    overflow-x:auto;
+    scrollbar-width:none;
+  }
+  .nav-inner::-webkit-scrollbar{display:none}
+  nav a{
+    flex:0 0 auto;
+    display:block;
+    padding:15px 0 13px;
+    font-size:13px;
+    color:var(--muted);
+    border-bottom:2px solid transparent;
+    white-space:nowrap;
+    transition:color .15s,border-color .15s;
+  }
+  nav a:hover{color:var(--ink);text-decoration:none}
+  nav a.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+  .progress{
+    position:absolute;left:0;right:0;bottom:-1px;height:2px;
+    background:transparent;
+    pointer-events:none;
+  }
+  .progress i{
+    display:block;height:100%;width:0;
+    background:linear-gradient(90deg,var(--accent),#7c6cff);
+    transition:width .08s linear;
+  }
+
+  /* ---------- sections ---------- */
+  main{padding:56px 0 96px}
+  section{
+    margin:0 0 76px;
+    scroll-margin-top:76px;
+  }
+  .sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:10px}
+  .sec-no{
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--accent);
+    letter-spacing:.08em;
+    padding-top:6px;
+  }
+  h2{
+    margin:0;
+    font-size:clamp(24px,2.6vw,30px);
+    line-height:1.35;
+    letter-spacing:-.01em;
+    color:var(--ink);
+    font-weight:650;
+  }
+  .lede{
+    margin:0 0 30px 40px;
+    max-width:820px;
+    color:var(--muted);
+    font-size:15px;
+  }
+  h3{color:var(--ink);font-weight:650;letter-spacing:-.01em}
+
+  /* ---------- cards ---------- */
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    box-shadow:var(--shadow);
+  }
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .term-card{padding:22px 22px 20px}
+  .term-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+  .term-name{font-weight:650;color:var(--ink);font-size:15px;line-height:1.4}
+  .tag{
+    display:inline-block;
+    font-size:11px;
+    line-height:1.6;
+    padding:1px 8px;
+    border-radius:999px;
+    border:1px solid var(--line-strong);
+    color:var(--muted);
+    background:#fafbfd;
+    white-space:nowrap;
+  }
+  .tag.practice{color:#1d4ed8;background:#eef3ff;border-color:#d5e0ff}
+  .tag.vendor{color:var(--green);background:var(--green-soft);border-color:#c9e6df}
+  .tag.std{color:var(--amber);background:var(--amber-soft);border-color:#f0ddba}
+  .tag.open{color:#6d28d9;background:#f4efff;border-color:#e2d7fb}
+  .term-card p{margin:0 0 6px;font-size:13.5px;color:var(--muted);line-height:1.8}
+  .term-rep{margin-top:10px!important;color:var(--faint)!important;font-size:12.5px!important}
+
+  .callout{
+    margin-top:18px;
+    padding:18px 22px;
+    border:1px solid var(--accent-line);
+    background:linear-gradient(180deg,#f7f8ff,#f2f4ff);
+    border-radius:12px;
+    font-size:14px;
+    color:#3b4160;
+    line-height:1.85;
+  }
+  .callout b{color:var(--ink)}
+
+  /* ---------- pillars ---------- */
+  .pillars{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:26px}
+  .pillar{padding:20px;background:#fff;border:1px solid var(--line);border-radius:12px}
+  .pillar .pk{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:24px;height:24px;border-radius:6px;
+    background:var(--accent-soft);color:var(--accent);
+    font-family:var(--mono);font-size:11px;font-weight:600;
+    margin-bottom:10px;
+  }
+  .pillar h3{margin:0 0 6px;font-size:14px}
+  .pillar p{margin:0;font-size:13px;color:var(--muted);line-height:1.75}
+
+  /* ---------- pattern ---------- */
+  .pattern{padding:30px 30px 26px;margin-bottom:20px}
+  .pattern-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:4px}
+  .pnum{
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--accent);
+    background:var(--accent-soft);
+    border:1px solid var(--accent-line);
+    border-radius:6px;
+    padding:2px 8px;
+    letter-spacing:.04em;
+  }
+  .pattern-head h3{margin:0;font-size:21px;line-height:1.4}
+  .pattern-sub{margin:0 0 22px;color:var(--faint);font-size:13px}
+  .pattern-body{display:grid;grid-template-columns:1.5fr .9fr;gap:30px}
+  .mech{list-style:none;margin:0;padding:0}
+  .mech li{
+    position:relative;
+    padding-left:16px;
+    margin-bottom:12px;
+    font-size:14px;
+    line-height:1.85;
+  }
+  .mech li::before{
+    content:"";
+    position:absolute;left:0;top:.72em;
+    width:5px;height:5px;border-radius:50%;
+    background:var(--accent-line);
+  }
+  .mech b{color:var(--ink);font-weight:600}
+  .side{
+    background:#fafbfd;
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:18px 20px;
+    align-self:start;
+  }
+  .side h4{
+    margin:0 0 10px;
+    font-size:11px;
+    letter-spacing:.14em;
+    color:var(--faint);
+    font-weight:600;
+  }
+  .side ul{margin:0;padding-left:16px}
+  .side li{font-size:13px;color:#4b5260;line-height:1.8;margin-bottom:5px}
+  .src{
+    margin-top:14px;padding-top:12px;
+    border-top:1px dashed var(--line-strong);
+    font-size:11.5px;color:var(--faint);
+  }
+  .src a{font-family:var(--mono);font-size:11px;margin-right:6px}
+
+  /* ---------- diagrams ---------- */
+  .diagram{
+    margin:22px 0 4px;
+    padding:20px;
+    background:#fbfcfe;
+    border:1px solid var(--line);
+    border-radius:10px;
+  }
+  .flow{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap}
+  .node{
+    flex:1 1 150px;
+    min-width:130px;
+    padding:13px 14px;
+    background:#fff;
+    border:1px solid var(--line-strong);
+    border-radius:8px;
+  }
+  .node b{display:block;font-size:13.5px;color:var(--ink);font-weight:600;line-height:1.5}
+  .node span{display:block;margin-top:3px;font-size:11.5px;color:var(--faint);line-height:1.5}
+  .node.accent{border-color:var(--accent-line);background:var(--accent-soft)}
+  .node.accent b{color:#3730a3}
+  .arrow{
+    display:flex;align-items:center;justify-content:center;
+    color:#b3bac8;font-size:16px;flex:0 0 18px;
+  }
+  .diagram-note{margin-top:12px;font-size:12px;color:var(--faint);line-height:1.7}
+
+  .layers{display:grid;gap:6px}
+  .layer{
+    display:grid;
+    grid-template-columns:120px 1fr auto;
+    align-items:center;
+    gap:12px;
+    padding:12px 14px;
+    background:#fff;
+    border:1px solid var(--line-strong);
+    border-radius:8px;
+  }
+  .layer:first-child{border-color:var(--accent-line);background:var(--accent-soft)}
+  .lname{font-weight:600;color:var(--ink);font-size:13.5px}
+  .ldesc{font-size:12.5px;color:var(--muted)}
+  .lkey{
+    font-family:var(--mono);font-size:11px;
+    color:var(--green);background:var(--green-soft);
+    border:1px solid #c9e6df;border-radius:999px;
+    padding:1px 8px;white-space:nowrap;
+  }
+
+  .std-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:22px}
+  .std{padding:14px 16px;background:#fff;border:1px solid var(--line);border-radius:8px}
+  .std b{display:block;font-size:13px;color:var(--ink);margin-bottom:3px}
+  .std span{font-size:12px;color:var(--muted);line-height:1.7}
+
+  /* ---------- tables ---------- */
+  .table-wrap{
+    overflow-x:auto;
+    border:1px solid var(--line);
+    border-radius:12px;
+    background:#fff;
+    box-shadow:var(--shadow);
+  }
+  table{width:100%;border-collapse:collapse;min-width:720px}
+  thead th{
+    text-align:left;
+    font-size:11px;
+    letter-spacing:.1em;
+    color:var(--faint);
+    font-weight:600;
+    padding:14px 18px;
+    border-bottom:1px solid var(--line);
+    background:#fafbfd;
+    white-space:nowrap;
+  }
+  tbody td{
+    padding:15px 18px;
+    border-bottom:1px solid #eef0f5;
+    font-size:13.5px;
+    line-height:1.75;
+    vertical-align:top;
+  }
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover td{background:#fcfcfe}
+  td strong{color:var(--ink);font-weight:600}
+  .judge{color:var(--muted)}
+  .src-table td:first-child{font-family:var(--mono);font-size:12px;color:var(--accent);white-space:nowrap}
+  .src-table .url{font-family:var(--mono);font-size:11.5px;line-height:1.6;word-break:break-all}
+  .src-table .url a{color:#3b4a6b}
+  .src-table td:last-child{white-space:nowrap;font-size:12.5px;color:var(--faint)}
+
+  /* ---------- workspace ---------- */
+  .ws-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .ws-col{padding:22px;background:#fff;border:1px solid var(--line);border-radius:12px;border-top:2px solid var(--line-strong)}
+  .ws-col.good{border-top-color:var(--green)}
+  .ws-col.gap{border-top-color:var(--amber)}
+  .ws-col.risk{border-top-color:var(--red)}
+  .ws-col h3{margin:0 0 12px;font-size:14px;letter-spacing:.02em}
+  .ws-col h3 .mark{font-family:var(--mono);font-size:11px;color:var(--faint);font-weight:400;margin-left:6px}
+  .ws-col ul{margin:0;padding-left:16px}
+  .ws-col li{font-size:13px;line-height:1.85;margin-bottom:8px;color:#444b58}
+  .ws-col li b{color:var(--ink);font-weight:600}
+  .ws-col code{font-size:11px}
+
+  .compare{
+    display:grid;grid-template-columns:1fr 1fr;gap:16px;
+    margin-top:18px;
+  }
+  .cmp{padding:20px;background:#fff;border:1px solid var(--line);border-radius:12px}
+  .cmp h4{margin:0 0 12px;font-size:12px;letter-spacing:.1em;color:var(--faint);font-weight:600}
+  .cmp-layer{
+    padding:9px 12px;margin-bottom:6px;
+    border:1px solid var(--line-strong);border-radius:6px;
+    font-size:13px;color:var(--ink);background:#fbfcfe;
+  }
+  .cmp-layer.missing{
+    border-style:dashed;border-color:#e3b9b4;background:var(--red-soft);
+    color:var(--red);
+  }
+  .cmp-note{margin:10px 0 0;font-size:11.5px;color:var(--faint);line-height:1.7}
+
+  /* ---------- footer ---------- */
+  footer{
+    border-top:1px solid var(--line);
+    background:#fff;
+    padding:30px 0 46px;
+  }
+  footer p{margin:0 0 8px;font-size:12.5px;color:var(--faint);line-height:1.9;max-width:900px}
+  footer b{color:var(--muted);font-weight:600}
+
+  @media (max-width:900px){
+    .grid-3{grid-template-columns:1fr}
+    .pillars{grid-template-columns:repeat(2,1fr)}
+    .pattern-body{grid-template-columns:1fr}
+    .ws-grid{grid-template-columns:1fr}
+    .compare{grid-template-columns:1fr}
+    .print-btn{position:static;margin-top:24px}
+  }
+  @media (max-width:640px){
+    .wrap,.nav-inner{padding-left:20px;padding-right:20px}
+    h1{font-size:28px;line-height:1.24;letter-spacing:-.015em}
+    .masthead{padding:48px 0 32px}
+    main{padding-top:38px}
+    .pattern{padding:22px 18px}
+    .pillars{grid-template-columns:1fr}
+    .lede{margin-left:0}
+    .layer{grid-template-columns:1fr;gap:4px}
+    .std-grid{grid-template-columns:1fr}
+    .arrow{flex-basis:100%;height:14px;font-size:13px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    *{transition:none!important}
+  }
+  @media print{
+    body{background:#fff;font-size:11pt}
+    nav,.print-btn{display:none!important}
+    .masthead{background:#fff;padding-top:0}
+    .card,.table-wrap,.pattern,.ws-col,.cmp{box-shadow:none}
+    section{break-inside:avoid;margin-bottom:36px}
+    a{color:inherit;text-decoration:none}
+    .pattern{break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="kicker"><span class="dot"></span>行业研究 · 工作区外资料 E2</div>
+    <h1>单据引擎：四种行业解法<br><span class="thin">与本工作区的对照</span></h1>
+    <p class="lead">“单据引擎”不是行业标准术语。它指四类能力的不同组合：单据建模、类型与编号、流转、转换与校验。本页拆开四种主流做法，给出机制、代价和适用条件，再对照本工作区已有的单据模型。</p>
+    <div class="meta">
+      <span class="chip"><strong>2026-10-20</strong> 整理</span>
+      <span class="chip"><strong>4</strong> 类模式</span>
+      <span class="chip"><strong>12</strong> 条来源</span>
+      <span class="chip"><strong>3</strong> 处缺口</span>
+    </div>
+    <button class="print-btn" id="printBtn" type="button">打印 / 存为 PDF</button>
+  </div>
+</header>
+
+<nav aria-label="章节导航">
+  <div class="nav-inner">
+    <a href="#sec0">三种所指</a>
+    <a href="#sec1">设计思路</a>
+    <a href="#sec2">四种模式</a>
+    <a href="#sec3">权衡取舍</a>
+    <a href="#sec4">适用场景</a>
+    <a href="#sec5">本工作区对照</a>
+    <a href="#sec6">来源</a>
+  </div>
+  <div class="progress"><i id="progress"></i></div>
+</nav>
+
+<main class="wrap">
+
+  <section id="sec0">
+    <div class="sec-head"><span class="sec-no">00</span><h2>先分清三种所指</h2></div>
+    <p class="lede">同一个词，在三个语境里指三套不同的东西。取用前先确认语境，否则会把财务单据的校验规则，误当成仓内作业的流程引擎。</p>
+
+    <div class="grid-3">
+      <article class="card term-card">
+        <div class="term-top">
+          <span class="term-name">订单中心 / 单据中心</span>
+          <span class="tag practice">交易与履约</span>
+        </div>
+        <p>配置对象是统一单据模型、扩展字段与接口收口。</p>
+        <p>目标是让多条业务线共用一套模型，新业务接入不改代码。</p>
+        <p class="term-rep">代表：京东物流订单中心、阿里交易域</p>
+      </article>
+
+      <article class="card term-card">
+        <div class="term-top">
+          <span class="term-name">单据类型 / 流程类型</span>
+          <span class="tag vendor">ERP 与 WMS</span>
+        </div>
+        <p>配置对象是单据类型、仓库流程类型、任务与下推规则。</p>
+        <p>目标是让单据语义、现场动作与执行单元分开配置。</p>
+        <p class="term-rep">代表：SAP EWM、金蝶 BOTP</p>
+      </article>
+
+      <article class="card term-card">
+        <div class="term-top">
+          <span class="term-name">单据引擎 / 表单引擎</span>
+          <span class="tag std">财务与费控</span>
+        </div>
+        <p>配置对象是单据模板、字段、校验规则与计算规则。</p>
+        <p>目标是让业务人员在提交前完成机器校验。</p>
+        <p class="term-rep">代表：中兴新云 FOL</p>
+      </article>
+    </div>
+
+    <div class="callout">
+      <b>本页的用法。</b>本工作区的“单据引擎”接近第二类。它已有类型、流程、状态机、策略四件，没有单据转换规则与执行包层。第四节的对照按这个判断给出。
+    </div>
+  </section>
+
+  <section id="sec1">
+    <div class="sec-head"><span class="sec-no">01</span><h2>设计思路：四件事，不是一件</h2></div>
+    <p class="lede">行业里能称为“引擎”的部分，通常由四件事组成。四件事可以分开做，也可以合成一个产品。差别不在技术栈，而在配置边界停在哪一层。</p>
+
+    <div class="pillars">
+      <div class="pillar">
+        <span class="pk">A</span>
+        <h3>单据建模</h3>
+        <p>单头、明细行、扩展字段。决定一张单能装什么。</p>
+      </div>
+      <div class="pillar">
+        <span class="pk">B</span>
+        <h3>类型与编号</h3>
+        <p>类型决定语义、可用流程与编号段。决定一张单是什么。</p>
+      </div>
+      <div class="pillar">
+        <span class="pk">C</span>
+        <h3>流转</h3>
+        <p>状态机与流程模板。决定一张单走到哪一步。</p>
+      </div>
+      <div class="pillar">
+        <span class="pk">D</span>
+        <h3>转换与校验</h3>
+        <p>字段映射、分组、容差、校验规则。决定一张单如何变成下一张单。</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <b>一句话结论。</b>行业做法的分歧集中在 D。只做 A 到 C 的系统，单据之间靠代码连接；把 D 也配置化的系统，才称得上“单据引擎”。
+    </div>
+  </section>
+
+  <section id="sec2">
+    <div class="sec-head"><span class="sec-no">02</span><h2>四种模式</h2></div>
+    <p class="lede">每种模式给出机制、可落地的做法、代价与来源。模式名称取行业里的通用叫法，代表系统取公开可查的一手资料。</p>
+
+    <!-- pattern 1 -->
+    <article class="card pattern">
+      <div class="pattern-head">
+        <span class="pnum">01</span>
+        <h3>统一单据中心</h3>
+        <span class="tag practice">最佳实践</span>
+      </div>
+      <p class="pattern-sub">互联网交易与履约语境。代表：京东物流订单中心、阿里交易域。</p>
+
+      <div class="pattern-body">
+        <div>
+          <ul class="mech">
+            <li><b>一套模型收口所有业务线。</b>单头、明细、扩展字段共用。不同业务只加类型与字段，不另建一套单据表。</li>
+            <li><b>字段按域分组。</b>京东把订单字段划成九类：主档、货品、物流服务、营销、财务、客户渠道、收发货、操作、扩展。标识类字段不逐项建列，走 KV 存储。</li>
+            <li><b>个性化字段用三元组定位。</b>按「业务身份 + 业务类型 + 业务字段」找到具体表与字段。每张表预留扩展属性，同一属性在不同业务类型下含义不同。</li>
+            <li><b>两层收口。</b>接口层做单据流量的唯一入口；数据层把持久化、搜索、中继、对账拆开。交易与履约解耦。</li>
+            <li><b>聚合与事件。</b>阿里以交易订单为聚合根，订单商品、发货单在聚合内创建；状态变化发领域事件。</li>
+          </ul>
+        </div>
+        <aside class="side">
+          <h4>可落地的做法</h4>
+          <ul>
+            <li>先建字段字典，再谈扩展字段。</li>
+            <li>扩展字段用 KV，不逐项加列。</li>
+            <li>单据链只存上游单号与行号，不复制上游内容。</li>
+            <li>状态变化单独留流水。</li>
+          </ul>
+          <div class="src">来源：<a href="#s1">S1</a><a href="#s2">S2</a></div>
+        </aside>
+      </div>
+
+      <div class="diagram">
+        <div class="flow">
+          <div class="node"><b>接入</b><span>多条业务线</span></div>
+          <div class="arrow">→</div>
+          <div class="node accent"><b>统一单据模型</b><span>头 / 行 / 扩展字段</span></div>
+          <div class="arrow">→</div>
+          <div class="node"><b>履约与执行</b><span>按场景分发</span></div>
+        </div>
+        <div class="diagram-note">收口做两层：接口层收单据流量，数据层收存储与查询。</div>
+      </div>
+    </article>
+
+    <!-- pattern 2 -->
+    <article class="card pattern">
+      <div class="pattern-head">
+        <span class="pnum">02</span>
+        <h3>单据类型 × 流程类型 × 任务 / 执行包</h3>
+        <span class="tag vendor">竞品案例</span>
+      </div>
+      <p class="pattern-sub">WMS 语境，与本工作区最接近。代表：SAP EWM。</p>
+
+      <div class="pattern-body">
+        <div>
+          <ul class="mech">
+            <li><b>三层结构。</b>仓库请求表达要做什么；仓库任务表达怎么搬、从哪到哪；仓库订单把任务组装成工作包，交给具体作业人员。</li>
+            <li><b>流程类型挂在单据行上。</b>仓库流程类型（WPT）分配给每个仓库请求行，控制该行的活动与任务创建方式。WPT 不同，是否自动建任务、建几个、进哪个队列都会不同。</li>
+            <li><b>任务由单据派生。</b>任务带源单号与行号。任务之上再按队列、活动区域、资源分组，形成执行包。</li>
+            <li><b>单据链单独查。</b>Document Flow 显示与一笔业务直接相连的前序、后续单据及其状态，形成单据链。</li>
+            <li><b>类型与号段绑定。</b>单据类型指定号码段，单号从号段中取。</li>
+          </ul>
+        </div>
+        <aside class="side">
+          <h4>可落地的做法</h4>
+          <ul>
+            <li>单据行上挂流程类型，流程不画在单据上。</li>
+            <li>任务带源单号与行号，作为幂等键。</li>
+            <li>执行包按资源与队列聚合，不按单据聚合。</li>
+            <li>提供上查、下查与全流程跟踪。</li>
+          </ul>
+          <div class="src">来源：<a href="#s3">S3</a><a href="#s4">S4</a><a href="#s5">S5</a><a href="#s12">S12</a></div>
+        </aside>
+      </div>
+
+      <div class="diagram">
+        <div class="layers">
+          <div class="layer"><span class="lname">仓库请求</span><span class="ldesc">要做什么。业务单据层，可回写上游。</span><span class="lkey">单据类型</span></div>
+          <div class="layer"><span class="lname">仓库任务</span><span class="ldesc">怎么搬。物理动作层，带源位与目标位。</span><span class="lkey">流程类型 WPT</span></div>
+          <div class="layer"><span class="lname">仓库订单</span><span class="ldesc">由谁、按什么顺序做。执行包层。</span><span class="lkey">队列 / 资源</span></div>
+        </div>
+        <div class="diagram-note">这三层是本页最值得对照的结构。单据与执行单据分开，执行包可以跨单据合并。</div>
+      </div>
+    </article>
+
+    <!-- pattern 3 -->
+    <article class="card pattern">
+      <div class="pattern-head">
+        <span class="pnum">03</span>
+        <h3>单据转换 / 下推</h3>
+        <span class="tag vendor">竞品案例</span>
+      </div>
+      <p class="pattern-sub">国产 ERP 与财务语境。代表：金蝶 BOTP、中兴新云 FOL。</p>
+
+      <div class="pattern-body">
+        <div>
+          <ul class="mech">
+            <li><b>转换规则定义字段映射。</b>源单与目标单逐字段对应，携带数量、金额、批次等业务字段。</li>
+            <li><b>分组策略决定基数。</b>一对一生成、多对一生成、按规则分组合并生成。多对一时，单据头取第一张源单的值。</li>
+            <li><b>尾差单独处理。</b>金额或数量换算产生小数差时，按尾差策略调差，避免下游合计对不上。</li>
+            <li><b>运行时五个动作。</b>下推、选单、上查、下查、全流程跟踪。前两个生成下游单，后三个查单据链。</li>
+            <li><b>校验前移。</b>中兴新云把校验放在提交、业务审批、财务初审三个时点，形成“配置—提单—机审—人审”的闭环。</li>
+          </ul>
+        </div>
+        <aside class="side">
+          <h4>可落地的做法</h4>
+          <ul>
+            <li>转换规则单独建表，不与页面逻辑混写。</li>
+            <li>分组策略按单据类型固定，不逐单判断。</li>
+            <li>数量与金额都要有容差口径。</li>
+            <li>转换后保留源单行号，供追溯。</li>
+          </ul>
+          <div class="src">来源：<a href="#s6">S6</a><a href="#s7">S7</a></div>
+        </aside>
+      </div>
+
+      <div class="diagram">
+        <div class="flow">
+          <div class="node"><b>上游单</b><span>源单与分录</span></div>
+          <div class="arrow">→</div>
+          <div class="node accent"><b>转换规则</b><span>字段映射 / 分组 / 尾差</span></div>
+          <div class="arrow">→</div>
+          <div class="node"><b>下游单</b><span>目标单与分录</span></div>
+        </div>
+        <div class="diagram-note">单据类型关系支持 1 比 1、多比 1；1 比多时由系统自动选一个目标类型。</div>
+      </div>
+    </article>
+
+    <!-- pattern 4 -->
+    <article class="card pattern">
+      <div class="pattern-head">
+        <span class="pnum">04</span>
+        <h3>标准流程 / 决策引擎与元数据建模</h3>
+        <span class="tag std">行业标准</span>
+      </div>
+      <p class="pattern-sub">通用技术派。用标准建模语言或元数据平台承载流程与规则。</p>
+
+      <div class="pattern-body">
+        <div>
+          <ul class="mech">
+            <li><b>BPMN 2.0。</b>OMG 的流程建模标准。流程图可以被流程引擎直接执行，适合跨系统的长流程。</li>
+            <li><b>DMN。</b>OMG 的决策建模标准。用决策表或决策树表达“命中哪条规则”，适合策略判定。</li>
+            <li><b>External Task。</b>Camunda 把系统动作发布成待办，由外部 worker 拉取执行。适合把 PDA、AGV、打印等设备动作挂到流程上。</li>
+            <li><b>元数据建模。</b>金蝶苍穹 KDDM 用元数据描述业务对象、布局、规则与流程，运行期动态加载。</li>
+          </ul>
+        </div>
+        <aside class="side">
+          <h4>可落地的做法</h4>
+          <ul>
+            <li>流程与执行解耦，执行侧只认任务。</li>
+            <li>策略用决策表，不用 if-else 堆叠。</li>
+            <li>元数据要配版本与灰度。</li>
+            <li>高频短流程不套通用引擎。</li>
+          </ul>
+          <div class="src">来源：<a href="#s8">S8</a><a href="#s9">S9</a><a href="#s10">S10</a><a href="#s11">S11</a></div>
+        </aside>
+      </div>
+
+      <div class="std-grid">
+        <div class="std"><b>BPMN 2.0</b><span>流程可执行标准。适合跨系统、带人工审批的长流程。</span></div>
+        <div class="std"><b>DMN</b><span>决策表与表达式。适合上架、波次、路由等策略命中。</span></div>
+        <div class="std"><b>Camunda External Task</b><span>外部 worker 拉取任务。适合设备与终端的异步动作。</span></div>
+        <div class="std"><b>金蝶 KDDM</b><span>元数据描述对象、布局、规则、流程，运行期加载。</span></div>
+      </div>
+    </article>
+  </section>
+
+  <section id="sec3">
+    <div class="sec-head"><span class="sec-no">03</span><h2>权衡取舍</h2></div>
+    <p class="lede">四种模式都能解决“配置化”的问题，代价落在不同位置。失败条件比收益更值得先看。</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>模式</th><th>收益</th><th>代价</th><th>失败条件</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>统一单据中心</strong></td>
+            <td>新业务接入快，模型不膨胀，数据可跨业务分析。</td>
+            <td>扩展字段治理难，跨域查询与对账复杂。</td>
+            <td class="judge">没有字段字典与责任人，KV 变成垃圾场。</td>
+          </tr>
+          <tr>
+            <td><strong>类型 × 流程类型 × 任务 / 执行包</strong></td>
+            <td>单据语义与现场动作分离，任务可按资源聚合。</td>
+            <td>配置项多，流程类型与存储策略互相耦合。</td>
+            <td class="judge">流程类型粒度过细，配置数量爆炸。</td>
+          </tr>
+          <tr>
+            <td><strong>单据转换 / 下推</strong></td>
+            <td>单据链自动生成，减少重复录入，上下游可追溯。</td>
+            <td>字段映射与分组规则维护成本高，尾差与容差易错。</td>
+            <td class="judge">上下游类型一对多，追溯链出现断点。</td>
+          </tr>
+          <tr>
+            <td><strong>BPMN / DMN 通用引擎</strong></td>
+            <td>标准、可视、可审计，跨系统流程统一。</td>
+            <td>引擎与领域模型两张皮，简单单据被过度建模。</td>
+            <td class="judge">用 BPMN 画仓内高频短流程，开销大于收益。</td>
+          </tr>
+          <tr>
+            <td><strong>元数据低代码</strong></td>
+            <td>业务人员可自配，变更快。</td>
+            <td>运行期解释，性能与可测性下降。</td>
+            <td class="judge">缺少版本与灰度，配置错误直接影响生产。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="sec4">
+    <div class="sec-head"><span class="sec-no">04</span><h2>适用场景</h2></div>
+    <p class="lede">按约束选模式，不按技术偏好选。先回答单据种类、现场动作、转换频率三个问题。</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>条件</th><th>选择</th><th>理由</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>单据种类多、扩展字段多、多业务线共用</td>
+            <td><strong>统一单据模型，再谈引擎</strong></td>
+            <td>模型不统一时，配置化只会放大差异。</td>
+          </tr>
+          <tr>
+            <td>现场动作复杂，任务要按人、设备或队列聚合</td>
+            <td><strong>单据 → 任务 → 执行包三层</strong></td>
+            <td>执行包按资源聚合，不按单据聚合。</td>
+          </tr>
+          <tr>
+            <td>上下游转换频繁，如入库、收货、上架，或补货、拣货、移库</td>
+            <td><strong>单独做转换规则表</strong></td>
+            <td>字段映射、分组与容差需要独立维护与试算。</td>
+          </tr>
+          <tr>
+            <td>规则要由业务人员改，且要审计</td>
+            <td><strong>DMN 决策表或规则表</strong></td>
+            <td>决策表可版本化，命中结果可解释。</td>
+          </tr>
+          <tr>
+            <td>流程跨多个系统，含长事务与人工审批</td>
+            <td><strong>BPMN 引擎加 External Task</strong></td>
+            <td>通用引擎擅长长流程，不擅长秒级仓内任务。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="sec5">
+    <div class="sec-head"><span class="sec-no">05</span><h2>与本工作区的对照</h2></div>
+    <p class="lede">本节依据工作区内文件，不引用外部资料。判断口径：已有、缺口、风险三列。</p>
+
+    <div class="ws-grid">
+      <div class="ws-col good">
+        <h3>已有<span class="mark">W1</span></h3>
+        <ul>
+          <li><b>类型注册表。</b><code>wset-workflow.json</code> 有 2 个单据、4 个类型。</li>
+          <li><b>流程与工序。</b>8 条仓库流程、4 个模板、16 个工序节点、9 类动作。</li>
+          <li><b>状态机。</b>2 套，分别有 7 条与 5 条迁移。节点只引用迁移，不新增状态。</li>
+          <li><b>策略表。</b><code>wset-strategy.json</code> 有 7 条规则，按单据级与工序级分层。</li>
+          <li><b>单据链。</b><code>model.json</code> 有 7 条关系，写明来源与派生。</li>
+        </ul>
+      </div>
+
+      <div class="ws-col gap">
+        <h3>缺口<span class="mark">W1</span></h3>
+        <ul>
+          <li><b>转换规则。</b>全库检索不到下推、转换规则、上查、下查、全流程跟踪。</li>
+          <li><b>执行包层。</b>结构是主单据到作业任务，任务之上没有按资源或队列聚合的容器。</li>
+          <li><b>编号规则。</b>单号只是数据字段，没有号段与类型绑定的配置。</li>
+        </ul>
+      </div>
+
+      <div class="ws-col risk">
+        <h3>风险<span class="mark">W1</span></h3>
+        <ul>
+          <li><b>入口分散。</b>流程、状态机、策略分三页配置。新增一个单据类型要改多处。</li>
+          <li><b>页签由构建注入。</b>类型页签在构建期写入，补货单还显式关闭了页签。</li>
+          <li><b>监控页已撤。</b>流程监控改由单据详情承载，没有独立的跨单据视图。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="compare">
+      <div class="cmp">
+        <h4>SAP EWM 三层</h4>
+        <div class="cmp-layer">仓库请求 · 要做什么</div>
+        <div class="cmp-layer">仓库任务 · 怎么搬</div>
+        <div class="cmp-layer">仓库订单 · 由谁做</div>
+        <p class="cmp-note">执行包可以跨单据合并，目标是资源效率。</p>
+      </div>
+      <div class="cmp">
+        <h4>本工作区两层</h4>
+        <div class="cmp-layer">主单据 · 入库单、上架单、移库单、补货单</div>
+        <div class="cmp-layer">作业任务 · 上架、移库、拣货、盘点</div>
+        <div class="cmp-layer missing">执行包 · 缺</div>
+        <p class="cmp-note">波次是节拍视图，不承担任务包，不能替代执行包层。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="sec6">
+    <div class="sec-head"><span class="sec-no">06</span><h2>来源</h2></div>
+    <p class="lede">每条来源给出名称、类型、URL 与访问日期。论坛与聚合站只作线索，未列入。</p>
+
+    <div class="table-wrap">
+      <table class="src-table">
+        <thead>
+          <tr><th>编号</th><th>来源</th><th>类型</th><th>URL</th><th>访问日期</th></tr>
+        </thead>
+        <tbody>
+          <tr id="s1">
+            <td>S1</td>
+            <td>京东物流技术团队《交易日均千万订单的存储架构设计与实践》，2023-09-25</td>
+            <td><span class="tag practice">最佳实践</span></td>
+            <td class="url"><a href="https://juejin.cn/post/7282245793688059964" target="_blank" rel="noopener">juejin.cn/post/7282245793688059964</a></td>
+            <td>2026-10-20</td>
+          </tr>
+          <tr id="s2">
+            <td>S2</td>
+            <td>阿里云开发者社区《业务中台构建策略：划分子域、上下文、事件风暴、需求结构化和能力可配置（1）》</td>
+            <td><span class="tag practice">最佳实践</span></td>
+            <td class="url"><a href="https://developer.aliyun.com/article/861063" target="_blank" rel="noopener">developer.aliyun.com/article/861063</a></td>
+            <td>2026-10-20</td>
+          </tr>
+          <tr id="s3">
+            <td>S3</td>
+            <td>SAP Help Portal《Creation of Warehouse Tasks for Warehouse Request》</td>
+            <td><span class="tag vendor">竞品案例</span></td>
+            <td class="url"><a href="https://help.sap.com/docs/SAP_S4HANA_ON-PREMISE/9832125c23154a179bfa1784cdc9577a/7fcccb53ad377114e10000000a174cb4.html" target="_blank" rel="noopener">help.sap.com/docs/SAP_S4HANA_ON-PREMISE/…/7fcccb53ad377114e10000000a174cb4.html</a></td>
+            <td>2026-10-20</td>
+          </tr>
+          <tr id="s4">
+            <td>S4</td>
+            <td>SAP Learning《Applying Warehouse Process Types》</td>
+            <td><span class="tag vendor">竞品案例</span></td>
+            <td class="url"><a href="https://learning.sap.com/courses/basic-customizing-in-sap-s-4hana-ewm/applying-warehouse-process-types" target="_blank" rel="noopener">learning.sap.com/courses/basic-customizing-in-sap-s-4hana-ewm/applying-warehouse-process-types</a></td>
+            <td>2026-10-20</td>
+          </tr>
+          <tr id="s5">
+            <td>S5</td>
+            <td>SAP Help Portal《Document Flow》</td>
+            <td><span class="tag vendor">竞品案例</span></td>
+            <td class="url"><a href="https://help.sap.com/docs/SAP_S4HANA_ON-PREMISE/f7d969cde600466b96094e772632c3f3/b4dfb65334e6b54ce10000000a174cb4.html" target="_blank" rel="noopener">help.sap.com/docs/SAP_S4HANA_ON-PREMISE/…/b4dfb65334e6b54ce10000000a174cb4.html</a></td>
+            <td>2026-10-20</td>
+          </tr>
+          <tr id="s6">
+            <td>S6</td>
+            <td>金蝶云产品手册《单据转换规则》</td>
+            <td><span class="tag vendor">竞品案例</span></td>
+            <td class="url"><a href="https://help.open.kingdee.com/dokuwiki/doku.php?id=单据转换规则" target="_blank" rel="noopener">help.open.kingdee.com/dokuwiki/doku.php?id=单据转换规则</a></td>
+            <td>2026-10-20</td>
+          </tr>
+          <tr id="s7">
+            <td>S7</td>
+            <td>中兴新云《FOL 单据引擎：高效单据设计，敏捷响应需求》，2023-04-19</td>
+            <td><span class="tag vendor">竞品案例</span></td>
+            <td class="url"><a href="http://folcloud.com/sys-nd/66.html" target="_blank" rel="noopener">folcloud.com/sys-nd/66.html</a></td>
+            <td>2026-10-20</td>
+          </tr>
+          <tr id="s8">
+            <td>S8</td>
+            <td>OMG《Business Process Model and Notation 2.0》</td>
+            <td><span class="tag std">行业标准</span></td>
+            <td class="url"><a href="https://www.omg.org/spec/BPMN/2.0/" target="_blank" rel="noopener">omg.org/spec/BPMN/2.0/</a></td>
+            <td>2026-10-20</td>
+          </tr>
+          <tr id="s9">
+            <td>S9</td>
+            <td>OMG《Decision Model and Notation》</td>
+            <td><span class="tag std">行业标准</span></td>
+            <td class="url"><a href="https://www.omg.org/spec/DMN/" target="_blank" rel="noopener">omg.org/spec/DMN/</a></td>
+            <td>2026-10-20</td>
+          </tr>
+          <tr id="s10">
+            <td>S10</td>
+            <td>Camunda Docs《External Tasks》</td>
+            <td><span class="tag open">开源文档</span></td>
+            <td class="url"><a href="https://docs.camunda.org/manual/user-guide/process-engine/external-tasks" target="_blank" rel="noopener">docs.camunda.org/manual/user-guide/process-engine/external-tasks</a></td>
+            <td>2026-10-20</td>
+          </tr>
+          <tr id="s11">
+            <td>S11</td>
+            <td>金蝶《苍穹开发服务云（KDDM）》</td>
+            <td><span class="tag vendor">竞品案例</span></td>
+            <td class="url"><a href="https://www.kingdee.com/products/cosmic_development_services.html" target="_blank" rel="noopener">kingdee.com/products/cosmic_development_services.html</a></td>
+            <td>2026-10-20</td>
+          </tr>
+          <tr id="s12">
+            <td>S12</td>
+            <td>SAP Help《Define Document Types》</td>
+            <td><span class="tag vendor">竞品案例</span></td>
+            <td class="url"><a href="https://help.sap.com/saphelp_46c/helpdata/en/90/204b6e5733d1118b3f0060b03ca329/content.htm" target="_blank" rel="noopener">help.sap.com/saphelp_46c/helpdata/en/90/204b6e5733d1118b3f0060b03ca329/content.htm</a></td>
+            <td>2026-10-20</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><b>来源说明。</b>本页第 00 至 04 节来自工作区之外的行业资料，按 <code>scope/RULE.mdc</code> 第 3.4 节 E2 标注。第 05 节来自工作区文件，依据为 <code>W1</code>。</p>
+    <p><b>优先级。</b>外部资料排序在 W1 至 W4 之后。本页与工作区文件冲突时，以工作区文件为准。</p>
+    <p><b>整理日期</b> 2026-10-20。文件位置 <code>docs/汇报材料/单据引擎行业资料.html</code>。本页不是原型产物，不参与 <code>proto/</code> 两侧的构建与校验。</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  var navLinks = Array.prototype.slice.call(document.querySelectorAll('nav a[href^="#"]'));
+  var sections = navLinks.map(function (a) {
+    return document.querySelector(a.getAttribute('href'));
+  }).filter(Boolean);
+  var progress = document.getElementById('progress');
+  var printBtn = document.getElementById('printBtn');
+
+  function setActive(id) {
+    navLinks.forEach(function (a) {
+      var on = a.getAttribute('href') === '#' + id;
+      a.classList.toggle('active', on);
+      if (on) { a.setAttribute('aria-current', 'true'); }
+      else { a.removeAttribute('aria-current'); }
+    });
+  }
+
+  if ('IntersectionObserver' in window) {
+    var visible = {};
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { visible[e.target.id] = e.isIntersecting ? e.intersectionRatio : 0; });
+      var best = '', bestRatio = 0;
+      Object.keys(visible).forEach(function (id) {
+        if (visible[id] > bestRatio) { bestRatio = visible[id]; best = id; }
+      });
+      if (best) { setActive(best); }
+    }, { rootMargin: '-72px 0px -55% 0px', threshold: [0, .15, .35, .6, 1] });
+    sections.forEach(function (s) { io.observe(s); });
+  }
+
+  function updateProgress() {
+    var doc = document.documentElement;
+    var max = doc.scrollHeight - window.innerHeight;
+    var pct = max > 0 ? Math.min(100, Math.max(0, (window.scrollY / max) * 100)) : 0;
+    if (progress) { progress.style.width = pct + '%'; }
+  }
+
+  var ticking = false;
+  window.addEventListener('scroll', function () {
+    if (ticking) { return; }
+    ticking = true;
+    window.requestAnimationFrame(function () {
+      updateProgress();
+      ticking = false;
+    });
+  }, { passive: true });
+
+  if (printBtn) {
+    printBtn.addEventListener('click', function () { window.print(); });
+  }
+
+  updateProgress();
+})();
+</script>
+</body>
+</html>

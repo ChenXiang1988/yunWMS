@@ -1,0 +1,2920 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>西之月 WMS · PDA 原型骨架</title>
+
+<!--
+================================================================================
+  西之月 WMS · PDA 原型骨架  v1.0
+  用途：库内管理「上架 / 移位 / 补货」手持终端的可交互原型骨架
+  形态：单文件 · 零外部依赖 · file:// 直接打开
+  规范：对齐 proto/PDA-ui/pda-ui-tokens.json 与 pda-ui-design-spec.md
+  参照：proto/原型模板.html 的三层标注体系与页面注册表写法
+================================================================================
+
+  【三层结构】
+  ┌ L0 固定层 FIXED ──────────────────────────────────────────────────────────
+  │  · <style> 中所有 [FIXED-n] 段落：设计令牌 + 掌机外壳 + 屏幕分栏 + 组件样式
+  │  · <body> 里 stage / device / screen / keypad / overlays 骨架
+  │  · <script> 中 [FIXED] 段落的渲染内核与交互工具
+  │  → 禁止改动。改这些会破坏掌机外观与交互契约。
+  │  ★ 只换品牌主色：改 :root 里的 --pda-color-brand / --pda-color-action-primary
+  ├ L1 数据层 REPLACE ────────────────────────────────────────────────────────
+  │  · APPS / APP_GROUPS  → 主屏与应用列表的入口注册表
+  │  · WAREHOUSES         → 仓库作用域下拉的选项
+  │  · PAGES              → 页面注册表（标题 / 导航 / 操作栏 / render / mounted）
+  │  · TASKS              → 上架 / 移位 / 补货 三套演示数据
+  ├ L2 内容层 REPLACE ────────────────────────────────────────────────────────
+  │  · 每个 render() 返回的 HTML 字符串即页面主体
+  │  · 只能用骨架已提供的组件生成函数与 .pda-* 类名
+  ├ L3 扩展层 EXTEND ─────────────────────────────────────────────────────────
+  │  · <style> 末尾 [EXTEND] 区：放页面私有样式
+  │  · <script> 末尾 [EXTEND] 区：放页面私有逻辑
+  └──────────────────────────────────────────────────────────────────────────
+
+  【硬约束】（来自 PDA 设计规范，勿违反）
+  1. 不做常驻底部 Tab。导航 = 主屏九宫格入口 + 每页底部操作栏 + 顶部返回。
+  2. 屏幕是唯一滚动容器。.pda-device 与 body 不得再设 overflow:auto。
+  3. 弹层必须挂在 #pdaOverlays 内（absolute），层级用 token：底栏 10 / 遮罩 1000 / 弹层 1010 / 提示 1100。
+  4. 同一时刻只允许一个扫描字段激活，由 state.scan.active 管控。
+  5. 扫描确认入口唯一：只走 Enter，并排除输入法组合输入（e.isComposing）。
+  6. 数量字段必须显示单位；空字符串不等于 0。
+  7. 品牌绿 #018D71 对白对比度仅 4.16:1，小字与按钮统一用 #007D64。
+
+  【非生产接口声明】
+  本文件不含任何 service / http / 存储 / 权限代码。所有「提交成功」均为
+  toast + switchPage('*-success') 的本地演示；TASKS 为虚构演示数据，
+  每处标注 // [DEMO]，可自由替换。不得据此宣称业务已接通。
+
+  【新增一个页面的 3 步】
+  1. 在 APPS 里挂入口（叶子直接给 page；容器给 children）。
+  2. 在 PAGES 注册：
+     'xx-page': { title:'标题', type:'task-list', parent:'home',
+                  nav:{back:true, right:{label:'重扫', action:fn}},
+                  actionBar:{ primary:'确认', onPrimary:fn },
+                  render:function(){ return pdaPageShell({...}); },
+                  mounted:function(root){ /* 绑定本页交互 */ } }
+  3. 刷新即可。CSS 一行不用改。
+
+  【开箱可用的能力】
+  组件生成器：pdaPageShell / pdaScanField / pdaTaskItem / pdaSkuSummary /
+              pdaQuantityField / pdaActionBar / pdaStatePanel / pdaResultPanel
+  附加：appGrid / appItem / pdaStatusTabs / pdaStatusTag / pdaKv / pdaCard / pdaGroupTitle
+  交互：switchPage(key) / back() / openSheet(title, items, onPick) / closeSheet()
+        openModal(title, bodyHTML, footerHTML) / closeModal() / toast(msg) / openKeyboard()
+  设备按键：返回 / 主页 / 菜单 / 清空 / 扫描 / 确定（底部 pda-keypad）
+================================================================================
+-->
+
+<style>
+  /* ==========================================================================
+     [FIXED-1] 设计令牌 —— 全站唯一颜色/尺寸来源
+     映射规则：token 点号+驼峰 → 小写 kebab，前缀 --pda-
+     ========================================================================== */
+  :root {
+    /* --- 颜色 --- */
+    --pda-color-brand:            #018D71;
+    --pda-color-action-primary:   #007D64;
+    --pda-color-brand-soft:       #E6F4EF;
+    --pda-color-page:             #F2F2F2;
+    --pda-color-surface:          #FFFFFF;
+    --pda-color-text-primary:     #333333;
+    --pda-color-text-secondary:   #666666;
+    --pda-color-text-muted:       #999999;
+    --pda-color-text-inverse:     #FFFFFF;
+    --pda-color-divider:          #F2F2F2;
+    --pda-color-border:           #DDDDDD;
+    --pda-color-danger:           #DD524D;
+    --pda-color-danger-text:      #B42318;
+    --pda-color-danger-soft:      #FEF3F2;
+    --pda-color-warning-text:     #B45309;
+    --pda-color-warning-soft:     #FFF7ED;
+    --pda-color-mask:             rgba(0, 0, 0, .40);
+
+    /* --- 字体 --- */
+    --pda-font-family: system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    --pda-font-caption:        12px;
+    --pda-font-body:           14px;
+    --pda-font-item-title:     15px;
+    --pda-font-section-title:  16px;
+    --pda-font-key-value:      17px;
+    --pda-font-dialog-title:   18px;
+    --pda-font-dialog-body:    16px;
+    --pda-font-metric:         36px;
+    --pda-font-weight-regular: 400;
+    --pda-font-weight-strong:  700;
+    --pda-font-line-height-body: 1.5;
+
+    /* --- 间距 --- */
+    --pda-space-micro:   4px;
+    --pda-space-small:   8px;
+    --pda-space-content: 12px;
+    --pda-space-page:    16px;
+    --pda-space-large:   24px;
+
+    /* --- 圆角 / 边框 / 阴影 --- */
+    --pda-radius-operational:   0px;
+    --pda-radius-contextual:    8px;
+    --pda-radius-button:        7px;
+    --pda-radius-dialog:        12px;
+    --pda-border-divider-width: 1px;
+    --pda-shadow-contextual:    0 3px 9px rgba(15, 23, 42, .04);
+
+    /* --- 尺寸 --- */
+    --pda-size-button-min-height:       44px;
+    --pda-size-input-min-height:        44px;
+    --pda-size-minimum-touch-target:    44px;
+    --pda-size-sku-image:               80px;
+    --pda-size-back-icon:               20px;
+    --pda-size-home-icon:               31px;
+    --pda-size-success-icon:            40px;
+    --pda-layout-action-bar-min-height: 56px;
+    --pda-layout-selection-sheet-max-height: 70vh;
+
+    /* --- 层级 --- */
+    --pda-z-index-action-bar: 10;
+    --pda-z-index-mask:       1000;
+    --pda-z-index-overlay:    1010;
+    --pda-z-index-feedback:   1100;
+
+    /* --- 设备外壳（非 token，写死在 FIXED 层） --- */
+    --pda-device-screen-w:  375px;
+    --pda-device-screen-h:  720px;
+    --pda-device-shell:     #2b2f33;
+    --pda-device-edge:      #3a3f45;
+    --pda-device-radius:    30px;
+    --pda-device-keypad-h:  92px;
+    --pda-device-scan-key:  #f5b301;
+    --pda-stage-bg:         #0e1116;
+  }
+
+  /* ==========================================================================
+     [FIXED-2] 基础重置
+     ========================================================================== */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    min-height: 100%;
+    font-family: var(--pda-font-family);
+    font-size: var(--pda-font-body);
+    line-height: var(--pda-font-line-height-body);
+    color: var(--pda-color-text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body { background: var(--pda-stage-bg); }
+
+  button { font-family: inherit; font-size: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+  input, textarea { font-family: inherit; font-size: inherit; color: inherit; }
+  ul, ol { list-style: none; }
+
+  .pda-hidden { display: none !important; }
+
+  /* 线性图标统一尺寸；容器可覆盖 */
+  .pda-icon { display: block; width: 18px; height: 18px; flex: 0 0 auto; }
+
+  /* ==========================================================================
+     [FIXED-3] 舞台与掌机外壳 —— 纯 CSS 绘制，无图片
+     ========================================================================== */
+  .pda-stage {
+    min-height: 100dvh;
+    display: flex;
+    /* 用 padding + margin:auto 居中；不可用 place-items:center，
+       否则配合 overflow:auto 会裁掉设备顶部 */
+    padding: var(--pda-space-large) var(--pda-space-page);
+    overflow: auto;
+    background:
+      radial-gradient(1200px 600px at 50% 0%, #171c24 0%, var(--pda-stage-bg) 70%);
+  }
+
+  .pda-device {
+    position: relative;
+    margin: auto;
+    width: calc(var(--pda-device-screen-w) + 30px);
+    padding: 14px 15px 15px;
+    border-radius: var(--pda-device-radius);
+    background: linear-gradient(180deg, #34393e 0%, var(--pda-device-shell) 12%, #23272b 100%);
+    border: 1px solid var(--pda-device-edge);
+    box-shadow:
+      0 24px 64px rgba(0, 0, 0, .55),
+      0 2px 0 rgba(255, 255, 255, .06) inset,
+      0 0 0 2px #1b1e22 inset;
+  }
+
+  /* 扫描头 / 听筒 */
+  .pda-cam {
+    position: relative;
+    width: 76px; height: 10px;
+    margin: 0 auto 10px;
+    border-radius: 6px;
+    background: linear-gradient(180deg, #090b0e, #16191d);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, .05);
+  }
+  .pda-cam::after {
+    content: "";
+    position: absolute; left: 50%; top: 50%;
+    width: 46px; height: 3px; margin: -1.5px 0 0 -23px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #1d3a4d, #2f6b8c, #1d3a4d);
+    opacity: .85;
+  }
+  .pda-led {
+    position: absolute; top: 20px; right: 26px;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #3d8f4a;
+    box-shadow: 0 0 6px rgba(61, 143, 74, .9);
+  }
+  .pda-led.is-scan { background: #e5484d; box-shadow: 0 0 8px rgba(229, 72, 77, .95); }
+
+  /* 机身侧键 */
+  .pda-key-side {
+    position: absolute; top: 190px;
+    width: 4px; height: 46px; border-radius: 2px;
+    background: #4a5057;
+  }
+  .pda-key-side--l { left: -3px; }
+  .pda-key-side--r { right: -3px; top: 130px; height: 64px; background: #5a6169; }
+
+  /* ==========================================================================
+     [FIXED-4] 屏幕分栏 —— 屏幕是唯一滚动容器
+     ========================================================================== */
+  .pda-screen {
+    position: relative;
+    width: var(--pda-device-screen-w);
+    height: var(--pda-device-screen-h);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    isolation: isolate;
+    border-radius: 10px;
+    background: var(--pda-color-page);
+    box-shadow: 0 0 0 2px #0b0d10, 0 8px 20px rgba(0, 0, 0, .45) inset;
+  }
+
+  /* 状态栏 */
+  .pda-statusbar {
+    flex: 0 0 auto;
+    height: 28px;
+    display: flex; align-items: center; gap: var(--pda-space-small);
+    padding: 0 var(--pda-space-content);
+    background: #12312b;
+    color: #cfe9e2;
+    font-size: var(--pda-font-caption);
+    letter-spacing: .2px;
+  }
+  .pda-statusbar .pda-sb-time { font-weight: 600; color: #ffffff; }
+  .pda-statusbar .pda-sb-wh   { opacity: .9; }
+  .pda-statusbar .pda-sb-spacer { flex: 1; }
+  .pda-statusbar .pda-sb-icons { display: flex; align-items: center; gap: 6px; }
+  .pda-statusbar .pda-sb-icons svg { display: block; }
+
+  /* 顶部导航 */
+  .pda-navbar {
+    flex: 0 0 auto;
+    min-height: 48px;
+    display: flex; align-items: center; gap: var(--pda-space-small);
+    padding: 0 var(--pda-space-content);
+    padding-top: env(safe-area-inset-top, 0px);
+    background: var(--pda-color-surface);
+    border-bottom: var(--pda-border-divider-width) solid var(--pda-color-border);
+  }
+  .pda-nav-back {
+    display: flex; align-items: center; gap: 2px;
+    min-width: var(--pda-size-minimum-touch-target);
+    min-height: var(--pda-size-minimum-touch-target);
+    margin-left: -8px; padding: 0 8px;
+    color: var(--pda-color-action-primary);
+    font-size: var(--pda-font-body);
+  }
+  .pda-nav-back .pda-icon { width: var(--pda-size-back-icon); height: var(--pda-size-back-icon); }
+  .pda-nav-title {
+    flex: 1; min-width: 0;
+    font-size: var(--pda-font-section-title);
+    font-weight: var(--pda-font-weight-strong);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pda-nav-title.pda-nav-title--center { text-align: center; }
+  .pda-nav-right {
+    display: flex; align-items: center; gap: var(--pda-space-small);
+    flex: 0 0 auto;
+  }
+  .pda-nav-action {
+    min-height: 32px; padding: 0 10px;
+    border: 1px solid var(--pda-color-border);
+    border-radius: var(--pda-radius-button);
+    color: var(--pda-color-action-primary);
+    font-size: var(--pda-font-caption);
+    background: var(--pda-color-surface);
+    white-space: nowrap;
+  }
+  .pda-nav-avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--pda-color-brand-soft);
+    color: var(--pda-color-action-primary);
+    font-size: var(--pda-font-body);
+    font-weight: var(--pda-font-weight-strong);
+  }
+  .pda-nav-wh {
+    display: flex; align-items: center; gap: var(--pda-space-micro);
+    min-height: 32px; padding: 0 10px;
+    border-radius: var(--pda-radius-button);
+    background: var(--pda-color-brand-soft);
+    color: var(--pda-color-action-primary);
+    font-size: var(--pda-font-caption);
+    font-weight: 600;
+    max-width: 150px;
+  }
+  .pda-nav-wh span.pda-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* 内容滚动区 */
+  .pda-content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: var(--pda-space-page);
+    -webkit-overflow-scrolling: touch;
+  }
+  .pda-content::-webkit-scrollbar { width: 4px; }
+  .pda-content::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, .14); border-radius: 2px; }
+
+  /* 底部操作栏 */
+  .pda-actionbar {
+    flex: 0 0 auto;
+    min-height: var(--pda-layout-action-bar-min-height);
+    display: flex; align-items: center; gap: var(--pda-space-small);
+    padding: var(--pda-space-small) var(--pda-space-content);
+    padding-bottom: calc(var(--pda-space-small) + env(safe-area-inset-bottom, 0px));
+    background: var(--pda-color-surface);
+    border-top: var(--pda-border-divider-width) solid var(--pda-color-border);
+    z-index: var(--pda-z-index-action-bar);
+  }
+  .pda-actionbar:empty { display: none; }
+
+  /* ==========================================================================
+     [FIXED-5] 通用组件样式
+     ========================================================================== */
+
+  /* --- 按钮 --- */
+  .pda-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    min-height: var(--pda-size-button-min-height);
+    padding: 0 var(--pda-space-content);
+    border-radius: var(--pda-radius-button);
+    border: 1px solid var(--pda-color-border);
+    background: var(--pda-color-surface);
+    color: var(--pda-color-text-primary);
+    font-size: var(--pda-font-section-title);
+    white-space: nowrap;
+  }
+  .pda-btn--primary {
+    border-color: var(--pda-color-action-primary);
+    background: var(--pda-color-action-primary);
+    color: var(--pda-color-text-inverse);
+    font-weight: 600;
+  }
+  .pda-btn--danger {
+    border-color: var(--pda-color-danger-text);
+    background: var(--pda-color-danger-text);
+    color: var(--pda-color-text-inverse);
+  }
+  .pda-btn--ghost {
+    border-color: transparent;
+    background: transparent;
+    color: var(--pda-color-action-primary);
+    padding: 0 8px;
+  }
+  /* flex:1 供底栏并列使用；width:100% 供非 flex 容器内的整宽按钮使用
+     （flex-basis 优先于 width，两者共存不会互相破坏） */
+  .pda-btn--block { flex: 1; width: 100%; }
+  .pda-btn[disabled], .pda-btn.is-disabled {
+    opacity: .45; cursor: not-allowed;
+  }
+  .pda-btn:active:not([disabled]):not(.is-disabled) { transform: translateY(1px); }
+
+  /* --- 卡片 / 分组 --- */
+  .pda-card {
+    margin: var(--pda-space-small) var(--pda-space-page) 0;
+    background: var(--pda-color-surface);
+    border: var(--pda-border-divider-width) solid var(--pda-color-border);
+    border-radius: var(--pda-radius-operational);
+  }
+  .pda-card--contextual {
+    border: none;
+    border-radius: var(--pda-radius-contextual);
+    box-shadow: var(--pda-shadow-contextual);
+  }
+  .pda-card-head {
+    display: flex; align-items: center; gap: var(--pda-space-small);
+    padding: var(--pda-space-content);
+    border-bottom: var(--pda-border-divider-width) solid var(--pda-color-divider);
+  }
+  .pda-card-head h3 {
+    flex: 1; min-width: 0;
+    font-size: var(--pda-font-item-title);
+    font-weight: var(--pda-font-weight-strong);
+  }
+  .pda-card-body { padding: var(--pda-space-content); }
+
+  .pda-group-title {
+    display: flex; align-items: center; gap: 6px;
+    margin: var(--pda-space-page) var(--pda-space-page) var(--pda-space-small);
+    font-size: var(--pda-font-item-title);
+    font-weight: var(--pda-font-weight-strong);
+    color: var(--pda-color-text-primary);
+  }
+  .pda-group-title::before {
+    content: ""; width: 3px; height: 14px; border-radius: 2px;
+    background: var(--pda-color-brand);
+  }
+  .pda-group-title .pda-group-count { margin-left: auto; font-size: var(--pda-font-caption); font-weight: 400; color: var(--pda-color-text-secondary); }
+
+  /* --- 键值行 --- */
+  .pda-kv {
+    display: flex; align-items: flex-start; gap: var(--pda-space-small);
+    padding: 7px 0;
+    font-size: var(--pda-font-body);
+  }
+  .pda-kv + .pda-kv { border-top: var(--pda-border-divider-width) solid var(--pda-color-divider); }
+  .pda-kv-k { flex: 0 0 84px; color: var(--pda-color-text-secondary); }
+  .pda-kv-v { flex: 1; min-width: 0; color: var(--pda-color-text-primary); word-break: break-all; }
+  .pda-kv-v.is-code { font-weight: var(--pda-font-weight-strong); letter-spacing: .3px; }
+  .pda-kv-v.is-danger { color: var(--pda-color-danger-text); font-weight: 600; }
+  .pda-kv-v.is-warning { color: var(--pda-color-warning-text); font-weight: 600; }
+
+  /* --- 状态标签 --- */
+  .pda-status-tag {
+    display: inline-flex; align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: var(--pda-font-caption);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .pda-status--success { background: var(--pda-color-brand-soft);    color: var(--pda-color-action-primary); }
+  .pda-status--warning { background: var(--pda-color-warning-soft);  color: var(--pda-color-warning-text); }
+  .pda-status--danger  { background: var(--pda-color-danger-soft);   color: var(--pda-color-danger-text); }
+  .pda-status--neutral { background: var(--pda-color-page);          color: var(--pda-color-text-secondary); }
+
+  /* --- 状态页签 --- */
+  .pda-status-tabs {
+    display: flex; gap: var(--pda-space-page);
+    padding: 0 var(--pda-space-page);
+    background: var(--pda-color-surface);
+    border-bottom: var(--pda-border-divider-width) solid var(--pda-color-border);
+    overflow-x: auto;
+  }
+  .pda-status-tabs::-webkit-scrollbar { height: 0; }
+  .pda-status-tab {
+    position: relative;
+    padding: 12px 0;
+    font-size: var(--pda-font-body);
+    color: var(--pda-color-text-secondary);
+    white-space: nowrap;
+  }
+  .pda-status-tab .pda-tab-count { margin-left: 3px; font-size: var(--pda-font-caption); color: var(--pda-color-text-muted); }
+  .pda-status-tab.is-active { color: var(--pda-color-action-primary); font-weight: 600; }
+  .pda-status-tab.is-active::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+    height: 2px; border-radius: 2px; background: var(--pda-color-action-primary);
+  }
+
+  /* --- 进度 --- */
+  .pda-progress { display: flex; align-items: center; gap: var(--pda-space-small); }
+  .pda-progress-track {
+    flex: 1; min-width: 0; height: 6px; border-radius: 3px;
+    background: var(--pda-color-page); overflow: hidden;
+  }
+  .pda-progress-fill { height: 100%; border-radius: 3px; background: var(--pda-color-action-primary); }
+  .pda-progress-text { flex: 0 0 auto; font-size: var(--pda-font-caption); color: var(--pda-color-text-secondary); }
+
+  /* --- 空态 / 状态面板 --- */
+  .pda-state-panel {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: var(--pda-space-small);
+    padding: 56px var(--pda-space-large);
+    text-align: center;
+  }
+  .pda-state-icon {
+    width: 54px; height: 54px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--pda-color-brand-soft);
+    color: var(--pda-color-action-primary);
+    margin-bottom: var(--pda-space-micro);
+  }
+  .pda-state-icon svg { width: 26px; height: 26px; }
+  .pda-state-panel[data-kind="error"] .pda-state-icon,
+  .pda-state-panel[data-kind="no-permission"] .pda-state-icon {
+    background: var(--pda-color-danger-soft); color: var(--pda-color-danger-text);
+  }
+  .pda-state-panel[data-kind="no-match"] .pda-state-icon,
+  .pda-state-panel[data-kind="empty"] .pda-state-icon {
+    background: var(--pda-color-page); color: var(--pda-color-text-muted);
+  }
+  .pda-state-title { font-size: var(--pda-font-section-title); font-weight: 600; }
+  .pda-state-desc { font-size: var(--pda-font-body); color: var(--pda-color-text-secondary); max-width: 250px; }
+  .pda-state-action {
+    margin-top: var(--pda-space-small);
+    min-height: 36px; padding: 0 var(--pda-space-page);
+    border: 1px solid var(--pda-color-action-primary);
+    border-radius: var(--pda-radius-button);
+    color: var(--pda-color-action-primary);
+    font-size: var(--pda-font-body);
+    background: var(--pda-color-surface);
+  }
+
+  /* 加载 */
+  .pda-spinner {
+    width: 22px; height: 22px; border-radius: 50%;
+    border: 2px solid var(--pda-color-border);
+    border-top-color: var(--pda-color-action-primary);
+    animation: pda-spin .8s linear infinite;
+  }
+  @keyframes pda-spin { to { transform: rotate(360deg); } }
+  .pda-state-panel[data-kind="loading"] .pda-state-icon { background: transparent; }
+
+  /* --- 结果面板 --- */
+  .pda-result-panel {
+    display: flex; flex-direction: column; align-items: center;
+    gap: var(--pda-space-small);
+    padding: var(--pda-space-large) var(--pda-space-page) 0;
+    text-align: center;
+  }
+  .pda-result-icon {
+    width: var(--pda-size-success-icon); height: var(--pda-size-success-icon);
+    border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--pda-color-brand-soft);
+    color: var(--pda-color-action-primary);
+  }
+  .pda-result-icon svg { width: 22px; height: 22px; }
+  .pda-result-title { font-size: var(--pda-font-section-title); font-weight: var(--pda-font-weight-strong); }
+  .pda-result-code {
+    font-size: var(--pda-font-key-value);
+    font-weight: var(--pda-font-weight-strong);
+    letter-spacing: .4px;
+    color: var(--pda-color-text-primary);
+  }
+
+  /* --- 底部选择弹层内的列表行 --- */
+  .pda-sheet-item {
+    display: flex; align-items: center; gap: var(--pda-space-small);
+    width: 100%; min-height: var(--pda-size-minimum-touch-target);
+    padding: var(--pda-space-content) var(--pda-space-page);
+    text-align: left;
+    border-bottom: var(--pda-border-divider-width) solid var(--pda-color-divider);
+  }
+  .pda-sheet-item:active { background: var(--pda-color-page); }
+  .pda-sheet-item-main { flex: 1; min-width: 0; }
+  .pda-sheet-item-label { display: block; font-size: var(--pda-font-body); font-weight: 600; }
+  .pda-sheet-item-desc  { display: block; font-size: var(--pda-font-caption); color: var(--pda-color-text-secondary); }
+
+  /* ==========================================================================
+     [FIXED-6] PDA 专用组件样式
+     ========================================================================== */
+
+  /* --- 主屏 / 应用网格 --- */
+  .pda-home-head {
+    display: flex; align-items: center; gap: var(--pda-space-small);
+    padding: var(--pda-space-content) var(--pda-space-page);
+    background: linear-gradient(160deg, #0f7f66 0%, var(--pda-color-brand) 55%, #017a62 100%);
+    color: var(--pda-color-text-inverse);
+  }
+  .pda-home-head .pda-home-wh {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+    min-height: var(--pda-size-minimum-touch-target);
+    justify-content: center;
+    text-align: left;
+  }
+  .pda-home-head .pda-home-wh-label { font-size: var(--pda-font-caption); opacity: .8; }
+  .pda-home-head .pda-home-wh-name { font-size: var(--pda-font-item-title); font-weight: 600; display: flex; align-items: center; gap: 4px; }
+  .pda-home-head .pda-home-user {
+    margin-left: auto;
+    width: 40px; height: 40px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: rgba(255, 255, 255, .18);
+    border: 1px solid rgba(255, 255, 255, .35);
+    font-size: var(--pda-font-body); font-weight: 600;
+  }
+  .pda-home-hello {
+    padding: var(--pda-space-content) var(--pda-space-page) 0;
+    font-size: var(--pda-font-caption);
+    color: var(--pda-color-text-secondary);
+  }
+
+  .pda-app-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--pda-space-small);
+    background: var(--pda-color-surface);
+    padding: var(--pda-space-content) var(--pda-space-small);
+    margin: 0 var(--pda-space-small);
+    border-radius: var(--pda-radius-operational);
+  }
+  .pda-app-item {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: var(--pda-space-small) 2px;
+    border-radius: var(--pda-radius-contextual);
+    min-height: var(--pda-size-minimum-touch-target);
+  }
+  .pda-app-item:active { background: var(--pda-color-brand-soft); }
+  .pda-app-item-icon {
+    position: relative;
+    width: 44px; height: 44px; border-radius: 12px;
+    display: grid; place-items: center;
+    background: var(--pda-color-brand-soft);
+    color: var(--pda-color-action-primary);
+  }
+  .pda-app-item-icon svg { width: 22px; height: 22px; }
+  .pda-app-item-name {
+    font-size: var(--pda-font-caption);
+    color: var(--pda-color-text-primary);
+    text-align: center;
+    line-height: 1.25;
+  }
+  .pda-app-item-badge {
+    position: absolute; top: -4px; right: -4px;
+    min-width: 16px; height: 16px; padding: 0 4px;
+    border-radius: 8px;
+    background: var(--pda-color-danger);
+    color: #fff; font-size: 10px; line-height: 16px; text-align: center;
+  }
+  .pda-app-item.is-planned { opacity: .45; }
+  .pda-app-item.is-planned .pda-app-item-icon { background: var(--pda-color-page); color: var(--pda-color-text-muted); }
+
+  /* --- 扫描字段 --- */
+  .pda-field {
+    padding: var(--pda-space-content) var(--pda-space-page);
+    border-bottom: var(--pda-border-divider-width) solid var(--pda-color-divider);
+    background: var(--pda-color-surface);
+  }
+  .pda-field:first-child { border-top: var(--pda-border-divider-width) solid var(--pda-color-border); }
+  .pda-field-label {
+    display: flex; align-items: center; gap: 6px;
+    font-size: var(--pda-font-body);
+    color: var(--pda-color-text-secondary);
+    margin-bottom: 6px;
+  }
+  .pda-field-step {
+    display: inline-grid; place-items: center;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--pda-color-page); color: var(--pda-color-text-secondary);
+    font-size: 11px; font-weight: 600;
+  }
+  .pda-field.is-active .pda-field-step { background: var(--pda-color-brand); color: #fff; }
+  .pda-field-req { color: var(--pda-color-danger); }
+
+  .pda-field-control {
+    display: flex; align-items: center; gap: var(--pda-space-small);
+    min-height: var(--pda-size-input-min-height);
+    padding: 0 var(--pda-space-content);
+    border: 1px solid var(--pda-color-border);
+    border-radius: var(--pda-radius-button);
+    background: var(--pda-color-surface);
+  }
+  .pda-field.is-active  .pda-field-control { border-color: var(--pda-color-brand); box-shadow: 0 0 0 2px var(--pda-color-brand-soft); }
+  .pda-field.is-error   .pda-field-control { border-color: var(--pda-color-danger); box-shadow: 0 0 0 2px var(--pda-color-danger-soft); }
+  .pda-field.is-busy    .pda-field-control { border-color: var(--pda-color-warning-text); }
+  .pda-field.is-readonly .pda-field-control { background: var(--pda-color-page); border-style: dashed; }
+
+  .pda-field-icon { color: var(--pda-color-text-muted); display: grid; place-items: center; }
+  .pda-field.is-active .pda-field-icon { color: var(--pda-color-action-primary); }
+  .pda-field-input {
+    flex: 1; min-width: 0;
+    height: 42px;
+    border: none; outline: none; background: transparent;
+    font-size: var(--pda-font-body);
+    letter-spacing: .3px;
+  }
+  .pda-field-input::placeholder { color: var(--pda-color-text-muted); letter-spacing: 0; }
+  .pda-field.is-readonly .pda-field-input { color: var(--pda-color-text-secondary); }
+
+  .pda-field-clear {
+    width: 26px; height: 26px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--pda-color-page);
+    color: var(--pda-color-text-secondary);
+    font-size: 15px; line-height: 1;
+  }
+  .pda-field-clear:active { background: var(--pda-color-border); }
+
+  .pda-field-msg {
+    display: flex; align-items: flex-start; gap: 4px;
+    margin-top: 6px;
+    font-size: var(--pda-font-caption);
+    color: var(--pda-color-text-muted);
+  }
+  .pda-field.is-error .pda-field-msg   { color: var(--pda-color-danger-text); }
+  .pda-field.is-warning .pda-field-msg { color: var(--pda-color-warning-text); }
+  .pda-field.is-busy .pda-field-msg    { color: var(--pda-color-warning-text); }
+
+  /* --- 任务卡 --- */
+  .pda-task-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    margin: var(--pda-space-small) var(--pda-space-page) 0;
+    padding: var(--pda-space-content);
+    background: var(--pda-color-surface);
+    border: var(--pda-border-divider-width) solid var(--pda-color-border);
+    border-radius: var(--pda-radius-operational);
+  }
+  .pda-task-item:active { background: #fafafa; }
+  .pda-task-item-head {
+    display: flex; align-items: center; gap: var(--pda-space-small);
+    padding-bottom: var(--pda-space-small);
+    border-bottom: var(--pda-border-divider-width) solid var(--pda-color-divider);
+  }
+  .pda-task-code {
+    flex: 1; min-width: 0;
+    font-size: var(--pda-font-item-title);
+    font-weight: var(--pda-font-weight-strong);
+    letter-spacing: .3px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .pda-task-fields { padding-top: var(--pda-space-small); }
+  .pda-task-fields .pda-kv { padding: 5px 0; }
+  .pda-task-fields .pda-kv + .pda-kv { border-top: none; }
+  .pda-task-actions {
+    display: flex; gap: var(--pda-space-small);
+    margin-top: var(--pda-space-small);
+    padding-top: var(--pda-space-small);
+    border-top: var(--pda-border-divider-width) solid var(--pda-color-divider);
+  }
+  .pda-task-actions .pda-btn { min-height: 36px; font-size: var(--pda-font-body); flex: 0 0 auto; }
+  .pda-task-actions .pda-btn--primary { margin-left: auto; }
+
+  /* --- SKU 摘要 --- */
+  .pda-sku-summary {
+    display: flex; gap: var(--pda-space-content);
+    padding: var(--pda-space-content) var(--pda-space-page);
+    background: var(--pda-color-surface);
+    border-bottom: var(--pda-border-divider-width) solid var(--pda-color-divider);
+  }
+  .pda-sku-img {
+    width: var(--pda-size-sku-image); height: var(--pda-size-sku-image);
+    flex: 0 0 auto;
+    border-radius: var(--pda-radius-contextual);
+    background: var(--pda-color-page);
+    border: var(--pda-border-divider-width) solid var(--pda-color-border);
+    display: grid; place-items: center;
+    overflow: hidden;
+  }
+  .pda-sku-img img { width: 100%; height: 100%; object-fit: contain; }
+  .pda-sku-img .pda-sku-img-ph { color: var(--pda-color-text-muted); }
+  .pda-sku-img .pda-sku-img-ph svg { width: 28px; height: 28px; }
+  .pda-sku-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .pda-sku-name { font-size: var(--pda-font-item-title); font-weight: 600; line-height: 1.35; }
+  .pda-sku-code { font-size: var(--pda-font-caption); color: var(--pda-color-text-secondary); letter-spacing: .3px; word-break: break-all; }
+  .pda-sku-qty { display: flex; flex-wrap: wrap; gap: var(--pda-space-small); margin-top: 2px; font-size: var(--pda-font-caption); }
+  .pda-sku-qty b { font-size: var(--pda-font-key-value); font-weight: var(--pda-font-weight-strong); }
+  .pda-sku-qty .is-danger { color: var(--pda-color-danger-text); }
+
+  /* --- 数量字段 --- */
+  .pda-qty-row { display: flex; align-items: center; gap: var(--pda-space-small); }
+  .pda-qty-input {
+    flex: 1; min-width: 0;
+    height: 42px;
+    border: none; outline: none; background: transparent;
+    font-size: var(--pda-font-key-value);
+    font-weight: var(--pda-font-weight-strong);
+    letter-spacing: .5px;
+  }
+  .pda-qty-unit {
+    flex: 0 0 auto;
+    padding-left: var(--pda-space-small);
+    border-left: var(--pda-border-divider-width) solid var(--pda-color-border);
+    color: var(--pda-color-text-secondary);
+    font-size: var(--pda-font-body);
+  }
+  .pda-qty-stepper { display: flex; align-items: center; gap: 6px; margin-top: var(--pda-space-small); }
+  .pda-qty-stepper button {
+    width: 34px; height: 34px; border-radius: var(--pda-radius-button);
+    border: 1px solid var(--pda-color-border);
+    background: var(--pda-color-surface);
+    color: var(--pda-color-text-primary);
+    font-size: 18px; line-height: 1;
+    display: grid; place-items: center;
+  }
+  .pda-qty-stepper button:active { background: var(--pda-color-brand-soft); }
+  /* 选择器需带 .pda-qty-stepper 前缀，否则被上面的 `.pda-qty-stepper button` 压成 34×34 */
+  .pda-qty-stepper .pda-qty-quick {
+    width: auto;
+    height: auto;
+    flex: 0 0 auto;
+    margin-left: auto;
+    min-height: 34px;
+    padding: 0 10px;
+    white-space: nowrap;
+    border: 1px solid var(--pda-color-border);
+    border-radius: var(--pda-radius-button);
+    background: var(--pda-color-surface);
+    color: var(--pda-color-action-primary);
+    font-size: var(--pda-font-caption);
+  }
+  .pda-qty-stepper .pda-qty-quick:active { background: var(--pda-color-brand-soft); }
+
+  /* ==========================================================================
+     [FIXED-7] 弹层与 Toast —— 必须挂在 #pdaOverlays 内（absolute）
+     ========================================================================== */
+  .pda-overlays {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    z-index: var(--pda-z-index-mask);
+  }
+  .pda-mask {
+    position: absolute; inset: 0;
+    background: var(--pda-color-mask);
+    opacity: 0; visibility: hidden;
+    transition: opacity .18s ease, visibility .18s ease;
+    pointer-events: auto;
+  }
+  .pda-mask.is-open { opacity: 1; visibility: visible; }
+
+  /* 底部选择弹层 */
+  .pda-sheet {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    max-height: var(--pda-layout-selection-sheet-max-height);
+    display: flex; flex-direction: column;
+    background: var(--pda-color-surface);
+    border-radius: var(--pda-radius-dialog) var(--pda-radius-dialog) 0 0;
+    transform: translateY(101%);
+    transition: transform .22s cubic-bezier(.2,.7,.3,1);
+    z-index: var(--pda-z-index-overlay);
+    pointer-events: auto;
+    overflow: hidden;
+  }
+  .pda-sheet.is-open { transform: translateY(0); }
+  .pda-sheet-head {
+    flex: 0 0 auto;
+    display: flex; align-items: center; gap: var(--pda-space-small);
+    padding: var(--pda-space-content) var(--pda-space-page);
+    border-bottom: var(--pda-border-divider-width) solid var(--pda-color-border);
+  }
+  .pda-sheet-title { flex: 1; min-width: 0; font-size: var(--pda-font-section-title); font-weight: 600; }
+  .pda-sheet-close {
+    width: 32px; height: 32px; border-radius: 50%;
+    display: grid; place-items: center;
+    color: var(--pda-color-text-secondary);
+  }
+  .pda-sheet-body { flex: 1; min-height: 0; overflow-y: auto; }
+  .pda-sheet-foot {
+    flex: 0 0 auto;
+    padding: var(--pda-space-small) var(--pda-space-page);
+    padding-bottom: calc(var(--pda-space-small) + env(safe-area-inset-bottom, 0px));
+    border-top: var(--pda-border-divider-width) solid var(--pda-color-divider);
+  }
+
+  /* 居中弹窗 */
+  .pda-modal {
+    position: absolute; top: 50%; left: 50%;
+    width: 84%;
+    transform: translate(-50%, -50%) scale(.94);
+    opacity: 0; visibility: hidden;
+    background: var(--pda-color-surface);
+    border-radius: var(--pda-radius-dialog);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, .28);
+    z-index: var(--pda-z-index-overlay);
+    pointer-events: auto;
+    transition: opacity .18s ease, visibility .18s ease, transform .18s ease;
+    overflow: hidden;
+  }
+  .pda-modal.is-open { opacity: 1; visibility: visible; transform: translate(-50%, -50%) scale(1); }
+  .pda-modal-head { padding: var(--pda-space-page) var(--pda-space-page) 0; text-align: center; }
+  .pda-modal-title { font-size: var(--pda-font-dialog-title); font-weight: var(--pda-font-weight-strong); }
+  .pda-modal-body {
+    padding: var(--pda-space-content) var(--pda-space-page);
+    font-size: var(--pda-font-dialog-body);
+    color: var(--pda-color-text-secondary);
+    text-align: center;
+  }
+  .pda-modal-foot {
+    display: flex; gap: var(--pda-space-small);
+    padding: var(--pda-space-content) var(--pda-space-page) var(--pda-space-page);
+  }
+  .pda-modal-foot .pda-btn { flex: 1; }
+
+  /* Toast */
+  .pda-toast {
+    position: absolute; left: 50%; bottom: 90px;
+    transform: translate(-50%, 8px);
+    max-width: 78%;
+    padding: 10px 16px;
+    border-radius: var(--pda-radius-button);
+    background: rgba(20, 24, 28, .92);
+    color: #fff;
+    font-size: var(--pda-font-body);
+    text-align: center;
+    opacity: 0; visibility: hidden;
+    transition: opacity .2s ease, transform .2s ease, visibility .2s ease;
+    z-index: var(--pda-z-index-feedback);
+    pointer-events: none;
+  }
+  .pda-toast.is-open { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
+
+  /* 机身按键区 */
+  .pda-keypad {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 6px;
+    height: var(--pda-device-keypad-h);
+    margin-top: 12px;
+    padding: 8px 10px 10px;
+    border-radius: 14px;
+    background: #1e2226;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, .05) inset;
+  }
+  .pda-key {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    border-radius: 8px;
+    background: linear-gradient(180deg, #3b4147, #2c3238);
+    border: 1px solid #454c53;
+    color: #d7dde3;
+    font-size: 11px;
+    letter-spacing: .5px;
+    text-shadow: 0 1px 0 rgba(0, 0, 0, .4);
+  }
+  .pda-key svg { width: 13px; height: 13px; opacity: .8; }
+  .pda-key:active { background: linear-gradient(180deg, #2c3238, #22272c); transform: translateY(1px); }
+  .pda-key--scan {
+    grid-column: span 2;
+    background: linear-gradient(180deg, #ffd24a, var(--pda-device-scan-key));
+    border-color: #d99f00;
+    color: #4a3300;
+    font-size: 13px; font-weight: 700;
+    text-shadow: none;
+  }
+  .pda-key--ok { grid-column: span 2; color: #9fe0c8; border-color: #2f6b5b; }
+
+  /* ==========================================================================
+     [FIXED-8] 响应式 —— 只调设备高度，不改内部布局
+     ========================================================================== */
+  @media (max-height: 960px) { :root { --pda-device-screen-h: 600px; } }
+  @media (max-height: 800px) { :root { --pda-device-screen-h: 500px; --pda-device-keypad-h: 82px; } }
+  @media (max-height: 680px) { :root { --pda-device-screen-h: 420px; --pda-device-keypad-h: 0px; } .pda-keypad { display: none; } }
+  /* 窄视口：用 zoom 让整机等比收纳。
+     不用 transform: scale —— transform 不参与布局流，会导致横向溢出与右侧裁切。 */
+  @media (max-width: 460px) { .pda-stage { padding: 12px 8px; } .pda-device { zoom: .90; } }
+  @media (max-width: 420px) { .pda-device { zoom: .82; } }
+  @media (max-width: 380px) { .pda-device { zoom: .74; } }
+  @media (max-width: 340px) { .pda-device { zoom: .66; } }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+
+  /* ==========================================================================
+     [EXTEND] 页面私有样式区 —— 新增页面的样式写在这里，颜色一律用 var(--pda-…)
+     ========================================================================== */
+
+  /* --- 主屏 / 引导 --- */
+  .pda-home-foot {
+    margin: var(--pda-space-large) var(--pda-space-page) var(--pda-space-small);
+    text-align: center;
+    font-size: var(--pda-font-caption);
+    color: var(--pda-color-text-muted);
+  }
+
+  /* --- 任务列表页脚 --- */
+  .pda-list-foot {
+    margin: var(--pda-space-page) var(--pda-space-page) var(--pda-space-small);
+    text-align: center;
+    font-size: var(--pda-font-caption);
+    color: var(--pda-color-text-muted);
+  }
+
+  /* --- 作业页顶部条 --- */
+  .pda-job-strip {
+    display: flex; align-items: center; gap: var(--pda-space-small);
+    padding: var(--pda-space-content) var(--pda-space-page);
+    background: var(--pda-color-brand-soft);
+    color: var(--pda-color-action-primary);
+    font-size: var(--pda-font-caption);
+  }
+  .pda-job-code { font-size: var(--pda-font-body); font-weight: var(--pda-font-weight-strong); letter-spacing: .3px; }
+  .pda-job-step { margin-left: auto; }
+
+  /* --- 设置页开关行 --- */
+  .pda-switch-row {
+    display: flex; align-items: center; gap: var(--pda-space-content);
+    padding: 10px 0;
+  }
+  .pda-switch-row + .pda-switch-row { border-top: var(--pda-border-divider-width) solid var(--pda-color-divider); }
+  .pda-switch-main { flex: 1; min-width: 0; }
+  .pda-switch-title { font-size: var(--pda-font-body); }
+  .pda-switch-desc { margin-top: 2px; font-size: var(--pda-font-caption); color: var(--pda-color-text-secondary); }
+  .pda-switch {
+    position: relative; flex: 0 0 auto;
+    width: 46px; height: 26px; border-radius: 13px;
+    background: var(--pda-color-border);
+    transition: background .18s ease;
+  }
+  .pda-switch.is-on { background: var(--pda-color-action-primary); }
+  .pda-switch-knob {
+    position: absolute; top: 3px; left: 3px;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+    transition: transform .18s ease;
+  }
+  .pda-switch.is-on .pda-switch-knob { transform: translateX(20px); }
+
+  /* --- 我的 / 通用列表行 --- */
+  .pda-profile-head {
+    display: flex; align-items: center; gap: var(--pda-space-content);
+    padding: var(--pda-space-page);
+    background: linear-gradient(160deg, #0f7f66 0%, var(--pda-color-brand) 60%, #017a62 100%);
+    color: var(--pda-color-text-inverse);
+  }
+  .pda-profile-avatar {
+    width: 52px; height: 52px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: rgba(255, 255, 255, .18);
+    border: 1px solid rgba(255, 255, 255, .35);
+    font-size: var(--pda-font-key-value); font-weight: 600;
+  }
+  .pda-profile-main { flex: 1; min-width: 0; }
+  .pda-profile-name { font-size: var(--pda-font-section-title); font-weight: var(--pda-font-weight-strong); }
+  .pda-profile-role { margin-top: 2px; font-size: var(--pda-font-caption); opacity: .85; }
+
+  .pda-list-row {
+    display: flex; align-items: center; gap: var(--pda-space-content);
+    width: 100%; min-height: var(--pda-size-minimum-touch-target);
+    padding: 10px 0;
+    text-align: left;
+    border-top: var(--pda-border-divider-width) solid var(--pda-color-divider);
+  }
+  .pda-list-row:first-child { border-top: none; }
+  .pda-list-row-icon { flex: 0 0 auto; color: var(--pda-color-action-primary); display: grid; place-items: center; }
+  .pda-list-row-label { flex: 1; min-width: 0; font-size: var(--pda-font-body); }
+  .pda-list-row-value { flex: 0 0 auto; font-size: var(--pda-font-caption); color: var(--pda-color-text-secondary); }
+  .pda-list-row-chev { flex: 0 0 auto; width: 18px; height: 18px; color: var(--pda-color-text-muted); display: grid; place-items: center; }
+  .pda-list-row-chev svg { width: 16px; height: 16px; }
+
+  /* --- 页内联操作栏（组件契约备用） --- */
+  .pda-inline-actionbar {
+    display: flex; gap: var(--pda-space-small);
+    padding: var(--pda-space-small) var(--pda-space-page);
+    background: var(--pda-color-surface);
+  }
+
+</style>
+</head>
+
+<body>
+  <!-- [FIXED] 舞台 → 机身 → 屏幕 → 按键区 -->
+  <div class="pda-stage">
+    <div class="pda-device" role="application" aria-label="西之月 WMS 手持终端原型">
+
+      <div class="pda-cam" aria-hidden="true"></div>
+      <span class="pda-led" id="pdaLed" aria-hidden="true"></span>
+      <span class="pda-key-side pda-key-side--l" aria-hidden="true"></span>
+      <span class="pda-key-side pda-key-side--r" aria-hidden="true"></span>
+
+      <div class="pda-screen" id="pdaScreen">
+        <!-- 状态栏 -->
+        <div class="pda-statusbar" id="pdaStatusbar"></div>
+        <!-- 顶部导航 -->
+        <header class="pda-navbar" id="pdaNavbar"></header>
+        <!-- 内容滚动区（唯一滚动容器） -->
+        <main class="pda-content" id="pdaContent"></main>
+        <!-- 底部操作栏 -->
+        <footer class="pda-actionbar" id="pdaActionbar"></footer>
+        <!-- 弹层挂载点：遮罩 1000 / 弹层 1010 / 提示 1100 -->
+        <div class="pda-overlays" id="pdaOverlays">
+          <div class="pda-mask" id="pdaMask"></div>
+          <div class="pda-sheet" id="pdaSheet" role="dialog" aria-modal="true"></div>
+          <div class="pda-modal" id="pdaModal" role="dialog" aria-modal="true"></div>
+          <div class="pda-toast" id="pdaToast" role="status" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <!-- 物理按键区 -->
+      <div class="pda-keypad" id="pdaKeypad">
+        <button class="pda-key" type="button" data-key="back">返回</button>
+        <button class="pda-key" type="button" data-key="home">主页</button>
+        <button class="pda-key" type="button" data-key="menu">菜单</button>
+        <button class="pda-key" type="button" data-key="clear">清空</button>
+        <button class="pda-key pda-key--scan" type="button" data-key="scan">扫描</button>
+        <button class="pda-key pda-key--ok" type="button" data-key="ok">确定</button>
+      </div>
+
+    </div>
+  </div>
+
+<script>
+/* ============================================================================
+   [FIXED] 图标库 —— 统一 24×24 线性图标
+   ============================================================================ */
+var ICONS = {
+  home:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-6h5v6"/></svg>',
+  grid:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-2.87 1.2V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 2.6 15a1.7 1.7 0 0 0-1.51-1H1a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 2.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 7 4.6h.09A1.7 1.7 0 0 0 8.6 3.09V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.09a1.7 1.7 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>',
+  user:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></svg>',
+  package:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8.5V16a1.5 1.5 0 0 1-.8 1.3l-7.5 4a1.5 1.5 0 0 1-1.4 0l-7.5-4A1.5 1.5 0 0 1 3 16V8.5"/><path d="m3 8.5 7.7-4.1a1.5 1.5 0 0 1 1.4 0L20 8.5l-7.9 4.2a1.5 1.5 0 0 1-1.4 0z"/><path d="M12 21v-8.3"/></svg>',
+  arrowUpBox:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 6.5 9"/><path d="M12 3.5 17.5 9"/><path d="M12 3.5V14"/><path d="M4 14v5.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V14"/></svg>',
+  swap:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3-3"/><path d="M20 16H7l3 3"/></svg>',
+  refresh:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4.5V11h-6.5"/></svg>',
+  search:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.7-4.7"/></svg>',
+  scan:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8"/><path d="M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8"/><path d="M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16"/><path d="M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/><path d="M4 12h16"/></svg>',
+  check:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
+  chevronR: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>',
+  chevronL: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"/></svg>',
+  chevronD: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 9 7 7 7-7"/></svg>',
+  alert:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.4h.01"/></svg>',
+  info:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><path d="M12 7.6h.01"/></svg>',
+  box:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="6.5" width="17" height="13" rx="1.5"/><path d="M3.5 11h17"/></svg>',
+  location: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s6.5-6 6.5-11a6.5 6.5 0 1 0-13 0c0 5 6.5 11 6.5 11z"/><circle cx="12" cy="10" r="2.4"/></svg>',
+  truck:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5h10v9H3z"/><path d="M13 11h4l3 3v2.5h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg>',
+  list:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6.5h12"/><path d="M8 12h12"/><path d="M8 17.5h12"/><path d="M4 6.5h.01"/><path d="M4 12h.01"/><path d="M4 17.5h.01"/></svg>',
+  clock:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5.3l3.4 2"/></svg>',
+  plus:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
+  minus:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg>',
+  logout:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H15"/><path d="M10 8l-4 4 4 4"/><path d="M6 12h8"/></svg>'
+};
+
+/* ============================================================================
+   [FIXED] 状态与渲染内核
+   ============================================================================ */
+var state = {
+  page: 'home',
+  stack: ['home'],                                  /* 导航栈：唯一层级来源 */
+  taskFilter: { putaway: 0, relocation: 0, replenish: 0 },
+  listQuery:  { putaway: '', relocation: '', replenish: '' },
+  current:    { putaway: null, relocation: null, replenish: null },
+  /* 扫描状态机：idle / ready / processing / accepted / error / paused */
+  scan: { phase: 'idle', active: null, value: '' },
+  warehouse: null,
+  user: { name: '陈明', role: '库内作业员', avatar: '陈' }
+};
+
+var elScreen, elStatusbar, elNavbar, elContent, elActionbar;
+var elMask, elSheet, elModal, elToast, elLed;
+var sheetOnPick = null;
+var toastTimer = null;
+var hashGuard = false;
+
+/* ---- 小工具 ---- */
+function $(sel, root) { return (root || document).querySelector(sel); }
+function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+function esc(s) {
+  return String(s === undefined || s === null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function icon(name) {
+  return '<span class="pda-icon">' + (ICONS[name] || ICONS.info) + '</span>';
+}
+
+/* ---- 导航 ---- */
+function switchPage(key, opts) {
+  opts = opts || {};
+  if (!PAGES[key]) { toast('页面「' + key + '」尚未注册'); return; }
+  if (opts.replace) state.stack[state.stack.length - 1] = key;
+  else if (state.page !== key) state.stack.push(key);
+  state.page = key;
+  state.scan.phase = 'ready';
+  state.scan.active = null;
+  state.scan.value = '';
+  scanValues = {}; scanErrors = {}; qtyValues = {}; qtyErrors = {};
+  closeSheet(); closeModal();
+  setHash(key);
+  renderAll();
+}
+
+function back() {
+  if (state.stack.length > 1) state.stack.pop();
+  state.page = state.stack[state.stack.length - 1] || 'home';
+  state.scan.phase = 'ready';
+  state.scan.active = null;
+  scanValues = {}; scanErrors = {}; qtyValues = {}; qtyErrors = {};
+  closeSheet(); closeModal();
+  setHash(state.page);
+  renderAll();
+}
+
+function goHome() {
+  state.stack = ['home'];
+  state.page = 'home';
+  closeSheet(); closeModal();
+  setHash('home');
+  renderAll();
+}
+
+function setHash(key) {
+  if (('#' + key) === location.hash) return;
+  hashGuard = true;
+  location.hash = key;
+  setTimeout(function () { hashGuard = false; }, 0);
+}
+
+/* ---- 渲染 ---- */
+function renderStatusbar() {
+  var d = new Date();
+  var hh = ('0' + d.getHours()).slice(-2);
+  var mm = ('0' + d.getMinutes()).slice(-2);
+  var wh = state.warehouse ? state.warehouse.name : '—';
+  elStatusbar.innerHTML =
+      '<span class="pda-sb-time">' + hh + ':' + mm + '</span>'
+    + '<span class="pda-sb-wh">' + esc(wh) + '</span>'
+    + '<span class="pda-sb-spacer"></span>'
+    + '<span class="pda-sb-icons">'
+    +   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 8.5a15 15 0 0 1 20 0"/><path d="M5.5 12a10 10 0 0 1 13 0"/><path d="M9 15.4a5 5 0 0 1 6 0"/><path d="M12 19h.01"/></svg>'
+    +   '<svg width="16" height="13" viewBox="0 0 26 14" fill="none"><rect x="1" y="1.5" width="20" height="11" rx="3" stroke="currentColor" stroke-width="1.4" opacity=".7"/><rect x="3" y="3.5" width="15" height="7" rx="1.6" fill="currentColor"/><path d="M23 5.5v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".7"/></svg>'
+    + '</span>';
+}
+
+function renderNavbar() {
+  var page = PAGES[state.page] || {};
+  var nav = page.nav || {};
+  var isHome = state.page === 'home';
+  var html = '';
+
+  if (nav.back === false || (nav.back === undefined && isHome)) {
+    /* 无返回：左侧留给页面自定义（首页的仓库/用户入口在 body 内），只渲染标题 */
+  } else {
+    html += '<button class="pda-nav-back" type="button" data-nav="back">'
+          +   '<span class="pda-icon">' + ICONS.chevronL + '</span><span>返回</span>'
+          + '</button>';
+  }
+
+  html += '<div class="pda-nav-title' + (nav.back === false ? ' pda-nav-title--center' : '') + '">'
+        +   esc(nav.title || page.title || '')
+        + '</div>';
+
+  html += '<div class="pda-nav-right">';
+  if (nav.right && nav.right.label) {
+    html += '<button class="pda-nav-action" type="button" data-nav="right">' + esc(nav.right.label) + '</button>';
+  } else if (isHome) {
+    html += '<button class="pda-nav-wh" type="button" data-nav="warehouse">'
+          +   icon('location') + '<span class="pda-ellipsis">' + esc(state.warehouse ? state.warehouse.name : '') + '</span>'
+          +   '<span style="width:12px;height:12px;display:inline-block">' + ICONS.chevronD + '</span>'
+          + '</button>';
+  }
+  html += '</div>';
+
+  if (!html.trim()) { elNavbar.style.display = 'none'; return; }
+  elNavbar.style.display = '';
+  elNavbar.innerHTML = html;
+
+  $$('[data-nav]', elNavbar).forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var k = btn.getAttribute('data-nav');
+      if (k === 'back') back();
+      else if (k === 'warehouse') openWarehousePicker();
+      else if (k === 'right') {
+        var r = (PAGES[state.page].nav || {}).right;
+        if (r && typeof r.action === 'function') r.action();
+      }
+    });
+  });
+}
+
+function renderActionbar() {
+  var page = PAGES[state.page] || {};
+  var ab = page.actionBar;
+  if (!ab || (!ab.primary && !ab.secondary)) {
+    elActionbar.innerHTML = '';
+    return;
+  }
+  if (typeof ab.html === 'string') { elActionbar.innerHTML = ab.html; return; }
+
+  var html = '';
+  if (ab.secondary) {
+    html += '<button class="pda-btn' + (ab.primary ? '' : ' pda-btn--block') + '" type="button" data-act="secondary"'
+          + (ab.disabled ? ' disabled' : '') + '>' + esc(ab.secondary) + '</button>';
+  }
+  if (ab.primary) {
+    html += '<button class="pda-btn pda-btn--primary pda-btn--block" type="button" data-act="primary"'
+          + (ab.disabled ? ' disabled' : '') + '>' + esc(ab.busy ? '提交中…' : ab.primary) + '</button>';
+  }
+  elActionbar.innerHTML = html;
+
+  $$('[data-act]', elActionbar).forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var a = PAGES[state.page].actionBar || {};
+      var fn = btn.getAttribute('data-act') === 'primary' ? a.onPrimary : a.onSecondary;
+      if (typeof fn === 'function') fn();
+    });
+  });
+}
+
+function renderAll() {
+  renderStatusbar();
+  renderNavbar();
+  renderPageBody();
+  renderActionbar();
+}
+
+function renderPageBody() {
+  var page = PAGES[state.page];
+  /* 每次渲染重置页内注册表：扫描处理器、模拟扫描值、数量元信息、状态面板恢复动作 */
+  scanHandlers = {}; simValues = {}; qtyMeta = {}; stateActions = {}; saSeq = 0;
+
+  if (!page || typeof page.render !== 'function') {
+    elContent.innerHTML = pdaStatePanel({
+      kind: 'empty',
+      title: (page && page.title ? page.title : '页面') + ' 尚未实现',
+      description: '在 PAGES 里为「' + state.page + '」补上 render() 即可。',
+      actionLabel: '回到主屏',
+      onRetry: goHome
+    });
+    bindStateActions(elContent);
+    return;
+  }
+  elContent.innerHTML = page.render() || '';
+  elContent.scrollTop = 0;
+  bindDelegates(elContent);
+  if (typeof page.mounted === 'function') page.mounted(elContent);
+  focusActive();
+}
+
+/* ---- 扫描焦点唯一性 ---- */
+function focusActive() {
+  if (state.scan.phase === 'paused') return;
+  var id = state.scan.active;
+  if (!id) return;
+  var input = elContent.querySelector('[data-scan-input="' + id + '"]')
+           || elContent.querySelector('[data-qty-input="' + id + '"]');
+  if (input && document.activeElement !== input) input.focus();
+}
+
+function setActiveField(id) {
+  state.scan.active = id;
+  $$('.pda-field', elContent).forEach(function (f) {
+    f.classList.toggle('is-active', f.getAttribute('data-field') === id);
+  });
+  focusActive();
+}
+
+function nextField() {
+  var order = $$('.pda-field[data-scan-input], .pda-field', elContent)
+    .map(function (f) { return f.getAttribute('data-field'); })
+    .filter(function (v, i, a) { return v && a.indexOf(v) === i; });
+  var i = order.indexOf(state.scan.active);
+  if (i >= 0 && i < order.length - 1) setActiveField(order[i + 1]);
+}
+
+/* ---- 设备按键 ---- */
+function bindKeypad() {
+  $$('.pda-key', elScreen.parentNode).forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var k = btn.getAttribute('data-key');
+      if (k === 'back') back();
+      else if (k === 'home') goHome();
+      else if (k === 'menu') switchPage('apps');
+      else if (k === 'clear') clearActiveField();
+      else if (k === 'scan') simulateScan();
+      else if (k === 'ok') confirmActiveField();
+    });
+  });
+}
+
+/* ============================================================================
+   [REPLACE-2] 仓库作用域选项
+   ============================================================================ */
+var WAREHOUSES = [
+  { name: '华东仓', code: 'WH-EA-01' },
+  { name: '华南仓', code: 'WH-SA-01' },
+  { name: '华北仓', code: 'WH-NA-01' }
+];
+
+/* ============================================================================
+   [REPLACE-1] 应用入口注册表
+   ----------------------------------------------------------------------------
+   APPS 项字段：
+     key     唯一键
+     name    入口名
+     icon    ICONS 图标 key
+     group   APP_GROUPS 的 key
+     page    目标页面 key；null 表示规划中占位
+     badge   可选，角标数字
+     planned 可选，true 表示规划中（置灰，点击仅提示）
+   ============================================================================ */
+var APP_GROUPS = [
+  { key: 'task',   name: '库内作业' },
+  { key: 'stock',  name: '库存与盘点' },
+  { key: 'system', name: '系统' }
+];
+
+var APPS = [
+  /* --- 库内作业：本原型实现的三条主链 --- */
+  { key: 'putaway',    name: '上架任务', icon: 'arrowUpBox', group: 'task', page: 'putaway-list',    badge: 2 },
+  { key: 'relocation', name: '移位任务', icon: 'swap',       group: 'task', page: 'relocation-list', badge: 2 },
+  { key: 'replenish',  name: '仓内补货', icon: 'refresh',    group: 'task', page: 'replenish-list',  badge: 2 },
+  /* --- 库存与盘点：规划中，用于展示未实现边界 --- */
+  { key: 'inventory',  name: '库存查询', icon: 'box',        group: 'stock', page: null, planned: true },
+  { key: 'count',      name: '盘点任务', icon: 'list',       group: 'stock', page: null, planned: true },
+  { key: 'stockmove',  name: '移库单',   icon: 'truck',      group: 'stock', page: null, planned: true },
+  { key: 'qc',         name: '库内质检', icon: 'alert',      group: 'stock', page: null, planned: true },
+  /* --- 系统 --- */
+  { key: 'apps',       name: '全部应用', icon: 'grid',       group: 'system', page: 'apps' },
+  { key: 'settings',   name: '设置',     icon: 'settings',   group: 'system', page: 'settings' },
+  { key: 'profile',    name: '我的',     icon: 'user',       group: 'system', page: 'profile' }
+];
+
+/* ============================================================================
+   [REPLACE-4] 演示数据 TASKS
+   ----------------------------------------------------------------------------
+   ⚠ 全部为虚构演示数据，每块以 // [DEMO] 标注。
+     结构（字段名）是契约，值可自由替换。
+     三套 schema 不可合并：
+       上架 = SKU 维度（任务头 + skus[]）
+       移位 = 容器维度（containerCode + 容器内 skus[]）
+       补货 = 单据（sourceType 为 6 个数据源之一）
+   ============================================================================ */
+var TASKS = {
+
+  /* ---- 上架：SKU 维度 ---- */
+  putaway: [ // [DEMO]
+    {
+      id: 'PA-1001', code: 'SJ20261013001', status: '待上架', tone: 'warning',
+      source: '收货上架', sourceDoc: 'RCV20261012008',
+      createdAt: '2026-10-13 09:20', owner: '陈明',
+      progress: { done: 0, total: 160, unit: '件' },
+      skus: [
+        { sku: 'SKU-88213', name: '户外折叠椅 军绿', unit: '件', planQty: 120, recLoc: 'A-01-02-03' },
+        { sku: 'SKU-88217', name: '户外折叠桌 铝合金', unit: '件', planQty: 40,  recLoc: 'A-01-02-04' }
+      ]
+    },
+    {
+      id: 'PA-1002', code: 'SJ20261013002', status: '待上架', tone: 'warning',
+      source: '返库上架', sourceDoc: 'SO20261011033',
+      createdAt: '2026-10-13 08:05', owner: '林芳',
+      progress: { done: 0, total: 30, unit: '件' },
+      skus: [ { sku: 'SKU-66120', name: '折叠收纳箱 60L', unit: '件', planQty: 30, recLoc: 'B-02-01-07' } ]
+    },
+    {
+      id: 'PA-1003', code: 'SJ20261012041', status: '上架中', tone: 'warning',
+      source: '补货上架', sourceDoc: 'BH20261012009',
+      createdAt: '2026-10-12 16:40', owner: '陈明',
+      progress: { done: 20, total: 60, unit: '件' },
+      skus: [ { sku: 'SKU-88213', name: '户外折叠椅 军绿', unit: '件', planQty: 60, recLoc: 'P-01-05' } ]
+    },
+    {
+      id: 'PA-1004', code: 'SJ20261012038', status: '已完成', tone: 'success',
+      source: '移库上架', sourceDoc: 'YW20261012021',
+      createdAt: '2026-10-12 14:10', owner: '周锐',
+      progress: { done: 48, total: 48, unit: '件' },
+      skus: [ { sku: 'SKU-55102', name: '便携折叠凳', unit: '件', planQty: 48, recLoc: 'C-03-01-02' } ]
+    }
+  ],
+
+  /* ---- 移位：容器维度 ---- */
+  relocation: [ // [DEMO]
+    {
+      id: 'RE-2001', code: 'YW20261013002', status: '待移位', tone: 'warning',
+      source: '入库移位', containerCode: 'CTN-77120',
+      fromLoc: '收货暂存区 R-01', toLoc: 'A-02-01-01',
+      createdAt: '2026-10-13 09:35', owner: '陈明',
+      progress: { done: 0, total: 2, unit: 'SKU' },
+      skus: [
+        { sku: 'SKU-88213', name: '户外折叠椅 军绿', unit: '件', qty: 60 },
+        { sku: 'SKU-88214', name: '户外折叠椅 米白', unit: '件', qty: 60 }
+      ]
+    },
+    {
+      id: 'RE-2002', code: 'YW20261013001', status: '移位中', tone: 'warning',
+      source: '返库移位', containerCode: 'CTN-77108',
+      fromLoc: '拣货位 P-01-05', toLoc: '存储区 B-03-02-01',
+      createdAt: '2026-10-13 09:02', owner: '林芳',
+      progress: { done: 1, total: 2, unit: 'SKU' },
+      skus: [
+        { sku: 'SKU-66120', name: '折叠收纳箱 60L', unit: '件', qty: 24 },
+        { sku: 'SKU-66121', name: '折叠收纳箱 80L', unit: '件', qty: 12 }
+      ]
+    },
+    {
+      id: 'RE-2003', code: 'YW20261012017', status: '已完成', tone: 'success',
+      source: '补货移位', containerCode: 'CTN-77090',
+      fromLoc: '存储区 B-03-02-01', toLoc: '拣货位 P-01-05',
+      createdAt: '2026-10-12 15:22', owner: '周锐',
+      progress: { done: 1, total: 1, unit: 'SKU' },
+      skus: [ { sku: 'SKU-88213', name: '户外折叠椅 军绿', unit: '件', qty: 40 } ]
+    }
+  ],
+
+  /* ---- 补货：单据，sourceType 取自 6 个数据源 ---- */
+  replenish: [ // [DEMO]
+    {
+      id: 'RP-3001', code: 'BH20261013003', status: '待补货', tone: 'warning',
+      source: '库存预警单', fromLoc: '存储区 B-03-02-01', toLoc: '拣货位 P-01-05',
+      sku: 'SKU-88213', name: '户外折叠椅 军绿', unit: '件',
+      planQty: 40, doneQty: 0, stockQty: 6, minQty: 20,
+      createdAt: '2026-10-13 09:40', owner: '陈明',
+      progress: { done: 0, total: 40, unit: '件' }
+    },
+    {
+      id: 'RP-3002', code: 'BH20261013002', status: '待补货', tone: 'warning',
+      source: '波次单', fromLoc: '存储区 C-01-01-02', toLoc: '拣货位 P-02-03',
+      sku: 'SKU-66120', name: '折叠收纳箱 60L', unit: '件',
+      planQty: 24, doneQty: 0, stockQty: 3, minQty: 12,
+      createdAt: '2026-10-13 09:28', owner: '林芳',
+      progress: { done: 0, total: 24, unit: '件' }
+    },
+    {
+      id: 'RP-3003', code: 'BH20261012015', status: '已完成', tone: 'success',
+      source: '人工补货申请单', fromLoc: '存储区 B-03-02-01', toLoc: '拣货位 P-01-05',
+      sku: 'SKU-88213', name: '户外折叠椅 军绿', unit: '件',
+      planQty: 30, doneQty: 30, stockQty: 30, minQty: 20,
+      createdAt: '2026-10-12 17:05', owner: '周锐',
+      progress: { done: 30, total: 30, unit: '件' }
+    }
+  ]
+};
+
+/* ============================================================================
+   [FIXED] 扫描注册表 · 弹层 · 事件委托 —— 以下不要改
+   ============================================================================ */
+var scanHandlers = {};   /* fieldId -> function(value, input) */
+var simValues    = {};   /* fieldId -> 硬件扫描键注入的演示值 */
+var scanValues   = {};   /* fieldId -> 当前输入值（跨重渲染保留） */
+var scanErrors   = {};   /* fieldId -> 错误文案 */
+var qtyValues    = {};   /* qtyId   -> 当前输入值 */
+var qtyErrors    = {};   /* qtyId   -> 错误文案 */
+var qtyMeta      = {};   /* qtyId   -> { min, max, precision, unit } */
+var stateActions = {};   /* 状态面板恢复动作注册表 */
+var saSeq = 0;
+
+var jobState = {
+  putaway:    { skuIndex: 0, results: [] },
+  relocation: null,
+  replenish:  null
+};
+
+function registerScan(id, fn, simValue) {
+  scanHandlers[id] = fn;
+  if (simValue !== undefined) simValues[id] = simValue;
+}
+function resetJob(kind) {
+  if (kind === 'putaway') jobState.putaway = { skuIndex: 0, results: [] };
+  else jobState[kind] = {};
+}
+function currentTask(kind) {
+  var id = state.current[kind];
+  if (!id) return null;
+  var list = TASKS[kind] || [];
+  for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+  return null;
+}
+function cleanCode(v) {
+  /* 只去末尾回车换行；保留前导零与大小写 */
+  return String(v === undefined || v === null ? '' : v).replace(/[\r\n]+$/, '').trim();
+}
+function pct(done, total) {
+  if (!total) return 0;
+  return Math.max(0, Math.min(100, Math.round(done / total * 100)));
+}
+function pendingCount() {
+  var n = 0;
+  ['putaway', 'relocation', 'replenish'].forEach(function (k) {
+    (TASKS[k] || []).forEach(function (t) { if (t.status.indexOf('已完成') < 0) n++; });
+  });
+  return n;
+}
+
+/* ---- 弹层 ---- */
+function openSheet(title, items, onPick) {
+  sheetOnPick = onPick || null;
+  elSheet.innerHTML =
+      '<div class="pda-sheet-head">'
+    +   '<div class="pda-sheet-title">' + esc(title) + '</div>'
+    +   '<button class="pda-sheet-close" type="button" data-sheet-close>✕</button>'
+    + '</div>'
+    + '<div class="pda-sheet-body">'
+    +   items.map(function (it, i) {
+          return '<button class="pda-sheet-item" type="button" data-sheet-index="' + i + '">'
+            + '<span class="pda-sheet-item-main">'
+            +   '<span class="pda-sheet-item-label">' + esc(it.label) + '</span>'
+            +   (it.desc ? '<span class="pda-sheet-item-desc">' + esc(it.desc) + '</span>' : '')
+            + '</span>'
+            + (it.active ? '<span class="pda-icon" style="color:var(--pda-color-action-primary)">' + ICONS.check + '</span>' : '')
+            + '</button>';
+        }).join('')
+    + '</div>';
+  elSheet.classList.add('is-open');
+  elMask.classList.add('is-open');
+  state.scan.phase = 'paused';
+  $('[data-sheet-close]', elSheet).addEventListener('click', closeSheet);
+  $$('[data-sheet-index]', elSheet).forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var it = items[parseInt(btn.getAttribute('data-sheet-index'), 10)];
+      var fn = sheetOnPick;
+      closeSheet();
+      if (typeof fn === 'function' && it) fn(it);
+    });
+  });
+}
+
+function closeSheet() {
+  elSheet.classList.remove('is-open');
+  if (!elModal.classList.contains('is-open')) elMask.classList.remove('is-open');
+  if (state.scan.phase === 'paused') state.scan.phase = 'ready';
+  focusActive();
+}
+
+function openModal(title, bodyHTML, footerHTML) {
+  elModal.innerHTML =
+      '<div class="pda-modal-head"><div class="pda-modal-title">' + esc(title) + '</div></div>'
+    + '<div class="pda-modal-body">' + (bodyHTML || '') + '</div>'
+    + '<div class="pda-modal-foot">' + (footerHTML || '') + '</div>';
+  elModal.classList.add('is-open');
+  elMask.classList.add('is-open');
+  state.scan.phase = 'paused';
+  $$('[data-modal-close]', elModal).forEach(function (b) {
+    b.addEventListener('click', closeModal);
+  });
+}
+
+function closeModal() {
+  elModal.classList.remove('is-open');
+  if (!elSheet.classList.contains('is-open')) elMask.classList.remove('is-open');
+  if (state.scan.phase === 'paused') state.scan.phase = 'ready';
+  focusActive();
+}
+
+function toast(msg) {
+  elToast.textContent = msg;
+  elToast.classList.add('is-open');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { elToast.classList.remove('is-open'); }, 1800);
+}
+
+function openWarehousePicker() {
+  var items = WAREHOUSES.map(function (w) {
+    return { label: w.name, desc: w.code, active: state.warehouse && w.name === state.warehouse.name, value: w };
+  });
+  openSheet('切换仓库', items, function (it) {
+    state.warehouse = it.value;
+    toast('已切换到「' + it.value.name + '」');
+    renderAll();
+  });
+}
+
+/* ---- 设备按键回调 ---- */
+function clearActiveField() {
+  var id = state.scan.active;
+  if (!id) { toast('当前没有可清空的字段'); return; }
+  scanValues[id] = ''; scanErrors[id] = '';
+  var input = elContent.querySelector('[data-scan-input="' + id + '"]') || elContent.querySelector('[data-qty-input="' + id + '"]');
+  if (input) {
+    input.value = '';
+    input.focus();
+    var f = input.closest('.pda-field');
+    if (f) { f.classList.remove('is-error'); var m = $('.pda-field-msg', f); if (m) m.textContent = ''; }
+  }
+  toast('已清空当前字段');
+}
+
+function simulateScan() {
+  var id = state.scan.active;
+  if (!id) { toast('当前没有可扫描的字段'); return; }
+  var v = simValues[id];
+  var input = elContent.querySelector('[data-scan-input="' + id + '"]');
+  if (v === undefined || !input) { toast('该步骤需要手工输入'); if (input) input.focus(); return; }
+  elLed.classList.add('is-scan');
+  setTimeout(function () { elLed.classList.remove('is-scan'); }, 280);
+  input.value = v;
+  scanValues[id] = v;
+  if (typeof scanHandlers[id] === 'function') scanHandlers[id](v, input);
+}
+
+function confirmActiveField() {
+  var id = state.scan.active;
+  var input = id ? (elContent.querySelector('[data-scan-input="' + id + '"]') || elContent.querySelector('[data-qty-input="' + id + '"]')) : null;
+  if (id && input && typeof scanHandlers[id] === 'function') {
+    scanHandlers[id](input.value, input);
+    return;
+  }
+  var ab = (PAGES[state.page] || {}).actionBar;
+  if (ab && typeof ab.onPrimary === 'function') ab.onPrimary();
+  else toast('当前页面没有可确认的操作');
+}
+
+function openKeyboard() { focusActive(); }
+
+/* ---- 事件委托：只绑一次，绑在 #pdaContent 上（它永不被替换） ---- */
+function bindDelegates(root) {
+  /* 通用跳转 / 返回 / 提示 */
+  $$('[data-go]', root).forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      switchPage(el.getAttribute('data-go'));
+    });
+  });
+  $$('[data-toast]', root).forEach(function (el) {
+    el.addEventListener('click', function (e) { e.stopPropagation(); toast(el.getAttribute('data-toast')); });
+  });
+
+  /* 状态面板恢复动作 */
+  $$('[data-state-action]', root).forEach(function (el) {
+    el.addEventListener('click', function () {
+      var fn = stateActions[el.getAttribute('data-state-action')];
+      if (typeof fn === 'function') fn();
+    });
+  });
+
+  /* 扫描输入：仅更新输入，不发起查询 */
+  $$('[data-scan-input]', root).forEach(function (inp) {
+    var id = inp.getAttribute('data-scan-input');
+    inp.addEventListener('input', function () {
+      scanValues[id] = inp.value;
+      if (scanErrors[id]) {
+        scanErrors[id] = '';
+        var f = inp.closest('.pda-field');
+        if (f) { f.classList.remove('is-error'); var m = $('.pda-field-msg', f); if (m) m.textContent = ''; }
+      }
+    });
+    inp.addEventListener('focus', function () { setActiveField(id); });
+  });
+
+  $$('[data-scan-clear]', root).forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var id = btn.getAttribute('data-scan-clear');
+      scanValues[id] = ''; scanErrors[id] = '';
+      var inp = root.querySelector('[data-scan-input="' + id + '"]');
+      if (inp) { inp.value = ''; inp.focus(); }
+      var f = btn.closest('.pda-field');
+      if (f) { f.classList.remove('is-error'); var m = $('.pda-field-msg', f); if (m) m.textContent = ''; }
+    });
+  });
+
+  /* 数量输入：仅更新输入 */
+  $$('[data-qty-input]', root).forEach(function (inp) {
+    var id = inp.getAttribute('data-qty-input');
+    inp.addEventListener('input', function () {
+      qtyValues[id] = inp.value;
+      if (qtyErrors[id]) {
+        qtyErrors[id] = '';
+        var f = inp.closest('.pda-field');
+        if (f) { f.classList.remove('is-error'); var m = $('.pda-field-msg', f); if (m) m.textContent = ''; }
+      }
+    });
+    inp.addEventListener('focus', function () { setActiveField(id); });
+  });
+
+  $$('[data-qty-step]', root).forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var id = btn.getAttribute('data-qty-step');
+      var delta = parseFloat(btn.getAttribute('data-delta')) || 0;
+      var meta = qtyMeta[id] || {};
+      var cur = parseFloat(qtyValues[id]);
+      if (isNaN(cur)) cur = 0;
+      var next = cur + delta;
+      if (meta.min !== undefined && next < meta.min) next = meta.min;
+      if (meta.max !== undefined && next > meta.max) next = meta.max;
+      qtyValues[id] = String(next);
+      var inp = root.querySelector('[data-qty-input="' + id + '"]');
+      if (inp) inp.value = String(next);
+      state.scan.active = id;
+      focusActive();
+    });
+  });
+
+  $$('[data-qty-quick]', root).forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var id = btn.getAttribute('data-qty-quick');
+      var val = btn.getAttribute('data-value') || '';
+      qtyValues[id] = val;
+      var inp = root.querySelector('[data-qty-input="' + id + '"]');
+      if (inp) inp.value = val;
+      state.scan.active = id;
+      focusActive();
+    });
+  });
+
+  /* 页面自定义动作（参数由页面在 mounted 里自绑；这里提供 data-* 直通） */
+  $$('[data-open-task]', root).forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var kind = el.getAttribute('data-kind');
+      var id = el.getAttribute('data-open-task');
+      var pageKey = { putaway: 'putaway-scan', relocation: 'relocation-scan', replenish: 'replenish-scan' }[kind];
+      openTask(kind, id, pageKey);
+    });
+  });
+}
+
+function bindStateActions(root) { bindDelegates(root); }
+
+function openTask(kind, id, pageKey) {
+  var list = TASKS[kind] || [];
+  var task = null;
+  for (var i = 0; i < list.length; i++) if (list[i].id === id) task = list[i];
+  if (!task) { toast('任务不存在'); return; }
+  if (task.status === '已完成') { toast('该任务已完成，不可再操作'); return; }
+  state.current[kind] = id;
+  resetJob(kind);
+  scanValues = {}; scanErrors = {}; qtyValues = {}; qtyErrors = {};
+  switchPage(pageKey);
+  state.scan.active = { putaway: 'pa-sku', relocation: 're-scan-code', replenish: 'rp-loc' }[kind] || null;
+  renderAll();
+}
+
+/* ============================================================================
+   [FIXED] 组件生成器 —— 全部返回 HTML 字符串
+   说明：本文件实现的是「原型生成函数」，不是 React 组件。
+   pda-ui-tokens.json 的 plannedNamesAreImplemented 仍为 false，React 版本需另行重写。
+   ============================================================================ */
+
+function pdaPageShell(cfg) {
+  return '<div class="pda-page pda-page--' + esc(cfg.type || 'generic') + '">' + (cfg.body || '') + '</div>';
+}
+
+function pdaGroupTitle(text, count) {
+  return '<div class="pda-group-title">' + esc(text)
+    + (count !== undefined ? '<span class="pda-group-count">' + count + ' 项</span>' : '')
+    + '</div>';
+}
+
+function appItem(app) {
+  var cls = 'pda-app-item' + (app.planned ? ' is-planned' : '');
+  var attr = app.planned ? ' data-toast="' + esc(app.name + ' 规划中，暂未开放') + '"'
+                         : ' data-go="' + esc(app.page) + '"';
+  return '<button class="' + cls + '" type="button"' + attr + '>'
+    + '<span class="pda-app-item-icon">' + (ICONS[app.icon] || ICONS.info)
+    +   (app.badge ? '<span class="pda-app-item-badge">' + app.badge + '</span>' : '')
+    + '</span>'
+    + '<span class="pda-app-item-name">' + esc(app.name) + '</span>'
+    + '</button>';
+}
+
+function appGrid(apps) {
+  return '<div class="pda-app-grid">' + apps.map(appItem).join('') + '</div>';
+}
+
+function pdaStatusTag(text, tone) {
+  return '<span class="pda-status-tag pda-status--' + esc(tone || 'neutral') + '">' + esc(text) + '</span>';
+}
+
+function pdaKv(k, v, cls) {
+  return '<div class="pda-kv"><span class="pda-kv-k">' + esc(k) + '</span>'
+    + '<span class="pda-kv-v' + (cls ? ' ' + cls : '') + '">' + esc(v) + '</span></div>';
+}
+
+function pdaCard(title, bodyHTML, opts) {
+  opts = opts || {};
+  return '<div class="pda-card' + (opts.contextual ? ' pda-card--contextual' : '') + '">'
+    + (title ? '<div class="pda-card-head"><h3>' + esc(title) + '</h3>'
+        + (opts.extraHTML || '') + '</div>' : '')
+    + '<div class="pda-card-body">' + (bodyHTML || '') + '</div>'
+    + '</div>';
+}
+
+function pdaScanField(cfg) {
+  var id = cfg.id;
+  var val = cfg.readonly ? (cfg.value || '') : (scanValues[id] !== undefined ? scanValues[id] : (cfg.value || ''));
+  var err = scanErrors[id] || '';
+  var cls = 'pda-field pda-scan-field';
+  if (cfg.active)   cls += ' is-active';
+  if (cfg.busy)     cls += ' is-busy';
+  if (cfg.readonly) cls += ' is-readonly';
+  if (err)          cls += ' is-error';
+
+  return '<div class="' + cls + '" data-field="' + esc(id) + '">'
+    + '<label class="pda-field-label" for="f-' + esc(id) + '">'
+    +   (cfg.step ? '<span class="pda-field-step">' + esc(cfg.step) + '</span>' : '')
+    +   esc(cfg.label)
+    +   (cfg.required ? '<span class="pda-field-req">*</span>' : '')
+    + '</label>'
+    + '<div class="pda-field-control">'
+    +   '<span class="pda-field-icon">' + (ICONS[cfg.icon || 'scan']) + '</span>'
+    +   '<input id="f-' + esc(id) + '" class="pda-field-input" type="text" autocomplete="off" spellcheck="false"'
+    +     ' data-scan-input="' + esc(id) + '"' + (cfg.readonly ? ' readonly' : '')
+    +     ' placeholder="' + esc(cfg.placeholder || '') + '" value="' + esc(val) + '" />'
+    +   (cfg.readonly ? '' : '<button class="pda-field-clear" type="button" data-scan-clear="' + esc(id) + '">✕</button>')
+    + '</div>'
+    + '<p class="pda-field-msg">' + esc(err || cfg.msg || '') + '</p>'
+    + '</div>';
+}
+
+function pdaQuantityField(cfg) {
+  var id = cfg.id;
+  qtyMeta[id] = { min: cfg.min, max: cfg.max, precision: cfg.precision, unit: cfg.unit };
+  var val = qtyValues[id] !== undefined ? qtyValues[id] : (cfg.value || '');
+  var err = qtyErrors[id] || '';
+  var cls = 'pda-field pda-qty-field';
+  if (cfg.active) cls += ' is-active';
+  if (err)        cls += ' is-error';
+
+  return '<div class="' + cls + '" data-field="' + esc(id) + '">'
+    + '<label class="pda-field-label" for="q-' + esc(id) + '">'
+    +   (cfg.step ? '<span class="pda-field-step">' + esc(cfg.step) + '</span>' : '')
+    +   esc(cfg.label)
+    +   (cfg.plan !== undefined
+          ? '<span style="margin-left:auto;font-size:var(--pda-font-caption);color:var(--pda-color-text-secondary)">'
+            + esc(cfg.planLabel || '应处理') + ' ' + esc(cfg.plan) + ' ' + esc(cfg.unit) + '</span>'
+          : '')
+    + '</label>'
+    + '<div class="pda-field-control">'
+    +   '<div class="pda-qty-row">'
+    +     '<input id="q-' + esc(id) + '" class="pda-qty-input" type="text" inputmode="decimal" autocomplete="off"'
+    +       ' data-qty-input="' + esc(id) + '" placeholder="' + esc(cfg.placeholder || '请输入数量') + '" value="' + esc(val) + '" />'
+    +     '<span class="pda-qty-unit">' + esc(cfg.unit) + '</span>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="pda-qty-stepper">'
+    +   '<button type="button" data-qty-step="' + esc(id) + '" data-delta="-1" aria-label="减一">' + ICONS.minus + '</button>'
+    +   '<button type="button" data-qty-step="' + esc(id) + '" data-delta="1" aria-label="加一">' + ICONS.plus + '</button>'
+    +   (cfg.quick
+          ? '<button class="pda-qty-quick" type="button" data-qty-quick="' + esc(id) + '" data-value="' + esc(cfg.quickValue !== undefined ? cfg.quickValue : '') + '">' + esc(cfg.quick) + '</button>'
+          : '')
+    + '</div>'
+    + '<p class="pda-field-msg">' + esc(err || cfg.msg || '') + '</p>'
+    + '</div>';
+}
+
+function pdaTaskItem(cfg) {
+  var fields = (cfg.fields || []).map(function (f) { return pdaKv(f.k, f.v, f.cls); }).join('');
+  var progress = '';
+  if (cfg.progress) {
+    progress = '<div class="pda-progress" style="margin-top:8px">'
+      + '<div class="pda-progress-track"><div class="pda-progress-fill" style="width:' + pct(cfg.progress.done, cfg.progress.total) + '%"></div></div>'
+      + '<span class="pda-progress-text">已处理 ' + cfg.progress.done + ' / ' + cfg.progress.total + ' ' + esc(cfg.progress.unit || '') + '</span>'
+      + '</div>';
+  }
+  return '<div class="pda-task-item">'
+    + '<div class="pda-task-item-head">'
+    +   '<div class="pda-task-code">' + esc(cfg.code) + '</div>'
+    +   pdaStatusTag(cfg.statusLabel, cfg.tone)
+    + '</div>'
+    + '<div class="pda-task-fields">' + fields + '</div>'
+    + progress
+    + '</div>';
+}
+
+function pdaSkuSummary(cfg) {
+  var qty = (cfg.quantities || []).map(function (q) {
+    return '<span' + (q.cls ? ' class="' + q.cls + '"' : '') + '>' + esc(q.label) + ' <b>' + esc(q.value) + '</b> ' + esc(cfg.unit || '') + '</span>';
+  }).join('');
+  return '<div class="pda-sku-summary">'
+    + '<div class="pda-sku-img">'
+    +   (cfg.imageUrl ? '<img src="' + esc(cfg.imageUrl) + '" alt="" />'
+                     : '<span class="pda-sku-img-ph">' + ICONS.box + '</span>')
+    + '</div>'
+    + '<div class="pda-sku-main">'
+    +   '<div class="pda-sku-name">' + esc(cfg.name) + '</div>'
+    +   '<div class="pda-sku-code">SKU ' + esc(cfg.sku) + (cfg.location ? ' · 库位 ' + esc(cfg.location) : '') + '</div>'
+    +   (qty ? '<div class="pda-sku-qty">' + qty + '</div>' : '')
+    + '</div>'
+    + '</div>';
+}
+
+function pdaStatusTabs(cfg) {
+  return '<div class="pda-status-tabs" data-tabs="' + esc(cfg.id || '') + '">'
+    + cfg.tabs.map(function (t, i) {
+        return '<button class="pda-status-tab' + (i === cfg.active ? ' is-active' : '') + '" type="button" data-tab-index="' + i + '">'
+          + esc(t.label)
+          + (t.count !== undefined ? '<span class="pda-tab-count">' + t.count + '</span>' : '')
+          + '</button>';
+      }).join('')
+    + '</div>';
+}
+
+function pdaActionBar(cfg) {
+  var html = '';
+  if (cfg.secondary) html += '<button class="pda-btn" type="button" data-bar="secondary">' + esc(cfg.secondary) + '</button>';
+  if (cfg.primary)   html += '<button class="pda-btn pda-btn--primary pda-btn--block" type="button" data-bar="primary">' + esc(cfg.primary) + '</button>';
+  return '<div class="pda-inline-actionbar">' + html + '</div>';
+}
+
+function pdaStatePanel(cfg) {
+  var kind = cfg.kind || 'empty';
+  var iconName = { empty: 'box', 'no-match': 'search', error: 'alert', 'no-permission': 'alert', initial: 'info', readonly: 'info' }[kind] || 'info';
+  var iconHTML = kind === 'loading' ? '<div class="pda-spinner"></div>' : (ICONS[iconName] || ICONS.info);
+  var actionHTML = '';
+  if (cfg.actionLabel) {
+    if (cfg.go) {
+      actionHTML = '<button class="pda-state-action" type="button" data-go="' + esc(cfg.go) + '">' + esc(cfg.actionLabel) + '</button>';
+    } else if (typeof cfg.onRetry === 'function') {
+      var id = 'sa' + (++saSeq);
+      stateActions[id] = cfg.onRetry;
+      actionHTML = '<button class="pda-state-action" type="button" data-state-action="' + id + '">' + esc(cfg.actionLabel) + '</button>';
+    }
+  }
+  return '<div class="pda-state-panel" data-kind="' + esc(kind) + '">'
+    + '<div class="pda-state-icon">' + iconHTML + '</div>'
+    + '<div class="pda-state-title">' + esc(cfg.title || '') + '</div>'
+    + (cfg.description ? '<p class="pda-state-desc">' + esc(cfg.description) + '</p>' : '')
+    + actionHTML
+    + '</div>';
+}
+
+function pdaResultPanel(cfg) {
+  return '<div class="pda-result-panel">'
+    + '<div class="pda-result-icon">' + ICONS.check + '</div>'
+    + '<div class="pda-result-title">' + esc(cfg.title || '操作完成') + '</div>'
+    + (cfg.objectCode ? '<div class="pda-result-code">' + esc(cfg.objectCode) + '</div>' : '')
+    + (cfg.summary ? '<p class="pda-state-desc">' + esc(cfg.summary) + '</p>' : '')
+    + '</div>';
+}
+
+/* ============================================================================
+   [REPLACE-5] 页面内容 —— render() 返回 HTML 字符串，mounted() 绑定本页交互
+   ============================================================================ */
+
+/* ---- 任务列表配置 ---- */
+var TASK_LIST_CFG = {
+  putaway: {
+    title: '上架任务', scanPage: 'putaway-scan',
+    tabs: ['全部', '待上架', '上架中', '已完成'],
+    scanLabel: '扫描或输入 任务单号 / SKU',
+    scanPlaceholder: '如 SJ20261013001',
+    emptyTitle: '暂无上架任务', emptyDesc: '当前筛选条件下没有待处理的上架任务。'
+  },
+  relocation: {
+    title: '移位任务', scanPage: 'relocation-scan',
+    tabs: ['全部', '待移位', '移位中', '已完成'],
+    scanLabel: '扫描或输入 任务单号 / 容器码',
+    scanPlaceholder: '如 YW20261013002',
+    emptyTitle: '暂无移位任务', emptyDesc: '当前筛选条件下没有待处理的移位任务。'
+  },
+  replenish: {
+    title: '仓内补货', scanPage: 'replenish-scan',
+    tabs: ['全部', '待补货', '补货中', '已完成'],
+    scanLabel: '扫描或输入 补货单号 / 拣货位',
+    scanPlaceholder: '如 BH20261013003',
+    emptyTitle: '暂无补货任务', emptyDesc: '当前筛选条件下没有待处理的补货任务。'
+  }
+};
+
+/* ---- 小构件 ---- */
+function listRow(iconName, label, value, attrs) {
+  return '<button class="pda-list-row" type="button"' + (attrs || '') + '>'
+    + '<span class="pda-list-row-icon">' + (ICONS[iconName] || ICONS.info) + '</span>'
+    + '<span class="pda-list-row-label">' + esc(label) + '</span>'
+    + (value ? '<span class="pda-list-row-value">' + esc(value) + '</span>' : '')
+    + '<span class="pda-list-row-chev">' + ICONS.chevronR + '</span>'
+    + '</button>';
+}
+
+function switchRow(title, desc, on) {
+  return '<div class="pda-switch-row">'
+    + '<div class="pda-switch-main">'
+    +   '<div class="pda-switch-title">' + esc(title) + '</div>'
+    +   (desc ? '<div class="pda-switch-desc">' + esc(desc) + '</div>' : '')
+    + '</div>'
+    + '<button class="pda-switch' + (on ? ' is-on' : '') + '" type="button" role="switch"'
+    +   ' aria-checked="' + (on ? 'true' : 'false') + '" data-switch><span class="pda-switch-knob"></span></button>'
+    + '</div>';
+}
+
+function jobStrip(code, right) {
+  return '<div class="pda-job-strip">'
+    + '<span class="pda-job-code">' + esc(code) + '</span>'
+    + '<span class="pda-job-step">' + esc(right || '') + '</span>'
+    + '</div>';
+}
+
+function taskFields(kind, t) {
+  if (kind === 'putaway') {
+    return [
+      { k: '来源', v: t.source },
+      { k: '上游单据', v: t.sourceDoc, cls: 'is-code' },
+      { k: 'SKU 明细', v: t.skus.length + ' 个 · ' + t.progress.total + ' ' + (t.progress.unit || '件') },
+      { k: '负责人', v: t.owner + ' · ' + t.createdAt }
+    ];
+  }
+  if (kind === 'relocation') {
+    return [
+      { k: '容器', v: t.containerCode, cls: 'is-code' },
+      { k: '来源', v: t.source },
+      { k: '源库位', v: t.fromLoc },
+      { k: '目标库位', v: t.toLoc },
+      { k: '容器内 SKU', v: t.skus.length + ' 个' }
+    ];
+  }
+  return [
+    { k: '数据源', v: t.source },
+    { k: 'SKU', v: t.sku, cls: 'is-code' },
+    { k: '拣货位', v: t.toLoc },
+    { k: '存储位', v: t.fromLoc }
+  ];
+}
+
+function matchTask(kind, t, term) {
+  if (!term) return true;
+  var hay = [t.code, t.id];
+  if (kind === 'relocation') hay.push(t.containerCode, t.fromLoc, t.toLoc);
+  if (kind === 'putaway')    t.skus.forEach(function (s) { hay.push(s.sku); });
+  if (kind === 'replenish')  hay.push(t.sku, t.toLoc, t.fromLoc);
+  return hay.join(' ').toLowerCase().indexOf(term.toLowerCase()) >= 0;
+}
+
+/* ---- 页面：主屏 ---- */
+function renderHome() {
+  var groups = APP_GROUPS.map(function (g) {
+    var apps = APPS.filter(function (a) { return a.group === g.key; });
+    if (!apps.length) return '';
+    return pdaGroupTitle(g.name) + appGrid(apps);
+  }).join('');
+
+  var body =
+      '<div class="pda-home-head">'
+    +   '<div class="pda-home-wh">'
+    +     '<span class="pda-home-wh-label">库内作业员</span>'
+    +     '<span class="pda-home-wh-name">' + esc(state.user.name) + ' · 今日待办 ' + pendingCount() + ' 项</span>'
+    +   '</div>'
+    +   '<button class="pda-home-user" type="button" data-go="profile">' + esc(state.user.avatar) + '</button>'
+    + '</div>'
+    + groups
+    + '<p class="pda-home-foot">PDA 原型骨架 · 无生产接口 · 所有「提交成功」均为本地演示</p>';
+
+  return pdaPageShell({ type: 'home', body: body });
+}
+
+/* ---- 页面：任务列表 ---- */
+function renderTaskList(kind) {
+  var cfg = TASK_LIST_CFG[kind];
+  var all = TASKS[kind] || [];
+  var q = state.listQuery[kind];
+  var fi = state.taskFilter[kind];
+
+  var afterTab = all.filter(function (t) { return fi === 0 || t.status === cfg.tabs[fi]; });
+  var filtered = afterTab.filter(function (t) { return matchTask(kind, t, q); });
+
+  var counts = cfg.tabs.map(function (label, i) {
+    return all.filter(function (t) { return i === 0 || t.status === label; }).length;
+  });
+
+  var body =
+      pdaScanField({
+        id: 'list-scan', label: cfg.scanLabel, icon: 'search',
+        placeholder: cfg.scanPlaceholder, value: q,
+        active: state.scan.active === 'list-scan',
+        msg: '按 Enter 查询；单号或容器码精确命中将直接进入作业页'
+      })
+    + pdaStatusTabs({
+        id: kind,
+        tabs: cfg.tabs.map(function (l, i) { return { label: l, count: counts[i] }; }),
+        active: fi
+      });
+
+  if (!filtered.length) {
+    if (q) {
+      body += pdaStatePanel({
+        kind: 'no-match',
+        title: '没有匹配的任务',
+        description: '未找到与「' + q + '」匹配的任务，请核对单号后重试。',
+        actionLabel: '清空查询条件',
+        onRetry: function () {
+          state.listQuery[kind] = '';
+          scanValues['list-scan'] = '';
+          state.scan.active = 'list-scan';
+          renderAll();
+        }
+      });
+    } else {
+      body += pdaStatePanel({ kind: 'empty', title: cfg.emptyTitle, description: cfg.emptyDesc });
+    }
+  } else {
+    body += filtered.map(function (t) {
+      return '<div data-open-task="' + esc(t.id) + '" data-kind="' + esc(kind) + '" style="cursor:pointer">'
+        + pdaTaskItem({
+            code: t.code, statusLabel: t.status, tone: t.tone,
+            fields: taskFields(kind, t), progress: t.progress
+          })
+        + '</div>';
+    }).join('');
+    body += '<p class="pda-list-foot">共 ' + filtered.length + ' 条'
+          + (filtered.length < afterTab.length ? '（已筛选）' : '')
+          + (q ? ' · 条件：' + q : '')
+          + ' · 没有更多了</p>';
+  }
+
+  return pdaPageShell({ type: 'task-list', body: body });
+}
+
+function mountTaskList(kind, root, cfg) {
+  $$('[data-tab-index]', root).forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      state.taskFilter[kind] = parseInt(btn.getAttribute('data-tab-index'), 10);
+      renderAll();
+    });
+  });
+
+  var clr = root.querySelector('[data-scan-clear="list-scan"]');
+  if (clr) clr.addEventListener('click', function () {
+    state.listQuery[kind] = '';
+    state.scan.active = 'list-scan';
+    renderAll();
+  });
+
+  registerScan('list-scan', function (v) {
+    var term = cleanCode(v);
+    state.listQuery[kind] = term;
+    state.scan.active = 'list-scan';
+
+    var hits = (TASKS[kind] || []).filter(function (t) { return matchTask(kind, t, term); });
+    var exact = hits.filter(function (t) {
+      return t.code.toUpperCase() === term.toUpperCase() || t.id.toUpperCase() === term.toUpperCase();
+    });
+
+    if (term && (exact.length === 1 || hits.length === 1)) {
+      openTask(kind, (exact[0] || hits[0]).id, cfg.scanPage);
+      return;
+    }
+    renderAll();
+    if (term && !hits.length) toast('未找到匹配的任务');
+  });
+}
+
+/* ---- 页面：上架作业 ---- */
+function renderPutawayScan() {
+  var task = currentTask('putaway');
+  if (!task) {
+    return pdaStatePanel({
+      kind: 'error', title: '未选择上架任务',
+      description: '请返回上架任务列表，选择一条任务后再进入作业页。',
+      actionLabel: '返回上架任务', go: 'putaway-list'
+    });
+  }
+  var job = jobState.putaway;
+  var sku = task.skus[job.skuIndex];
+  if (!sku) {
+    return pdaStatePanel({
+      kind: 'success', title: '全部 SKU 明细已完成',
+      description: '本次任务的上架明细已全部处理完毕。',
+      actionLabel: '查看结果', go: 'putaway-success'
+    });
+  }
+
+  var doneQty = job.results.reduce(function (n, r) { return n + r.good + r.bad; }, 0);
+
+  var body =
+      jobStrip(task.code, 'SKU ' + (job.skuIndex + 1) + ' / ' + task.skus.length)
+    + pdaSkuSummary({
+        sku: sku.sku, name: sku.name, unit: sku.unit, location: sku.recLoc,
+        quantities: [
+          { label: '计划', value: sku.planQty },
+          { label: '本任务已处理', value: doneQty }
+        ]
+      })
+    + pdaScanField({
+        id: 'pa-sku', step: '1', label: '扫描 SKU', icon: 'scan',
+        placeholder: '扫描或输入 SKU 编码', required: true,
+        active: state.scan.active === 'pa-sku',
+        msg: '扫描商品条码或手工输入 SKU，按 Enter 确认'
+      })
+    + pdaScanField({
+        id: 'pa-rec', step: '2', label: '推荐库位（只读）', icon: 'location',
+        value: sku.recLoc, readonly: true,
+        msg: '推荐值不等于实际确认，请以实际扫描的库位为准'
+      })
+    + pdaScanField({
+        id: 'pa-act', step: '3', label: '扫描实际库位', icon: 'location',
+        placeholder: '扫描或输入实际库位码', required: true,
+        active: state.scan.active === 'pa-act'
+      })
+    + pdaQuantityField({
+        id: 'pa-good', step: '4', label: '良品数量', unit: sku.unit, plan: sku.planQty,
+        active: state.scan.active === 'pa-good',
+        quick: '全部良品', quickValue: String(sku.planQty)
+      })
+    + pdaQuantityField({
+        id: 'pa-bad', step: '5', label: '不良品数量', unit: sku.unit,
+        active: state.scan.active === 'pa-bad',
+        quick: '清零', quickValue: '0'
+      })
+    + pdaCard('校验规则',
+        pdaKv('实际库位', '须与推荐库位 ' + sku.recLoc + ' 一致')
+      + pdaKv('数量合计', '良品 + 不良品 = 计划量 ' + sku.planQty + ' ' + sku.unit)
+      + pdaKv('空值处理', '数量留空不等于 0，需明确填写'));
+
+  return pdaPageShell({ type: 'scan-operation', body: body });
+}
+
+function mountPutawayScan() {
+  var task = currentTask('putaway');
+  if (!task) return;
+  var job = jobState.putaway;
+  var sku = task.skus[job.skuIndex];
+  if (!sku) return;
+
+  registerScan('pa-sku', function (v) {
+    var code = cleanCode(v);
+    if (!code) { scanErrors['pa-sku'] = '请扫描或输入 SKU 编码'; state.scan.active = 'pa-sku'; renderAll(); return; }
+    if (code.toUpperCase() !== sku.sku.toUpperCase()) {
+      var belongs = task.skus.some(function (s) { return s.sku.toUpperCase() === code.toUpperCase(); });
+      scanErrors['pa-sku'] = belongs
+        ? '请按顺序上架，当前应扫 ' + sku.sku
+        : '该 SKU 不属于本任务：' + code + '，请核对后重扫';
+      state.scan.active = 'pa-sku';
+      renderAll();
+      return;
+    }
+    scanErrors['pa-sku'] = '';
+    state.scan.active = 'pa-act';
+    renderAll();
+    toast('SKU 已确认：' + sku.sku);
+  }, sku.sku);
+
+  registerScan('pa-act', function (v) {
+    var code = cleanCode(v);
+    if (!code) { scanErrors['pa-act'] = '请扫描实际库位'; state.scan.active = 'pa-act'; renderAll(); return; }
+    if (code.toUpperCase() !== sku.recLoc.toUpperCase()) {
+      scanErrors['pa-act'] = '库位与任务要求不一致，请扫描推荐库位 ' + sku.recLoc;
+      state.scan.active = 'pa-act';
+      renderAll();
+      return;
+    }
+    scanErrors['pa-act'] = '';
+    state.scan.active = 'pa-good';
+    renderAll();
+  }, sku.recLoc);
+
+  registerScan('pa-good', function (v) {
+    if (cleanCode(v) === '') {
+      qtyErrors['pa-good'] = '良品数量不能为空（空值不等于 0）';
+      state.scan.active = 'pa-good';
+      renderAll();
+      return;
+    }
+    qtyErrors['pa-good'] = '';
+    state.scan.active = 'pa-bad';
+    renderAll();
+  });
+
+  registerScan('pa-bad', function () { submitPutaway(); });
+}
+
+function submitPutaway() {
+  var task = currentTask('putaway');
+  if (!task) return;
+  var job = jobState.putaway;
+  var sku = task.skus[job.skuIndex];
+  if (!sku) { switchPage('putaway-success'); return; }
+
+  var actLoc = cleanCode(scanValues['pa-act']);
+  if (!actLoc) {
+    scanErrors['pa-act'] = '请先扫描实际库位';
+    state.scan.active = 'pa-act'; renderAll(); return;
+  }
+  if (actLoc.toUpperCase() !== sku.recLoc.toUpperCase()) {
+    scanErrors['pa-act'] = '库位与任务要求不一致，请扫描推荐库位 ' + sku.recLoc;
+    state.scan.active = 'pa-act'; renderAll(); return;
+  }
+
+  var gRaw = qtyValues['pa-good'];
+  var bRaw = qtyValues['pa-bad'];
+  if (gRaw === undefined || gRaw === null || String(gRaw).trim() === '') {
+    qtyErrors['pa-good'] = '良品数量不能为空（空值不等于 0）';
+    state.scan.active = 'pa-good'; renderAll(); return;
+  }
+  if (bRaw === undefined || bRaw === null || String(bRaw).trim() === '') bRaw = '0';
+  if (!/^\d+$/.test(String(gRaw).trim()) || !/^\d+$/.test(String(bRaw).trim())) {
+    qtyErrors['pa-good'] = '良品与不良品数量须为整数';
+    state.scan.active = 'pa-good'; renderAll(); return;
+  }
+
+  var g = parseInt(gRaw, 10), b = parseInt(bRaw, 10);
+  if (g + b !== sku.planQty) {
+    qtyErrors['pa-bad'] = '良品 ' + g + ' + 不良品 ' + b + ' = ' + (g + b)
+      + '，应等于计划量 ' + sku.planQty + ' ' + sku.unit;
+    state.scan.active = 'pa-bad'; renderAll(); return;
+  }
+
+  job.results.push({ sku: sku.sku, loc: actLoc, good: g, bad: b });
+  job.skuIndex += 1;
+  scanValues = {}; scanErrors = {}; qtyValues = {}; qtyErrors = {};
+
+  if (job.skuIndex >= task.skus.length) {
+    task.status = '已完成'; task.tone = 'success';
+    task.progress.done = task.progress.total;
+    switchPage('putaway-success');
+    return;
+  }
+  state.scan.active = 'pa-sku';
+  renderAll();
+  toast('已记录 ' + sku.sku + '，进入下一个 SKU');
+}
+
+/* ---- 页面：移位作业 ---- */
+function renderRelocationScan() {
+  var task = currentTask('relocation');
+  if (!task) {
+    return pdaStatePanel({
+      kind: 'error', title: '未选择移位任务',
+      description: '请返回移位任务列表，选择一条任务后再进入作业页。',
+      actionLabel: '返回移位任务', go: 'relocation-list'
+    });
+  }
+  var job = jobState.relocation;
+
+  var rows = task.skus.map(function (s) {
+    return pdaKv(s.sku, s.name + ' · ' + s.qty + ' ' + s.unit);
+  }).join('');
+
+  var body =
+      jobStrip(task.code, '容器 ' + task.containerCode)
+    + pdaScanField({
+        id: 're-scan-code', step: '1', label: '扫描容器码', icon: 'scan', required: true,
+        placeholder: '扫描或输入容器码', active: state.scan.active === 're-scan-code',
+        msg: '按 Enter 确认容器；一个容器可含多个 SKU'
+      })
+    + pdaScanField({
+        id: 're-from', step: '2', label: '源库位（只读）', icon: 'location',
+        value: task.fromLoc, readonly: true,
+        msg: '容器当前所在库位，由任务下发'
+      })
+    + pdaScanField({
+        id: 're-to', step: '3', label: '扫描目标库位', icon: 'location', required: true,
+        placeholder: '扫描或输入目标库位码', active: state.scan.active === 're-to',
+        msg: '建议目标库位 ' + task.toLoc
+      })
+    + pdaCard('容器内 SKU（' + task.skus.length + ' 个，只读）',
+        rows + pdaKv('合计', task.skus.reduce(function (n, s) { return n + s.qty; }, 0) + ' 件'))
+    + pdaCard('校验规则',
+        pdaKv('目标库位', '不得与源库位相同，且须为合法库位编码')
+      + pdaKv('维度', '容器维度：整箱移动，不做单品拆分'));
+
+  return pdaPageShell({ type: 'scan-operation', body: body });
+}
+
+function mountRelocationScan() {
+  var task = currentTask('relocation');
+  if (!task) return;
+  var job = jobState.relocation;
+
+  registerScan('re-scan-code', function (v) {
+    var code = cleanCode(v);
+    if (!code) { scanErrors['re-scan-code'] = '请扫描容器码'; state.scan.active = 're-scan-code'; renderAll(); return; }
+    if (code.toUpperCase() !== task.containerCode.toUpperCase()) {
+      scanErrors['re-scan-code'] = '容器不属于本任务：' + code + '，应为 ' + task.containerCode;
+      state.scan.active = 're-scan-code'; renderAll(); return;
+    }
+    scanErrors['re-scan-code'] = '';
+    job.containerOk = true;
+    state.scan.active = 're-to';
+    renderAll();
+    toast('容器已确认，含 ' + task.skus.length + ' 个 SKU');
+  }, task.containerCode);
+
+  registerScan('re-to', function (v) {
+    var code = cleanCode(v);
+    if (!code) { scanErrors['re-to'] = '请扫描目标库位'; state.scan.active = 're-to'; renderAll(); return; }
+    if (code.toUpperCase() === task.fromLoc.toUpperCase()) {
+      scanErrors['re-to'] = '目标库位不能与源库位相同';
+      state.scan.active = 're-to'; renderAll(); return;
+    }
+    if (!/^[A-Za-z][-\s\w]{2,}$/.test(code)) {
+      scanErrors['re-to'] = '库位编码格式不正确：' + code;
+      state.scan.active = 're-to'; renderAll(); return;
+    }
+    scanErrors['re-to'] = '';
+    job.toLoc = code;
+    renderAll();
+    toast('目标库位已确认：' + code);
+  }, task.toLoc);
+}
+
+function submitRelocation() {
+  var task = currentTask('relocation');
+  if (!task) return;
+  var job = jobState.relocation;
+  if (!job.containerOk) {
+    scanErrors['re-scan-code'] = '请先扫描容器码';
+    state.scan.active = 're-scan-code'; renderAll(); return;
+  }
+  var to = cleanCode(job.toLoc || scanValues['re-to']);
+  if (!to) {
+    scanErrors['re-to'] = '请先扫描目标库位';
+    state.scan.active = 're-to'; renderAll(); return;
+  }
+  task.status = '已完成'; task.tone = 'success';
+  task.progress.done = task.progress.total;
+  task.toLoc = to;
+  switchPage('relocation-success');
+}
+
+/* ---- 页面：补货作业 ---- */
+function renderReplenishScan() {
+  var task = currentTask('replenish');
+  if (!task) {
+    return pdaStatePanel({
+      kind: 'error', title: '未选择补货任务',
+      description: '请返回补货任务列表，选择一条任务后再进入作业页。',
+      actionLabel: '返回补货任务', go: 'replenish-list'
+    });
+  }
+
+  var body =
+      jobStrip(task.code, task.source)
+    + pdaSkuSummary({
+        sku: task.sku, name: task.name, unit: task.unit, location: task.toLoc,
+        quantities: [
+          { label: '计划补货', value: task.planQty },
+          { label: '拣货位现存', value: task.stockQty, cls: 'is-danger' },
+          { label: '补货下限', value: task.minQty }
+        ]
+      })
+    + pdaScanField({
+        id: 'rp-loc', step: '1', label: '扫描拣货位', icon: 'location', required: true,
+        placeholder: '扫描或输入拣货位编码', active: state.scan.active === 'rp-loc',
+        msg: '目标拣货位 ' + task.toLoc
+      })
+    + pdaScanField({
+        id: 'rp-sku', step: '2', label: '扫描 SKU', icon: 'scan', required: true,
+        placeholder: '扫描或输入 SKU 编码', active: state.scan.active === 'rp-sku'
+      })
+    + pdaQuantityField({
+        id: 'rp-qty', step: '3', label: '本次补货数量', unit: task.unit, plan: task.planQty,
+        active: state.scan.active === 'rp-qty',
+        quick: '按计划量', quickValue: String(task.planQty)
+      })
+    + pdaCard('任务信息',
+        pdaKv('数据源', task.source)
+      + pdaKv('存储位', task.fromLoc)
+      + pdaKv('拣货位', task.toLoc)
+      + pdaKv('创建时间', task.createdAt)
+      + pdaKv('负责人', task.owner))
+    + pdaCard('校验规则',
+        pdaKv('数量范围', '大于 0 且不超过计划量 ' + task.planQty + ' ' + task.unit));
+
+  return pdaPageShell({ type: 'scan-operation', body: body });
+}
+
+function mountReplenishScan() {
+  var task = currentTask('replenish');
+  if (!task) return;
+
+  registerScan('rp-loc', function (v) {
+    var code = cleanCode(v);
+    if (!code) { scanErrors['rp-loc'] = '请扫描拣货位'; state.scan.active = 'rp-loc'; renderAll(); return; }
+    if (code.toUpperCase() !== task.toLoc.toUpperCase()) {
+      scanErrors['rp-loc'] = '库位与任务要求不一致，请扫描拣货位 ' + task.toLoc;
+      state.scan.active = 'rp-loc'; renderAll(); return;
+    }
+    scanErrors['rp-loc'] = '';
+    state.scan.active = 'rp-sku';
+    renderAll();
+  }, task.toLoc);
+
+  registerScan('rp-sku', function (v) {
+    var code = cleanCode(v);
+    if (!code) { scanErrors['rp-sku'] = '请扫描 SKU'; state.scan.active = 'rp-sku'; renderAll(); return; }
+    if (code.toUpperCase() !== task.sku.toUpperCase()) {
+      scanErrors['rp-sku'] = '该 SKU 不属于本任务：' + code + '，应为 ' + task.sku;
+      state.scan.active = 'rp-sku'; renderAll(); return;
+    }
+    scanErrors['rp-sku'] = '';
+    state.scan.active = 'rp-qty';
+    renderAll();
+    toast('SKU 已确认：' + task.sku);
+  }, task.sku);
+
+  registerScan('rp-qty', function () { submitReplenish(); });
+}
+
+function submitReplenish() {
+  var task = currentTask('replenish');
+  if (!task) return;
+
+  var loc = cleanCode(scanValues['rp-loc']);
+  if (!loc) { scanErrors['rp-loc'] = '请先扫描拣货位'; state.scan.active = 'rp-loc'; renderAll(); return; }
+  if (loc.toUpperCase() !== task.toLoc.toUpperCase()) {
+    scanErrors['rp-loc'] = '库位与任务要求不一致，请扫描拣货位 ' + task.toLoc;
+    state.scan.active = 'rp-loc'; renderAll(); return;
+  }
+  var skuCode = cleanCode(scanValues['rp-sku']);
+  if (!skuCode || skuCode.toUpperCase() !== task.sku.toUpperCase()) {
+    scanErrors['rp-sku'] = '请先扫描正确的 SKU：' + task.sku;
+    state.scan.active = 'rp-sku'; renderAll(); return;
+  }
+
+  var raw = qtyValues['rp-qty'];
+  if (raw === undefined || raw === null || String(raw).trim() === '') {
+    qtyErrors['rp-qty'] = '补货数量不能为空（空值不等于 0）';
+    state.scan.active = 'rp-qty'; renderAll(); return;
+  }
+  if (!/^\d+$/.test(String(raw).trim())) {
+    qtyErrors['rp-qty'] = '数量须为整数';
+    state.scan.active = 'rp-qty'; renderAll(); return;
+  }
+  var q = parseInt(raw, 10);
+  if (q <= 0) { qtyErrors['rp-qty'] = '数量须大于 0'; state.scan.active = 'rp-qty'; renderAll(); return; }
+  if (q > task.planQty) {
+    qtyErrors['rp-qty'] = '数量不得超过计划量 ' + task.planQty + ' ' + task.unit;
+    state.scan.active = 'rp-qty'; renderAll(); return;
+  }
+
+  task.doneQty = q;
+  task.status = '已完成'; task.tone = 'success';
+  task.progress.done = q;
+  switchPage('replenish-success');
+}
+
+/* ---- 页面：成功结果 ---- */
+function openNextTask(kind) {
+  var list = TASKS[kind] || [];
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].status.indexOf('已完成') < 0) { openTask(kind, list[i].id, kind + '-scan'); return; }
+  }
+  toast('没有更多待处理任务');
+  switchPage(kind + '-list');
+}
+
+function renderSuccess(kind, extraRows) {
+  var task = currentTask(kind);
+  var listPage = kind + '-list';
+  var rows = (extraRows || []).join('');
+  return pdaPageShell({
+    type: 'success-result',
+    body:
+        pdaResultPanel({
+          title: { putaway: '上架完成', relocation: '移位完成', replenish: '补货完成' }[kind],
+          objectCode: task ? task.code : '',
+          summary: task ? '状态已更新为「已完成」。' : '操作已完成。'
+        })
+      + (rows ? pdaCard('本次作业明细', rows) : '')
+      + '<p class="pda-list-foot">结果由业务返回确认；本原型为本地演示，未写入库存</p>'
+  });
+}
+
+/* ---- PAGES 注册表 ---- */
+function makeTaskListEntry(kind) {
+  var cfg = TASK_LIST_CFG[kind];
+  return {
+    title: cfg.title,
+    type: 'task-list',
+    nav: { back: true, title: cfg.title },
+    render: function () { return renderTaskList(kind); },
+    mounted: function (root) { mountTaskList(kind, root, cfg); }
+  };
+}
+
+var SUCCESS_SECTIONS = {
+  putaway: function () {
+    var job = jobState.putaway;
+    return (job.results || []).map(function (r) {
+      return pdaKv(r.sku, r.loc + ' · 良品 ' + r.good + ' / 不良品 ' + r.bad);
+    });
+  },
+  relocation: function () {
+    var task = currentTask('relocation');
+    if (!task) return [];
+    return [
+      pdaKv('容器', task.containerCode),
+      pdaKv('源库位', task.fromLoc),
+      pdaKv('目标库位', task.toLoc),
+      pdaKv('SKU 数', task.skus.length + ' 个')
+    ];
+  },
+  replenish: function () {
+    var task = currentTask('replenish');
+    if (!task) return [];
+    return [
+      pdaKv('SKU', task.sku),
+      pdaKv('补货位', task.toLoc),
+      pdaKv('本次补货', task.doneQty + ' ' + task.unit),
+      pdaKv('数据源', task.source)
+    ];
+  }
+};
+
+function makeSuccessEntry(kind) {
+  return {
+    title: { putaway: '上架完成', relocation: '移位完成', replenish: '补货完成' }[kind],
+    type: 'success-result',
+    nav: { back: false, title: { putaway: '上架完成', relocation: '移位完成', replenish: '补货完成' }[kind] },
+    actionBar: {
+      secondary: '返回列表',
+      onSecondary: function () { switchPage(kind + '-list'); },
+      primary: '继续下一任务',
+      onPrimary: function () { openNextTask(kind); }
+    },
+    render: function () { return renderSuccess(kind, SUCCESS_SECTIONS[kind]()); }
+  };
+}
+
+var PAGES = {
+
+  /* ---------- 主屏 ---------- */
+  'home': {
+    title: '西之月 WMS',
+    type: 'home',
+    nav: { back: false, title: '西之月 WMS' },
+    render: renderHome
+  },
+
+  /* ---------- 全部应用 ---------- */
+  'apps': {
+    title: '全部应用',
+    type: 'home',
+    nav: { back: true, title: '全部应用' },
+    render: function () {
+      var groups = APP_GROUPS.map(function (g) {
+        var apps = APPS.filter(function (a) { return a.group === g.key; });
+        if (!apps.length) return '';
+        return pdaGroupTitle(g.name) + appGrid(apps);
+      }).join('');
+      return pdaPageShell({ type: 'app-list', body: groups });
+    }
+  },
+
+  /* ---------- 设置 ---------- */
+  'settings': {
+    title: '设置',
+    type: 'entry-form',
+    nav: { back: true, title: '设置' },
+    actionBar: {
+      primary: '保存设置',
+      onPrimary: function () { toast('设置已保存（原型示意）'); }
+    },
+    render: function () {
+      return pdaPageShell({
+        type: 'settings',
+        body:
+            pdaCard('作业偏好',
+                switchRow('扫码后自动进入下一步', '扫描成功后直接跳到下一字段，不停留确认', true)
+              + switchRow('扫描成功播放提示音', '提示音为辅助信号，错误仍以文字展示', true)
+              + switchRow('连续扫描累计同一 SKU', '关闭后同一 SKU 重复扫描视为已扫', false))
+          + pdaCard('显示与交互',
+                switchRow('底部操作栏常驻', '关闭后仅在需要确认时出现', true)
+              + switchRow('大字模式', '放宽字号与行高，适配戴手套操作', false)
+              + switchRow('震动反馈', '扫描成功与失败给出不同震动', false))
+          + pdaCard('关于',
+                pdaKv('版本', '1.0.0（原型骨架）')
+              + pdaKv('UI 规范', 'PDA UI Spec 2.0.0')
+              + pdaKv('数据边界', '全部为虚构演示数据，无生产接口'))
+      });
+    },
+    mounted: function (root) {
+      $$('[data-switch]', root).forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var on = btn.classList.toggle('is-on');
+          btn.setAttribute('aria-checked', on ? 'true' : 'false');
+          toast(on ? '已开启（原型示意）' : '已关闭（原型示意）');
+        });
+      });
+    }
+  },
+
+  /* ---------- 我的 ---------- */
+  'profile': {
+    title: '我的',
+    type: 'entry-form',
+    nav: { back: true, title: '我的' },
+    render: function () {
+      return pdaPageShell({
+        type: 'profile',
+        body:
+            '<div class="pda-profile-head">'
+          +   '<span class="pda-profile-avatar">' + esc(state.user.avatar) + '</span>'
+          +   '<div class="pda-profile-main">'
+          +     '<div class="pda-profile-name">' + esc(state.user.name) + '</div>'
+          +     '<div class="pda-profile-role">' + esc(state.user.role) + ' · ' + esc(state.warehouse.name) + '</div>'
+          +   '</div>'
+          + '</div>'
+          + pdaCard('',
+                listRow('location', '当前仓库', state.warehouse.name, ' data-open-warehouse="1"')
+              + listRow('clock', '今日工时', '6.5 小时', ' data-toast="工时明细规划中"')
+              + listRow('list', '我的任务记录', '共 128 条', ' data-toast="任务记录规划中"')
+              + listRow('settings', '设置', '', ' data-go="settings"'))
+          + '<div style="padding:16px">'
+          +   '<button class="pda-btn pda-btn--block" type="button" data-logout>退出登录</button>'
+          + '</div>'
+      });
+    },
+    mounted: function (root) {
+      var wh = root.querySelector('[data-open-warehouse]');
+      if (wh) wh.addEventListener('click', openWarehousePicker);
+
+      var lo = root.querySelector('[data-logout]');
+      if (lo) lo.addEventListener('click', function () {
+        openModal(
+          '退出登录',
+          '退出后需要重新扫描工牌登录。当前为原型演示，不会真正退出。',
+          '<button class="pda-btn" type="button" data-modal-close>取消</button>'
+          + '<button class="pda-btn pda-btn--danger" type="button" data-logout-confirm>确认退出</button>'
+        );
+        var confirmBtn = elModal.querySelector('[data-logout-confirm]');
+        if (confirmBtn) confirmBtn.addEventListener('click', function () {
+          closeModal();
+          toast('已退出登录（原型示意）');
+          goHome();
+        });
+      });
+    }
+  },
+
+  /* ---------- 库内管理三作业 ---------- */
+  'putaway-list':    makeTaskListEntry('putaway'),
+  'relocation-list': makeTaskListEntry('relocation'),
+  'replenish-list':  makeTaskListEntry('replenish'),
+
+  'putaway-scan': {
+    title: '上架作业', type: 'scan-operation',
+    nav: { back: true, title: '上架作业', right: { label: '标记异常', action: function () { toast('异常登记规划中'); } } },
+    actionBar: {
+      secondary: '暂存',
+      onSecondary: function () { toast('已加入本次作业（本地暂存，未提交服务器）'); },
+      primary: '确认上架',
+      onPrimary: submitPutaway
+    },
+    render: renderPutawayScan,
+    mounted: mountPutawayScan
+  },
+  'putaway-success': makeSuccessEntry('putaway'),
+
+  'relocation-scan': {
+    title: '移位作业', type: 'scan-operation',
+    nav: { back: true, title: '移位作业', right: { label: '标记异常', action: function () { toast('异常登记规划中'); } } },
+    actionBar: {
+      secondary: '暂存',
+      onSecondary: function () { toast('已加入本次作业（本地暂存，未提交服务器）'); },
+      primary: '确认移位',
+      onPrimary: submitRelocation
+    },
+    render: renderRelocationScan,
+    mounted: mountRelocationScan
+  },
+  'relocation-success': makeSuccessEntry('relocation'),
+
+  'replenish-scan': {
+    title: '补货作业', type: 'scan-operation',
+    nav: { back: true, title: '补货作业', right: { label: '标记异常', action: function () { toast('异常登记规划中'); } } },
+    actionBar: {
+      secondary: '暂存',
+      onSecondary: function () { toast('已加入本次作业（本地暂存，未提交服务器）'); },
+      primary: '确认补货',
+      onPrimary: submitReplenish
+    },
+    render: renderReplenishScan,
+    mounted: mountReplenishScan
+  },
+  'replenish-success': makeSuccessEntry('replenish')
+};
+
+/* ============================================================================
+   [EXTEND] 启动 —— hash 直达；新增页面私有逻辑写在下面
+   ============================================================================ */
+function boot() {
+  elScreen    = document.getElementById('pdaScreen');
+  elStatusbar = document.getElementById('pdaStatusbar');
+  elNavbar    = document.getElementById('pdaNavbar');
+  elContent   = document.getElementById('pdaContent');
+  elActionbar = document.getElementById('pdaActionbar');
+  elMask      = document.getElementById('pdaMask');
+  elSheet     = document.getElementById('pdaSheet');
+  elModal     = document.getElementById('pdaModal');
+  elToast     = document.getElementById('pdaToast');
+  elLed       = document.getElementById('pdaLed');
+
+  state.warehouse = WAREHOUSES[0];
+  state.stack = ['home'];
+  state.page = 'home';
+
+  /* hash 直达：#putaway-list 刷新后仍停在该页 */
+  var h = (location.hash || '').replace('#', '');
+  if (h && PAGES[h]) {
+    state.page = h;
+    state.stack = (PAGES[h].nav && PAGES[h].nav.back === false) ? [h] : ['home', h];
+  }
+
+  /* 唯一键盘确认入口：Enter / 回车；排除输入法组合输入 */
+  elContent.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.keyCode !== 13) return;
+    if (e.isComposing || e.keyCode === 229) return;
+    var t = e.target;
+    var inp = t && t.closest ? (t.closest('[data-scan-input]') || t.closest('[data-qty-input]')) : null;
+    if (!inp) return;
+    e.preventDefault();
+    var id = inp.getAttribute('data-scan-input') || inp.getAttribute('data-qty-input');
+    var fn = scanHandlers[id];
+    if (typeof fn === 'function') fn(inp.value, inp);
+  });
+
+  /* 遮罩：点击关闭弹层 */
+  elMask.addEventListener('click', function () { closeSheet(); closeModal(); });
+
+  /* 浏览器 hash 变化（用户手改地址栏） */
+  window.addEventListener('hashchange', function () {
+    if (hashGuard) return;
+    var k = (location.hash || '').replace('#', '');
+    if (k && PAGES[k] && k !== state.page) {
+      state.page = k;
+      if (state.stack.indexOf(k) < 0) state.stack.push(k);
+      state.scan.active = null;
+      renderAll();
+    }
+  });
+
+  /* 状态栏时钟 */
+  setInterval(renderStatusbar, 30000);
+
+  bindKeypad();
+  switchPage(state.page);
+  if (state.page === 'home') state.scan.active = null;
+}
+
+boot();
+</script>
+</body>
+</html>

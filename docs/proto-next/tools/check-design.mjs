@@ -10,9 +10,9 @@
  * 找不到就是编的，编的就会腐烂。
  *
  * 用法：
- *   node docs/proto-next/check-design.mjs           # 硬检查 + 打印已知缺口
- *   node docs/proto-next/check-design.mjs --strict  # 已知缺口也当失败
- *   node docs/proto-next/check-design.mjs --quiet   # 只报失败
+ *   node tools/check-design.mjs           # 硬检查 + 打印已知缺口
+ *   node tools/check-design.mjs --strict  # 已知缺口也当失败
+ *   node tools/check-design.mjs --quiet   # 只报失败
  *
  * 退出码：0 通过，1 有硬性违规（或 --strict 下有缺口）。
  */
@@ -21,12 +21,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/* 路径一律相对本文件定位，不依赖 process.cwd()：
-   原先用 cwd 拼 'proto-next/...'，从仓库根或其他目录运行时全部落空，
-   existsSync 过滤后校验 0 个文件却打印「全部通过」——假通过比不检查更危险。 */
+/* 路径一律按本文件位置定位，不依赖 process.cwd()：
+   脚本按本文件位置定位路径，不依赖 process.cwd()
+   用 cwd 拼相对路径会在换目录运行时落空，existsSync 过滤后校验 0 个文件却报「通过」。 */
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(HERE, '..');
-
+const PROTO = path.resolve(HERE, '..');  // 本目录即自包含根
+const ROOT = PROTO;
 const ARGS = process.argv.slice(2);
 const STRICT = ARGS.includes('--strict');
 const QUIET = ARGS.includes('--quiet');
@@ -34,15 +34,15 @@ const QUIET = ARGS.includes('--quiet');
 /* ---------- 路径 ---------- */
 
 const F = {
-  designRoot: path.join(ROOT, 'DESIGN.md'),
-  designPc: path.join(HERE, 'pc/DESIGN.md'),
-  designApp: path.join(HERE, 'app/DESIGN.md'),
-  baseline: path.join(HERE, 'shared/ui/baseline-tokens.css.mjs'),
-  tokensCss: path.join(HERE, 'shared/ui/tokens.css'),
-  pdaJson: path.join(HERE, 'pda-ui-tokens.json'),
-  appShell: path.join(HERE, 'app/src/app-shell.mjs'),
-  distPc: path.join(HERE, 'dist/pc.html'),
-  distApp: path.join(HERE, 'dist/app.html'),
+  designRoot: path.join(PROTO, 'DESIGN.md'),
+  designPc: path.join(PROTO, 'pc/DESIGN.md'),
+  designApp: path.join(PROTO, 'app/DESIGN.md'),
+  baseline: path.join(PROTO, 'shared/ui/baseline-tokens.css.mjs'),
+  tokensCss: path.join(PROTO, 'shared/ui/tokens.css'),
+  pdaJson: path.join(PROTO, 'pda-ui-tokens.json'),
+  appShell: path.join(PROTO, 'app/src/app-shell.mjs'),
+  distPc: path.join(PROTO, 'dist/pc.html'),
+  distApp: path.join(PROTO, 'dist/app.html'),
 };
 
 const rel = (p) => path.relative(ROOT, p);
@@ -100,10 +100,11 @@ function checkDesignHexes(sources) {
   const candidates = [F.designRoot, F.designPc, F.designApp];
   const files = candidates.filter((f) => fs.existsSync(f));
 
-  /* 一份 DESIGN.md 都没读到，说明是路径错了，不是「没有问题」。
-     放过这种情况会让脚本在任何目录下都打印「全部通过」，形同没有检查。 */
-  if (!files.length) {
-    return [{ file: '(路径)', value: '-', line: `未找到任何 DESIGN.md，检查了 0 个文件；候选路径：${candidates.map(rel).join(' | ')}` }];
+  /* 三份缺一即失败：少读一份等于少守一份取值。
+     静默缩小校验范围，比路径写错更难发现。 */
+  if (files.length < candidates.length) {
+    const missing = candidates.filter((f) => !fs.existsSync(f)).map(rel);
+    return [{ file: '(缺失)', value: '-', line: `应校验 ${candidates.length} 份 DESIGN.md，缺失 ${missing.length} 份：${missing.join(' | ')}` }];
   }
 
   for (const f of files) {
@@ -150,8 +151,8 @@ function checkNoExternal() {
 function checkNoRpx() {
   const bad = [];
   const files = [
-    path.join(HERE, 'app/src/app-shell.mjs'),
-    path.join(HERE, 'app/src/app-pages.mjs'),
+    path.join(PROTO, 'app/src/app-shell.mjs'),
+    path.join(PROTO, 'app/src/app-pages.mjs'),
     F.distApp,
   ];
   for (const f of files) {
@@ -195,7 +196,7 @@ function appTokenGaps() {
  * 判据取字面调用，不靠变量名猜，避免把 Tag 的色调算进 StatusTag。
  */
 function statusToneGaps() {
-  const l3 = path.join(HERE, 'shared/ui/l3.mjs');
+  const l3 = path.join(PROTO, 'shared/ui/l3.mjs');
   if (!fs.existsSync(l3)) return null;
   const t = fs.readFileSync(l3, 'utf8');
 
@@ -205,7 +206,7 @@ function statusToneGaps() {
   for (const m of t.matchAll(/\.wm-tag--([a-z]+)\s*\{/g)) tagDefined.add(m[1]);
 
   const used = new Set();
-  const pagesDir = path.join(HERE, 'pc/src/pages');
+  const pagesDir = path.join(PROTO, 'pc/src/pages');
   if (fs.existsSync(pagesDir)) {
     for (const f of fs.readdirSync(pagesDir).filter((x) => x.endsWith('.mjs'))) {
       const s = fs.readFileSync(path.join(pagesDir, f), 'utf8');
@@ -239,7 +240,7 @@ function statusToneGaps() {
 function radiusOutliers() {
   const allowed = new Set(['6px', '8px', '999px', '0', '0px', '50%']);
   const files = ['l3.mjs', 'l4.mjs', 'base.css.mjs'].map((f) =>
-    path.join(HERE, 'shared/ui', f));
+    path.join(PROTO, 'shared/ui', f));
   const out = [];
   for (const f of files) {
     if (!fs.existsSync(f)) continue;

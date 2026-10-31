@@ -6,11 +6,11 @@
  * 且无法发现。本脚本把口径写成代码，材料与页面都从这里取数。
  *
  * 用法：
- *   node docs/proto-next/compute-metrics.mjs            打印 JSON
- *   node docs/proto-next/compute-metrics.mjs --markdown 打印 Markdown 表格
- *   node docs/proto-next/compute-metrics.mjs --check    检查材料里的数字是否与实测一致
+ *   node tools/compute-metrics.mjs            打印 JSON
+ *   node tools/compute-metrics.mjs --markdown 打印 Markdown 表格
+ *   node tools/compute-metrics.mjs --check    检查材料里的数字是否与实测一致
  *
- * 口径（与 docs/reports/任务中心看板-跨仓指标口径表.md 一致）：
+ * 口径（与 reports/任务中心看板-跨仓指标口径表.md 一致）：
  *   未终态 = status ∉ {completed, cancelled}
  *   待指派 = dispatchStatus = 待指派 且 status ≠ cancelled
  *   负荷比 = 未终态任务数 ÷ 在岗单元数（分母只含已登录单元）
@@ -20,9 +20,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/* 路径一律按本文件位置定位，不依赖 process.cwd()：
+   脚本按本文件位置定位路径，不依赖 process.cwd()
+   用 cwd 拼相对路径会在换目录运行时落空，existsSync 过滤后校验 0 个文件却报「通过」。 */
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(HERE, '../..');
-const DATA = path.join(HERE, 'shared/data');
+const PROTO = path.resolve(HERE, '..');        // 本目录即自包含根
+const DATA = path.join(PROTO, 'shared/data');
 
 const read = (name) => JSON.parse(fs.readFileSync(path.join(DATA, name + '.json'), 'utf8'));
 
@@ -128,17 +131,15 @@ const STALE = [
 
 function check() {
   const m = computeMetrics();
-  /* 目标材料在 docs/reports/ 下；该目录当前尚未入库。
-     一个都没找到时必须报「未校验」而不是「通过」——否则就是假通过。 */
   const targets = [
-    'docs/reports/任务中心思路.html',
-    'docs/reports/任务中心看板调研.html',
-    'docs/reports/任务中心看板-跨仓指标口径表.md',
+    'reports/任务中心思路.html',
+    'reports/任务中心看板调研.html',
+    'reports/任务中心看板-跨仓指标口径表.md',
   ];
   const bad = [];
   let checked = 0;
   for (const rel of targets) {
-    const p = path.join(ROOT, rel);
+    const p = path.join(PROTO, rel);
     if (!fs.existsSync(p)) continue;
     checked++;
     const src = fs.readFileSync(p, 'utf8');
@@ -149,9 +150,7 @@ function check() {
     }
   }
   if (!checked) {
-    console.log(`未校验：${targets.length} 份目标材料均不存在（docs/reports/ 尚未入库）。`);
-    console.log(`当前实测口径供参考：任务 ${m.tasks.total} 条，未终态 ${m.tasks.open}，异常 ${m.tasks.exception}，`
-      + `待指派 ${m.tasks.pendingAssign}，设备名作业员 ${m.tasks.deviceNamedOperator}。`);
+    console.log(`未校验：${targets.length} 份目标材料均不存在，本项没有检查任何文件。`);
     return;
   }
   if (bad.length) {
@@ -159,7 +158,7 @@ function check() {
     bad.forEach((b) => console.error('  - ' + b));
     console.error('\n实测值：任务 ' + m.tasks.total + ' 行，未终态 ' + m.tasks.open + '，异常 ' + m.tasks.exception
       + '，待指派 ' + m.tasks.pendingAssign + '，设备名作业员 ' + m.tasks.deviceNamedOperator);
-    console.error('改法：跑 node docs/proto-next/compute-metrics.mjs --markdown 取新表，替换材料里的手写数字。');
+    console.error('改法：跑 node tools/compute-metrics.mjs --markdown 取新表，替换材料里的手写数字。');
     process.exit(1);
   }
   console.log(`指标口径检查通过：${checked} 份材料的旧数字均已清除`);

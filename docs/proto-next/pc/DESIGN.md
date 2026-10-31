@@ -1,9 +1,8 @@
 # PC 后台 · DESIGN.md
 
-> 适用范围：`proto-next/pc/` 下的所有页面与样式。
-> 取值权威：`proto-next/shared/ui/baseline-tokens.css.mjs`（实际生效）+ `tokens.css`（`--wds-*` 全量）。
-> 规范上限：**本仓库无独立 PC 设计规范文档**（`docs/specs/` 不存在）。
-> 唯一可执行的上限是 `shared/ui/` 的实现与本文件，以及校验脚本 `check-design.mjs`。
+> 适用范围：`pc/` 下的所有页面与样式。
+> 取值权威：`shared/ui/baseline-tokens.css.mjs`（实际生效）+ `tokens.css`（`--wds-*` 全量）。
+> 规范上限：`specs/01-PC端设计规范.md`、`specs/05-PC页面构筑约定.md`。冲突时以规范为准。
 
 > **本文件不列页面清单与菜单项。** 菜单结构、页面数量和列名变化频繁，
 > 写进来必然过期。要查当前有哪几页、每页几列，直接读 `pc/src/menu.mjs` 与 `pc/src/pages/`。
@@ -180,7 +179,7 @@ page-card › statusTabs › queryPanel › actionBar › table-wrap/dl › page
 
 产物中 `status ok` 出现数百处。写新代码时若要表达成功/危险/警告，
 **暂时改用 `enabled` / `rejected` / `pending`**，或等该缺口补齐。
-`node docs/proto-next/check-design.mjs` 会持续报告这 3 个缺口。
+`node tools/check-design.mjs` 会持续报告这 3 个缺口。
 
 ## 9. Do / Don't
 
@@ -194,13 +193,13 @@ page-card › statusTabs › queryPanel › actionBar › table-wrap/dl › page
 ❌ 不手改 `dist/pc.html`。
 ❌ 不用 `#000` 作正文色（用 `--gray-900 #171717`）。
 ❌ 不引 CDN / 网络字体 / 图片外链。
-❌ 不读 `proto-next/app/` 目录（构建期 `assertNoPeerReads()` 会抛错）。
+❌ 不读 `app/` 目录（构建期 `assertNoPeerReads()` 会抛错）。
 
 ## 10. 构建
 
 ```bash
-cd docs/proto-next/pc && node src/build.mjs          # 构建
-cd docs/proto-next/pc && node src/build.mjs --check  # 只校验产物漂移
+cd pc && node src/build.mjs          # 构建
+cd pc && node src/build.mjs --check  # 只校验产物漂移
 ```
 
-改 `docs/proto-next/shared/` 下的文件后，`docs/proto-next/app` 也要重新构建并校验。
+改 `shared/` 下的文件后，`app` 也要重新构建并校验。

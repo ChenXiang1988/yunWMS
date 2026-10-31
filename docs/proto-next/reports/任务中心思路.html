@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>任务中心 · 活从哪来，怎么派，怎么算</title>
+<style>
+:root{
+  --bg:#f5f5f5; --surface:#ffffff; --ink:#171717; --ink-2:#414753; --muted:#687386;
+  --line:#e5e5e5; --line-soft:#f1f2f4;
+  --primary:#6424fe; --primary-50:#f3efff; --primary-100:#ece4ff; --primary-700:#4f1bcc;
+  --ok:#1f9d65; --ok-soft:#eaf8f1;
+  --warn:#d97706; --warn-soft:#fff7e6;
+  --err:#e5484d; --err-soft:#fff0f0;
+  --radius:8px; --radius-sm:6px;
+  --shadow:0 1px 2px rgba(0,0,0,.05);
+  --shadow-lg:0 8px 24px rgba(16,24,40,.08);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  font-size:14px; line-height:1.7; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:0 32px 80px}
+
+/* 顶栏 */
+.topbar{
+  position:sticky;top:0;z-index:20;height:54px;
+  background:rgba(255,255,255,.92);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);display:flex;align-items:center;
+}
+.topbar .wrap{width:100%;display:flex;align-items:center;justify-content:space-between;padding-top:0;padding-bottom:0}
+.brand{display:flex;align-items:center;gap:10px;font-weight:600}
+.brand-mark{
+  width:24px;height:24px;border-radius:var(--radius-sm);background:var(--primary);
+  color:#fff;display:grid;place-items:center;font-size:13px;font-weight:700;
+}
+.toc{display:flex;gap:4px;flex-wrap:wrap}
+.toc a{
+  padding:5px 10px;border-radius:var(--radius-sm);color:var(--ink-2);
+  text-decoration:none;font-size:13px;
+}
+.toc a:hover{background:var(--primary-50);color:var(--primary-700)}
+
+/* 头图 */
+.hero{padding:56px 0 36px;border-bottom:1px solid var(--line)}
+.hero h1{margin:0 0 12px;font-size:32px;line-height:1.3;font-weight:700;letter-spacing:-.3px}
+.hero .lead{margin:0;font-size:17px;color:var(--ink-2);max-width:820px}
+.hero .meta{margin-top:20px;display:flex;gap:20px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.hero .meta b{color:var(--ink);font-weight:600}
+
+/* 结论条 */
+.conclusion{
+  margin-top:28px;padding:20px 24px;border-radius:var(--radius);
+  background:var(--primary-50);border-left:3px solid var(--primary);
+}
+.conclusion h2{margin:0 0 8px;font-size:15px;color:var(--primary-700);font-weight:600}
+.conclusion p{margin:0;font-size:15px;color:var(--ink-2)}
+.conclusion p+p{margin-top:6px}
+
+/* 章节 */
+section{padding:44px 0;border-bottom:1px solid var(--line)}
+section:last-of-type{border-bottom:0}
+h2.sec{
+  margin:0 0 6px;font-size:22px;font-weight:700;letter-spacing:-.2px;
+  display:flex;align-items:center;gap:10px;
+}
+h2.sec .num{
+  flex:none;width:26px;height:26px;border-radius:50%;background:var(--primary);
+  color:#fff;font-size:13px;display:grid;place-items:center;font-weight:600;
+}
+.sec-sub{margin:0 0 24px;color:var(--muted);font-size:14px}
+h3{margin:28px 0 12px;font-size:16px;font-weight:600}
+h3:first-of-type{margin-top:0}
+p{margin:0 0 14px;color:var(--ink-2)}
+
+/* 卡片 */
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:880px){.g2,.g3,.g4{grid-template-columns:1fr}}
+.card{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:18px 20px;box-shadow:var(--shadow);
+}
+.card h4{margin:0 0 8px;font-size:14px;font-weight:600}
+.card p{margin:0;font-size:13px;color:var(--muted);line-height:1.65}
+.card .big{display:block;font-size:28px;font-weight:700;color:var(--primary);line-height:1.2;margin-bottom:4px}
+.card .big small{font-size:14px;font-weight:500;color:var(--muted);margin-left:4px}
+
+/* 表格 */
+table{width:100%;border-collapse:collapse;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;font-size:13.5px}
+th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line-soft);vertical-align:top}
+th{background:#fafafa;font-weight:600;color:var(--ink-2);font-size:13px}
+tbody tr:last-child td{border-bottom:0}
+td code,code.inline{
+  font-family:ui-monospace,Menlo,monospace;font-size:12.5px;
+  background:var(--line-soft);padding:1px 6px;border-radius:4px;color:var(--primary-700);
+}
+.tw{overflow-x:auto}
+
+/* 标记 */
+.tag{display:inline-block;padding:1px 8px;border-radius:4px;font-size:12px;line-height:20px;font-weight:500}
+.tag.ok{background:var(--ok-soft);color:var(--ok)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.tag.err{background:var(--err-soft);color:var(--err)}
+.tag.pri{background:var(--primary-50);color:var(--primary-700)}
+
+
+/* ===== 图：mermaid ===== */
+.fig{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:18px 20px;margin:18px 0;overflow-x:auto}
+.fig-cap{margin:0 0 12px;font-size:13px;color:var(--muted)}
+.fig .mermaid{display:flex;justify-content:center}
+.fig .mermaid svg{max-width:100%;height:auto}
+/* 树形结构：等宽字体保留缩进 */
+.tree{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:20px 24px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;
+  line-height:1.9;color:var(--ink-2);overflow-x:auto;white-space:pre}
+.tree .k{color:var(--primary-700);font-weight:600}
+.tree .m{color:var(--muted)}
+/* 提示 */
+.note{
+  padding:14px 18px;border-radius:var(--radius);background:var(--warn-soft);
+  border-left:3px solid var(--warn);font-size:13.5px;color:#8a4b00;margin:16px 0;
+}
+.note b{color:#703d00}
+.tip{
+  padding:14px 18px;border-radius:var(--radius);background:var(--ok-soft);
+  border-left:3px solid var(--ok);font-size:13.5px;color:#0f5c3b;margin:16px 0;
+}
+
+/* 流水线 */
+.flow{display:flex;align-items:stretch;gap:0;margin:20px 0;flex-wrap:wrap}
+.flow-step{
+  flex:1;min-width:140px;position:relative;padding:16px 18px 16px 26px;
+  background:var(--surface);border:1px solid var(--line);
+}
+.flow-step:first-child{border-radius:var(--radius) 0 0 var(--radius);padding-left:18px}
+.flow-step:last-child{border-radius:0 var(--radius) var(--radius) 0}
+.flow-step+.flow-step{border-left:0}
+.flow-step .n{font-size:11px;color:var(--muted);font-weight:600}
+.flow-step b{display:block;font-size:14px;margin:2px 0 4px}
+.flow-step small{font-size:12px;color:var(--muted);line-height:1.5;display:block}
+.flow-step::after{
+  content:'';position:absolute;right:-7px;top:50%;width:12px;height:12px;
+  background:var(--surface);border-right:1px solid var(--line);border-top:1px solid var(--line);
+  transform:translateY(-50%) rotate(45deg);z-index:1;
+}
+.flow-step:last-child::after{display:none}
+
+/* 结构图 */
+.tree{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:20px 24px;font-family:ui-monospace,Menlo,monospace;font-size:13px;
+  line-height:1.9;color:var(--ink-2);overflow-x:auto;
+}
+.tree .k{color:var(--primary-700);font-weight:600}
+.tree .m{color:var(--muted)}
+
+/* 对照 */
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);
+  border-radius:var(--radius);overflow:hidden;background:var(--surface)}
+@media(max-width:720px){.vs{grid-template-columns:1fr}}
+.vs>div{padding:18px 20px}
+.vs>div+div{border-left:1px solid var(--line)}
+@media(max-width:720px){.vs>div+div{border-left:0;border-top:1px solid var(--line)}}
+.vs h4{margin:0 0 10px;font-size:14px}
+.vs ul{margin:0;padding-left:18px;font-size:13px;color:var(--ink-2);line-height:1.8}
+
+/* 页脚 */
+footer{padding:36px 0;color:var(--muted);font-size:13px;border-top:1px solid var(--line)}
+footer .links{display:flex;gap:20px;flex-wrap:wrap;margin-top:8px}
+footer a{color:var(--primary-700);text-decoration:none}
+footer a:hover{text-decoration:underline}
+
+/* 任务中心补充 */
+.split-demo{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--surface);margin:18px 0}
+@media(max-width:820px){.split-demo{grid-template-columns:1fr}}
+.split-demo>div{padding:18px 20px}
+.split-demo>div+div{border-left:1px solid var(--line)}
+@media(max-width:820px){.split-demo>div+div{border-left:0;border-top:1px solid var(--line)}}
+.split-demo h5{margin:0 0 10px;font-size:13px;font-weight:600;color:var(--muted)}
+.tree2,.split-demo ul{margin:0;padding-left:0;list-style:none;font-size:13px;line-height:1.95;color:var(--ink-2)}
+.tree2 li{padding-left:2px}
+.tree2 .lv2{padding-left:18px}
+.tree2 .lv3{padding-left:36px;color:var(--muted)}
+.tree2 .mk{color:var(--primary);font-weight:600}
+.layer-flow{display:flex;flex-direction:column;gap:0;margin:20px 0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--surface)}
+.layer-row{display:grid;grid-template-columns:150px 1fr 190px;align-items:stretch;border-bottom:1px solid var(--line-soft)}
+.layer-row:last-child{border-bottom:0}
+.layer-row>div{padding:13px 16px;font-size:13px}
+.layer-row .lname{background:var(--th-bg);font-weight:600;color:var(--ink);border-right:1px solid var(--line-soft);display:flex;align-items:center;gap:8px}
+.layer-row .lnum{flex:none;width:20px;height:20px;border-radius:50%;background:var(--primary);color:#fff;font-size:11px;display:grid;place-items:center;font-weight:600}
+.layer-row .ldesc{color:var(--ink-2)}
+.layer-row .lstate{color:var(--muted);font-size:12.5px;display:flex;align-items:center}
+@media(max-width:820px){.layer-row{grid-template-columns:1fr}.layer-row .lname{border-right:0;border-bottom:1px solid var(--line-soft)}}
+.chain{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:16px 0}
+.chain .node{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);padding:6px 12px;font-size:13px;font-weight:500}
+.chain .arw{color:var(--muted);font-size:15px}
+.chain .node.is-key{background:var(--primary-50);border-color:var(--primary-100);color:var(--primary-700);font-weight:600}
+.stategrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}
+@media(max-width:820px){.stategrid{grid-template-columns:1fr}}
+.st-box{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+.st-box b{display:block;font-size:13.5px;margin-bottom:6px}
+.st-box small{display:block;font-size:12.5px;color:var(--muted);line-height:1.6}
+.st-box .badge{display:inline-block;font-size:11px;padding:1px 7px;border-radius:var(--radius-sm);background:var(--primary-50);color:var(--primary-700);margin-bottom:6px;font-weight:600}
+.qa{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--surface);margin:16px 0}
+.qa-row{display:grid;grid-template-columns:56px 1fr;border-bottom:1px solid var(--line-soft)}
+.qa-row:last-child{border-bottom:0}
+.qa-row .qn{padding:14px 10px 14px 16px;font-weight:600;color:var(--primary-700);font-size:13px;background:var(--th-bg);border-right:1px solid var(--line-soft)}
+.qa-row .qb{padding:14px 18px}
+.qa-row .qb b{display:block;font-size:13.5px;margin-bottom:4px}
+.qa-row .qb p{margin:0;font-size:13px;color:var(--muted);line-height:1.65}
+.kpi-inline{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
+.kpi-inline span{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);padding:7px 13px;font-size:13px;color:var(--ink-2)}
+.kpi-inline b{color:var(--primary-700);font-weight:600}
+
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand"><span class="brand-mark">西</span> 西之月 WMS · 任务中心</div>
+    <nav class="toc">
+      <a href="#s1">活从哪来</a>
+      <a href="#s2">五层链路</a>
+      <a href="#s3">怎么拆</a>
+      <a href="#s4">动作</a>
+      <a href="#s5">派给谁</a>
+      <a href="#s6">状态</a>
+      <a href="#s7">看板</a>
+      <a href="#s8">结论</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header class="hero">
+    <h1>任务中心：活从哪来，怎么派，怎么算</h1>
+    <p class="lead">
+      仓库里人做的不是单据，是单据拆出来的一张张活。
+      这张活的出生、拆法、派给谁、干完怎么算，就是任务中心要管的事。
+    </p>
+    <div class="meta">
+      <span>范围：<b>任务派生 · 执行动作 · 派工 · 看板</b></span>
+      <span>覆盖工序：<b>上架 · 移库 · 盘点</b></span>
+      <span>更新：<b>2026-10-30</b></span>
+    </div>
+
+    <div class="conclusion">
+      <h2>一句话结论</h2>
+      <p><strong>任务只能从单据长出来，不能凭空建。</strong>单据审核通过，按这个仓的工序编排拆成活，再派给在岗的人。</p>
+      <p>四件事必须按顺序建：<strong>先单据，再工序，再任务，最后看板</strong>。跳过任何一层，上面那层只能是编出来的数。</p>
+    </div>
+  </header>
+
+  <!-- 1 -->
+  <section id="s1">
+    <h2 class="sec"><span class="num">1</span>一张活从哪来</h2>
+    <p class="sec-sub">三个东西串起来，才有一张能派下去的活。</p>
+
+    <div class="grid g3">
+      <div class="card">
+        <h4>其一是单据</h4>
+        <p>入库单、上架单、移库单、盘点单、补货单、出库单。单据说清楚：这批货是什么、多少、从哪到哪。单据审核通过才会有活。</p>
+      </div>
+      <div class="card">
+        <h4>其二是工序</h4>
+        <p>这个仓干活分几道、每道按什么拆、拆成几张，是配出来的，不是写死的。换个仓、换个单据类型，链路可能完全不同。</p>
+      </div>
+      <div class="card">
+        <h4>其三是动作</h4>
+        <p>活派到手上之后，人每一步扫什么、填什么、验什么、留什么证据。动作定得清，才谈得上防错和追溯。</p>
+      </div>
+    </div>
+
+    <h3>三者是串行的，不是并列的</h3>
+    <div class="chain">
+      <span class="node">单据审核</span><span class="arw">→</span>
+      <span class="node is-key">工序编排</span><span class="arw">→</span>
+      <span class="node is-key">拆成任务</span><span class="arw">→</span>
+      <span class="node">派工</span><span class="arw">→</span>
+      <span class="node is-key">动作序列</span><span class="arw">→</span>
+      <span class="node">执行与证据</span><span class="arw">→</span>
+      <span class="node">过账</span>
+    </div>
+
+    <div class="tip">
+      <b>一个判据：</b>任何一张任务，都应该能回答「它是哪张单的第几行拆出来的」。
+      回答不了，这张任务就是孤儿，出了问题查不到源头。
+    </div>
+
+    <h3>现在卡在哪</h3>
+    <p>原型里已经有任务数据，但上游三层没有落地，所以这些数据只能手工编。三类能看出来的病：</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="width:200px">现象</th><th style="width:150px">实测</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>任务查不到来源单据</td><td>14 个上架单号中 7 个无主档</td><td>任务引用的单号，在系统里找不到对应的单据</td></tr>
+          <tr><td>一张表混装三种任务</td><td>上架单 35 行、移库单 14 行、库存调整 8 行</td><td>三类活的生命周期不同，却共用一套状态取值</td></tr>
+          <tr><td>作业员字段大面积空缺</td><td>136 行中 19 行没有作业员</td><td>任务归不到人，按人算负荷会漏掉这批活</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section id="s2">
+    <h2 class="sec"><span class="num">2</span>五层链路：先建哪层</h2>
+    <p class="sec-sub">上层不成立，下层只能是假数。所以建设顺序不能颠倒。</p>
+
+    <div class="layer-flow">
+      <div class="layer-row">
+        <div class="lname"><span class="lnum">1</span>单据层</div>
+        <div class="ldesc">入库单、上架单、移库单、盘点单、补货单、出库单、库存调整单。每张单有行、有货主、有数量。</div>
+        <div class="lstate">最先建。没有它，活没有来源</div>
+      </div>
+      <div class="layer-row">
+        <div class="lname"><span class="lnum">2</span>配置层</div>
+        <div class="ldesc">动作库、工序模板、单据工序编排、任务派生规则。这一层决定活怎么拆、每步怎么干。</div>
+        <div class="lstate">与单据层同批建。没有它，审核了也不知道拆几道</div>
+      </div>
+      <div class="layer-row">
+        <div class="lname"><span class="lnum">3</span>任务层</div>
+        <div class="ldesc">拆出来的活。带来源单据、带工序、带计划量、带状态。</div>
+        <div class="lstate">前两层成立后才真实</div>
+      </div>
+      <div class="layer-row">
+        <div class="lname"><span class="lnum">4</span>动作层</div>
+        <div class="ldesc">每张活展开成一串动作：扫这个、填那个、验这一项、留这个证据。</div>
+        <div class="lstate">跟着任务层一起落</div>
+      </div>
+      <div class="layer-row">
+        <div class="lname"><span class="lnum">5</span>统计层</div>
+        <div class="ldesc">执行看板。单仓看今天先干什么，全网看哪个仓在恶化。</div>
+        <div class="lstate">最后建。前四层不实，看板就是放大器</div>
+      </div>
+    </div>
+
+    <h3>为什么不能倒着来</h3>
+    <p>
+      先做看板最容易，因为它只要读数据。但数据本身没有来源时，看板上的每个数字都会被追问到答不上来：
+      这个数从哪张单来的？为什么这个仓超期二十条、那个仓一条都没有？是谁判的超期？
+    </p>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th style="width:150px">如果先做</th><th>会出现什么</th></tr></thead>
+        <tbody>
+          <tr><td>先做看板</td><td>数字漂亮但无法追溯。任何一条超期都无法定位到单据、责任人和时间点</td></tr>
+          <tr><td>先做派工</td><td>没有真实任务池可派。派的是手工编的假活，派工规则也没法验证对错</td></tr>
+          <tr><td>先做动作</td><td>动作挂在任务上，任务没有来源，动作执行完也不知道改哪张单、过什么账</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>四份配置对象各管什么</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="width:150px">对象</th><th>管什么</th><th style="width:230px">粒度</th></tr></thead>
+        <tbody>
+          <tr><td>操作动作库</td><td>单步动作的定义：扫库位、扫 SKU、输入数量、拍照留证。每个动作带校验规则和证据要求</td><td>整个主体共用一套</td></tr>
+          <tr><td>工序模板</td><td>一道工序由哪几步动作组成。同一道工序可以有不同版本，按执行的人还是设备来分</td><td>一道工序一套或多套</td></tr>
+          <tr><td>单据工序编排</td><td>这类单据在本仓走哪几道工序、按什么顺序。带版本，改动要重新审核</td><td>一个仓一类单据一条</td></tr>
+          <tr><td>任务派生规则</td><td>每道工序按什么维度拆、拆出来的尾数怎么分</td><td>一个仓一类单据一条</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <b>编排的一个硬要求：</b>改动必须重新审核，已经生成的任务按旧版本执行完，不受影响。
+      否则今天改一次链路，昨天在做的活的记录就对不上了。
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section id="s3">
+    <h2 class="sec"><span class="num">3</span>一张单据怎么拆成几张活</h2>
+    <p class="sec-sub">这是最容易出错的地方，也是口径争议最多的地方。</p>
+
+    <h3>拆法有三个维度</h3>
+    <div class="grid g3">
+      <div class="card">
+        <h4>按容器拆</h4>
+        <p>一个周转箱一张活。适合拣货、装容器这类以箱为单位搬的工序。</p>
+      </div>
+      <div class="card">
+        <h4>按托盘拆</h4>
+        <p>一个托盘一张活。适合整托搬运、整托上架。一个托盘上可能堆着好几个箱子。</p>
+      </div>
+      <div class="card">
+        <h4>按批次加 SKU 拆</h4>
+        <p>一个到货批次的一个 SKU 一张活。适合质检、拆零上架这类要逐项判定的。</p>
+      </div>
+    </div>
+
+    <h3>同一张单，不同工序拆出来张数可以不一样</h3>
+    <p>这是正常的，不是错。举一张真实的单：</p>
+
+    <div class="split-demo">
+      <div>
+        <h5>单据层面</h5>
+        <ul class="tree2">
+          <li><span class="mk">PUT-20261016-0002</span></li>
+          <li class="lv2">类型：收货上架</li>
+          <li class="lv2">SKU：8 个</li>
+          <li class="lv2">计划量：8554</li>
+        </ul>
+      </div>
+      <div>
+        <h5>拆出来的活</h5>
+        <ul class="tree2">
+          <li><span class="mk">搬运子任务 4 张</span>　按托盘拆</li>
+          <li class="lv2">LP-0001、LP-0005、LP-0017、LP-0049</li>
+          <li><span class="mk">上架子任务 6 张</span>　按容器拆</li>
+          <li class="lv2">CT-0021、CT-0023、CT-0043、CT-0045、CT-0047、CT-0049</li>
+        </ul>
+      </div>
+    </div>
+
+    <p>
+      4 张搬运对 6 张上架，原因很简单：<strong>一个托盘上堆了两个箱子</strong>。
+      LP-0001 上放着 CT-0021 和 CT-0045，LP-0005 上放着 CT-0023 和 CT-0047。
+      搬的时候按托盘走，一趟搬两个箱子；上架的时候按箱子走，一个箱子一张活，各自落到不同库位。
+    </p>
+
+    <div class="tip">
+      <b>为什么不能合成一张表：</b>搬运的计量单位是托盘，上架的计量单位是箱子。
+      混在一张表里，进度就没法算——搬完了但没上架，进度该显示百分之几？
+    </div>
+
+    <h3>拆的时候三条硬规矩</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="width:170px">规矩</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td>数量守恒</td><td>拆出来的各行计划量加起来，必须等于单据那一行的数量。少一件或多一件都是错</td></tr>
+          <tr><td>只出整数</td><td>除不尽按尾差策略分：均摊余数、尾差进最后一份、尾差进第一份。三选一，不许出现小数</td></tr>
+          <tr><td>带得住父引用</td><td>每张活都要记住自己是哪张单、哪一行、拆第几份。上卷下钻都靠它</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>两个需要拍板的口径</h3>
+    <div class="qa">
+      <div class="qa-row">
+        <div class="qn">Q1</div>
+        <div class="qb">
+          <b>搬运子任务和移库子任务，是一张表还是两张表？</b>
+          <p>建议两张。<b>搬运</b>是上架单派生出来的，从收货暂存位搬到落位，中途由托盘承载；
+          <b>移库</b>是移库单或调整任务派生出来的，从储位搬到另一个储位。两者的起点、终点、计量单位、生命周期都不同。
+          现在混在一张表里，已经出现状态口径打架的问题。</p>
+        </div>
+      </div>
+      <div class="qa-row">
+        <div class="qn">Q2</div>
+        <div class="qb">
+          <b>工序编排是按仓配，还是整个主体共用一套？</b>
+          <p>建议按仓配。同一个主体下，有的仓整托上架、有的仓拆零上架，链路长度都不一样。
+          共用一套的话，改一个仓会牵动全部仓。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section id="s4">
+    <h2 class="sec"><span class="num">4</span>活派下去之后，人怎么干</h2>
+    <p class="sec-sub">动作是这个系统最贴现场的一层。它决定了防错能做到什么程度。</p>
+
+    <h3>动作不是一个名字，是一组定义</h3>
+    <p>每个动作至少要说清四件事，缺一件就退化成「点一下算完成」：</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="width:120px">要素</th><th>举例</th></tr></thead>
+        <tbody>
+          <tr><td>输入什么</td><td>扫描库位码、输入数量、选择包装材料、拍摄破损照片</td></tr>
+          <tr><td>校验什么</td><td>库位属于本任务且容量够、SKU 在源库位且批次一致、数量不超过应做量</td></tr>
+          <tr><td>留什么证据</td><td>扫描流水、数量记录、照片与时间、交接单签署</td></tr>
+          <tr><td>要不要设备能力</td><td>要有扫描头、要能打印、要能称重、要能拍照</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>同一道工序，人和设备走的步数不一样</h3>
+    <p>以移库为例，两种执行方式需要的动作序列不同：</p>
+    <div class="split-demo">
+      <div>
+        <h5>人 + 手持终端　10 步</h5>
+        <ul class="tree2">
+          <li>1 领取移库任务</li>
+          <li>2 扫描容器码</li>
+          <li>3 扫描托盘码</li>
+          <li>4 容器装载到托盘</li>
+          <li>5 扫描源暂存位</li>
+          <li class="lv2">… 后续含搬运、扫描目标库位、提交</li>
+        </ul>
+      </div>
+      <div>
+        <h5>自动叉车　7 步</h5>
+        <ul class="tree2">
+          <li>1 接收调度任务</li>
+          <li>2 读取容器绑定</li>
+          <li>3 举升取货</li>
+          <li>4 移动到落位</li>
+          <li class="lv2">… 后续含落位回传、任务完成</li>
+        </ul>
+      </div>
+    </div>
+    <p>
+      人不做「举升取货」「读取容器绑定」这类机器动作，机器也不做「容器装载到托盘」这类需人判断的动作。
+      这就是为什么一道工序需要多套动作模板，按执行单元类型分。
+    </p>
+
+    <h3>四条防错底线</h3>
+    <div class="grid g2">
+      <div class="card">
+        <h4>不许跳步</h4>
+        <p>前一步没过，后一步点不动。没扫源库位就扫目标位，直接拦住。</p>
+      </div>
+      <div class="card">
+        <h4>不许静默放行</h4>
+        <p>校验不通过必须说清是哪一项不过，而不是弹个「操作失败」让人自己猜。</p>
+      </div>
+      <div class="card">
+        <h4>缺证据不许提交</h4>
+        <p>该拍照没拍、该扫码没扫，任务提交不了。防的是事后扯不清。</p>
+      </div>
+      <div class="card">
+        <h4>断网能继续干</h4>
+        <p>库区信号弱是常态。动作先存本地，恢复后按顺序补传，冲突的留给人处置。</p>
+      </div>
+    </div>
+
+    <div class="note">
+      <b>动作要发快照。</b>活派下去的时候，把这套动作序列复制一份跟着任务走。
+      之后动作库怎么改，都不影响已经在做的活。否则改一次配置，正在进行的任务记录就对不上了。
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section id="s5">
+    <h2 class="sec"><span class="num">5</span>派给谁</h2>
+    <p class="sec-sub">派工两种模式并存，人员派工优先。</p>
+
+    <div class="vs">
+      <div>
+        <h4>系统派工</h4>
+        <ul>
+          <li>先按这道工序要求的能力过滤，能力不符的不进候选</li>
+          <li>再按权重算分，分高的先派</li>
+          <li>没有合适的人就留着，进缺口清单</li>
+        </ul>
+      </div>
+      <div>
+        <h4>人员派工</h4>
+        <ul>
+          <li>派工员直接指定某个人</li>
+          <li>必须填原因，留痕</li>
+          <li>改派要通知原来的人</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>系统派工看什么</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="width:110px">对象</th><th>考量项</th><th style="width:170px">为什么</th></tr></thead>
+        <tbody>
+          <tr><td>人</td><td>手上活的多少、是否在这个区域、是否接着做同一类活、排队情况、是否当班</td><td>人跑动有成本，换区域要走路</td></tr>
+          <tr><td>设备</td><td>负荷、区域、排队</td><td>设备的区域基本固定，连续性是主要考量</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      另外两条：<strong>资源紧张时加惩罚分</strong>，避免把唯一能干的设备占满；
+      <strong>同分按任务号排</strong>，保证同一个场景重算两次结果一样，便于复盘。
+    </p>
+
+    <h3>三条不能破的规矩</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="width:200px">规矩</th><th>原因</th></tr></thead>
+        <tbody>
+          <tr><td>一个人同一时刻只有一张在办的活</td><td>一手一设备，物理上不可能同时在两个库区作业。多发会让负荷统计全部失真</td></tr>
+          <tr><td>没有合适的人就留着，不硬派</td><td>派给能力不够的人，最后还是要改派，等于干了两次</td></tr>
+          <tr><td>执行中的活不能随单据作废一起消失</td><td>货可能已经搬了一半，必须先把这张活结掉</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section id="s6">
+    <h2 class="sec"><span class="num">6</span>一张活的一生：六个状态</h2>
+    <p class="sec-sub">状态只能往前走，不能倒回去。倒回去意味着已经发生的作业要撤销。</p>
+
+    <div class="stategrid">
+      <div class="st-box"><span class="badge">起点</span><b>待派</b><small>单据审核拆出来的，还没分给谁</small></div>
+      <div class="st-box"><span class="badge">已分</span><b>待接</b><small>已经派给某人，人还没开工</small></div>
+      <div class="st-box"><span class="badge">在做</span><b>执行中</b><small>人接了，正在按动作一步步走</small></div>
+      <div class="st-box"><span class="badge">卡住</span><b>异常</b><small>报了异常，等人处置。可以解决后回到执行中</small></div>
+      <div class="st-box"><span class="badge">终点</span><b>已完成</b><small>动作全部通过，证据齐全，已过账</small></div>
+      <div class="st-box"><span class="badge">终点</span><b>已取消</b><small>单据作废或计划变更。必须填原因</small></div>
+    </div>
+
+    <h3>状态和派工进度必须自洽</h3>
+    <p>
+      这两个字段各记各的，很容易打架。比如状态还是「待派」，派工进度却写着「已完成」——
+      这种数据一出现，所有统计都要重新人工对齐。所以定了对照关系：
+    </p>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="width:130px">任务状态</th><th style="width:250px">允许的派工进度</th><th style="width:120px">作业员</th></tr></thead>
+        <tbody>
+          <tr><td>待派</td><td>待派、已退回</td><td>空</td></tr>
+          <tr><td>待接</td><td>已下发待接收、已推送待领取</td><td>必须有</td></tr>
+          <tr><td>执行中</td><td>已接受、执行中</td><td>必须有</td></tr>
+          <tr><td>异常</td><td>异常挂起</td><td>必须有</td></tr>
+          <tr><td>已完成</td><td>已完成、回报完成</td><td>必须有</td></tr>
+          <tr><td>已取消</td><td>任意</td><td>可空</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip">
+      <b>这一条建议做成构建期校验。</b>数据不自洽时直接让构建失败，而不是等页面显示出来再人工发现。
+      现有数据里已经出现「未终态却标已完成」4 条、「已推送待领取却无人」6 条。
+    </div>
+
+    <h3>异常要闭环</h3>
+    <div class="chain">
+      <span class="node">作业员上报</span><span class="arw">→</span>
+      <span class="node is-key">任务转异常</span><span class="arw">→</span>
+      <span class="node">主管接管</span><span class="arw">→</span>
+      <span class="node is-key">填处置说明</span><span class="arw">→</span>
+      <span class="node">结案或退回</span>
+    </div>
+    <p>
+      关闭异常必须填处置说明。<strong>没有说明的关闭不算关闭</strong>，只能算「看过了」。
+      现有 25 条异常里只有 1 条写了处置说明，这就是为什么异常数据没法用来复盘。
+    </p>
+  </section>
+
+  <!-- 7 -->
+  <section id="s7">
+    <h2 class="sec"><span class="num">7</span>看板怎么算</h2>
+    <p class="sec-sub">看板只做一件事：让人知道今天先干什么。它不负责好看。</p>
+
+    <h3>两种视图，各答一个问题</h3>
+    <div class="vs">
+      <div>
+        <h4>单仓视图</h4>
+        <ul>
+          <li>给仓主管和派工员</li>
+          <li>答：今天我该先处理什么</li>
+          <li>内容：异常队列、待指派、超期清单、三类工序负载</li>
+        </ul>
+      </div>
+      <div>
+        <h4>全网视图</h4>
+        <ul>
+          <li>给总部和区域</li>
+          <li>答：哪几个仓在恶化，缺口在哪</li>
+          <li>内容：仓间对比、覆盖缺口、偏离预警</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="note">
+      <b>同源同式。</b>两个视图必须用同一套公式。汇总层只做加权合并，不重新定义指标。
+      否则单仓和总部会算出两个数，一旦出现两个数，整套指标就不再被信任。
+    </div>
+
+    <h3>跨仓比较的三条底线</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="width:150px">底线</th><th>做法</th><th style="width:230px">理由</th></tr></thead>
+        <tbody>
+          <tr><td>先归一化</td><td>不比「谁活多」，比「未终态任务除以在岗单元」</td><td>仓的规模差一个量级，绝对数没有意义</td></tr>
+          <tr><td>同行分组</td><td>有执行单元的实体仓一组；虚拟仓、三方仓单列</td><td>零单元的仓不是效率问题，是配置缺口</td></tr>
+          <tr><td>比改善幅度</td><td>看环比变化和组内位置，不排名绝对值</td><td>排名会迅速从找问题变成找理由</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>现有五个仓的真实情况</h3>
+    <p>这张表本身就是跨仓监管的雏形。它暴露的第一个结论不是谁最能干，而是两个仓根本没有执行单元：</p>
+    <div class="tw">
+      <table>
+        <thead><tr>
+          <th style="width:120px">仓</th><th class="num">任务</th><th class="num">未终态</th>
+          <th class="num">异常</th><th class="num">待指派</th><th class="num">在岗单元</th><th class="num">负荷比</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>华东仓</td><td class="num">67</td><td class="num">26</td><td class="num">10</td><td class="num">2</td><td class="num">51</td><td class="num">0.51</td></tr>
+          <tr><td>华南仓</td><td class="num">37</td><td class="num">27</td><td class="num">8</td><td class="num">4</td><td class="num">22</td><td class="num">1.23</td></tr>
+          <tr><td>华北仓</td><td class="num">20</td><td class="num">15</td><td class="num">2</td><td class="num">3</td><td class="num">12</td><td class="num">1.25</td></tr>
+          <tr><td>华西仓 <span class="tag warn">虚拟仓</span></td><td class="num">8</td><td class="num">5</td><td class="num">3</td><td class="num">1</td><td class="num">0</td><td class="num">—</td></tr>
+          <tr><td>西南仓 <span class="tag warn">三方仓</span></td><td class="num">4</td><td class="num">4</td><td class="num">2</td><td class="num">1</td><td class="num">0</td><td class="num">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      华东 0.51、华南 1.23、华北 1.25。华东人多活少，华南和华北一个人要顶一张多。
+      这个差距是真实的资源错配信号，比「谁完成得多」有用得多。
+    </p>
+
+    <div class="note">
+      <b>超期判定必须单一入口。</b>基准时间、临期阈值只能写在一个地方。
+      现在判定结果和截止时间对不上——77 条未终态任务里 31 条判定不一致，两个数各自为政。
+      这种状态下做出的准时率，跨仓一比就会把矛盾乘以仓数。
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section id="s8">
+    <h2 class="sec"><span class="num">8</span>结论与要定的四件事</h2>
+
+    <h3>结论</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="width:40px">#</th><th style="width:230px">结论</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>任务只能从单据长出来</td><td>没有来源单据的任务不成立，出问题查不到源头</td></tr>
+          <tr><td>2</td><td>建设顺序不可颠倒</td><td>单据 → 工序 → 任务 → 动作 → 看板。跳过任何一层，上面都是假数</td></tr>
+          <tr><td>3</td><td>一道工序按执行单元分多套动作</td><td>人和机器做的事不同，不能共用一套步骤</td></tr>
+          <tr><td>4</td><td>状态与派工进度须自洽</td><td>不自洽的数据会毁掉所有统计，建议构建期拦截</td></tr>
+          <tr><td>5</td><td>看板同源同式，比改善不比绝对值</td><td>跨仓规模差一个量级，排名没有意义</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>需要拍板的四件事</h3>
+    <div class="qa">
+      <div class="qa-row">
+        <div class="qn">一</div>
+        <div class="qb">
+          <b>五层链路的建设顺序与本期范围</b>
+          <p>建议先建单据层与配置层，两者同批；任务层与动作层紧随其后；看板放最后。
+          判断依据：前两层不成立时，任务层只能编数据，这在当前原型里已经得到验证。</p>
+        </div>
+      </div>
+      <div class="qa-row">
+        <div class="qn">二</div>
+        <div class="qb">
+          <b>搬运子任务与移库子任务是否分表</b>
+          <p>建议分开。两者起点终点、计量单位、生命周期都不同。混在一张表里已经造成状态口径打架。
+          一张上架单拆出 4 张搬运、6 张上架，本身就是两种粒度的证据。</p>
+        </div>
+      </div>
+      <div class="qa-row">
+        <div class="qn">三</div>
+        <div class="qb">
+          <b>派工规则与状态机</b>
+          <p>建议：两模式并存、人员派工优先、一人同时一张活、状态六态只向前。
+          派工权重按仓可配——不同仓的瓶颈不同，同一套权重套全主体会失真。</p>
+        </div>
+      </div>
+      <div class="qa-row">
+        <div class="qn">四</div>
+        <div class="qb">
+          <b>看板指标口径与跨仓监管方式</b>
+          <p>建议：超期判定取服务端实时时间、基准与阈值单点可查；单仓与全网同源同式；
+          跨仓只比改善幅度与组内位置，样本量小于五不进排名。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip">
+      <b>还有一件事需要业务确认：</b>超期判定用实时时间还是固定快照。
+      演示包里用的是固定快照，生产环境必须用实时时间，否则隔夜打开看板，所有任务都显示超期。
+    </div>
+  </section>
+
+  <footer>
+    <div>西之月 WMS · 任务中心 · 2026-10-30 · 单文件零外链</div>
+    <div class="links">
+      <a href="../PRD/任务中心PRD.md">任务中心需求文档</a>
+      <a href="任务中心看板调研.html">看板行业调研与跨仓监管</a>
+      <a href="任务中心看板-跨仓指标口径表.md">跨仓指标口径定义表</a>
+    </div>
+  </footer>
+
+</div>
+
+</body>
+</html>

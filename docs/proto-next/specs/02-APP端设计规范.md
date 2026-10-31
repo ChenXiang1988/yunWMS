@@ -1,8 +1,7 @@
 # APP 端（手持）设计规范
 
 > 适用范围：所有手持端原型（`proto-next/app/`）与手持汇报 / 演示 HTML。
-> 资料来源：`pda-ui-tokens.json`（同目录，结构化令牌 v2.0.0，唯一权威来源）。
-> 原引用的 `../pda-原型骨架.html` 在本仓库中不存在，视觉基线改为以 `app/src/app-shell.mjs` 的 `:root` 块为准。
+> 资料来源：`../pda-ui-tokens.json`（结构化令牌 v2.0.0，唯一权威来源）+ `../pda-原型骨架.html`（视觉基线）。
 
 ## 1. 设计令牌（节选自 pda-ui-tokens.json）
 
