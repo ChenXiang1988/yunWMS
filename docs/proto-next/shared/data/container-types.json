@@ -1,0 +1,399 @@
+[
+  {
+    "typeCode": "pallet",
+    "typeName": "托盘",
+    "prefix": "LP",
+    "physicalClass": "托盘",
+    "level": 2,
+    "loadable": "是",
+    "canContain": "是",
+    "allowedChildTypes": [
+      "tote-s",
+      "tote-m",
+      "tote-80",
+      "tote-l",
+      "carton-s",
+      "carton-l",
+      "pick-bin"
+    ],
+    "allowedChildTypesLabel": "周转箱（40L）、周转箱（60L）、周转箱（80L）、周转箱（120L）、纸皮箱（小）、纸皮箱（大）、拣选筐",
+    "bindable": "是",
+    "assetTracked": "是",
+    "capacityL": "",
+    "maxLoadKg": 1200,
+    "stackLayers": 3,
+    "processes": [
+      "存储",
+      "搬运",
+      "上架",
+      "移库"
+    ],
+    "processLabel": "存储、搬运、上架、移库",
+    "enabled": "是",
+    "sortNo": 10,
+    "logs": [
+      {
+        "time": "2026-10-19 09:00",
+        "text": "容器台账统一：登记为容器类型「托盘」",
+        "by": "陈明"
+      }
+    ],
+    "updatedAt": "2026-10-19 09:00",
+    "updatedBy": "陈明"
+  },
+  {
+    "typeCode": "cage",
+    "typeName": "笼车",
+    "prefix": "LP",
+    "physicalClass": "笼车",
+    "level": 2,
+    "loadable": "是",
+    "canContain": "是",
+    "allowedChildTypes": [
+      "tote-s",
+      "tote-m",
+      "tote-80",
+      "tote-l",
+      "carton-s",
+      "carton-l",
+      "pick-bin"
+    ],
+    "allowedChildTypesLabel": "周转箱（40L）、周转箱（60L）、周转箱（80L）、周转箱（120L）、纸皮箱（小）、纸皮箱（大）、拣选筐",
+    "bindable": "否",
+    "assetTracked": "是",
+    "capacityL": "",
+    "maxLoadKg": 500,
+    "stackLayers": 2,
+    "processes": [
+      "存储",
+      "搬运",
+      "上架",
+      "移库"
+    ],
+    "processLabel": "存储、搬运、上架、移库",
+    "enabled": "是",
+    "sortNo": 20,
+    "logs": [
+      {
+        "time": "2026-10-19 09:00",
+        "text": "容器台账统一：登记为容器类型「笼车」",
+        "by": "陈明"
+      }
+    ],
+    "updatedAt": "2026-10-19 09:00",
+    "updatedBy": "陈明"
+  },
+  {
+    "typeCode": "rack-mobile",
+    "typeName": "移动料架",
+    "prefix": "LP",
+    "physicalClass": "移动料架",
+    "level": 2,
+    "loadable": "是",
+    "canContain": "是",
+    "allowedChildTypes": [
+      "tote-s",
+      "tote-m",
+      "tote-80",
+      "tote-l",
+      "pick-bin",
+      "carton-s",
+      "carton-l"
+    ],
+    "allowedChildTypesLabel": "周转箱（40L）、周转箱（60L）、周转箱（80L）、周转箱（120L）、拣选筐、纸皮箱（小）、纸皮箱（大）",
+    "bindable": "否",
+    "assetTracked": "是",
+    "capacityL": "",
+    "maxLoadKg": 300,
+    "stackLayers": 4,
+    "processes": [
+      "存储",
+      "搬运",
+      "上架",
+      "移库"
+    ],
+    "processLabel": "存储、搬运、上架、移库",
+    "enabled": "是",
+    "sortNo": 30,
+    "logs": [
+      {
+        "time": "2026-10-19 09:00",
+        "text": "容器台账统一：登记为容器类型「移动料架」",
+        "by": "陈明"
+      }
+    ],
+    "updatedAt": "2026-10-19 09:00",
+    "updatedBy": "陈明"
+  },
+  {
+    "typeCode": "cart",
+    "typeName": "拣选车",
+    "prefix": "LP",
+    "physicalClass": "拣选车",
+    "level": 2,
+    "loadable": "否",
+    "canContain": "是",
+    "allowedChildTypes": [
+      "pick-bin",
+      "tote-s",
+      "tote-m",
+      "tote-80",
+      "tote-l"
+    ],
+    "allowedChildTypesLabel": "拣选筐、周转箱（40L）、周转箱（60L）、周转箱（80L）、周转箱（120L）",
+    "bindable": "是",
+    "assetTracked": "是",
+    "capacityL": "",
+    "maxLoadKg": 500,
+    "stackLayers": 4,
+    "processes": [
+      "拣选",
+      "打包交接",
+      "移库"
+    ],
+    "processLabel": "拣选、打包交接、移库",
+    "enabled": "是",
+    "sortNo": 40,
+    "logs": [
+      {
+        "time": "2026-10-19 09:00",
+        "text": "容器台账统一：登记为容器类型「拣选车」",
+        "by": "陈明"
+      }
+    ],
+    "updatedAt": "2026-10-19 09:00",
+    "updatedBy": "陈明"
+  },
+  {
+    "typeCode": "tote-s",
+    "typeName": "周转箱（40L）",
+    "prefix": "CT",
+    "physicalClass": "周转箱",
+    "level": 1,
+    "loadable": "是",
+    "canContain": "否",
+    "allowedChildTypes": [],
+    "allowedChildTypesLabel": "",
+    "bindable": "否",
+    "assetTracked": "是",
+    "capacityL": 40,
+    "maxLoadKg": 25,
+    "stackLayers": 6,
+    "processes": [
+      "拣选",
+      "补货暂存",
+      "移库暂存",
+      "异常暂存"
+    ],
+    "processLabel": "拣选、补货暂存、移库暂存、异常暂存",
+    "enabled": "是",
+    "sortNo": 50,
+    "logs": [
+      {
+        "time": "2026-10-19 09:00",
+        "text": "容器台账统一：登记为容器类型「周转箱（40L）」",
+        "by": "陈明"
+      }
+    ],
+    "updatedAt": "2026-10-19 09:00",
+    "updatedBy": "陈明"
+  },
+  {
+    "typeCode": "tote-m",
+    "typeName": "周转箱（60L）",
+    "prefix": "CT",
+    "physicalClass": "周转箱",
+    "level": 1,
+    "loadable": "是",
+    "canContain": "否",
+    "allowedChildTypes": [],
+    "allowedChildTypesLabel": "",
+    "bindable": "否",
+    "assetTracked": "是",
+    "capacityL": 60,
+    "maxLoadKg": 30,
+    "stackLayers": 8,
+    "processes": [
+      "拣选",
+      "补货暂存",
+      "移库暂存",
+      "异常暂存"
+    ],
+    "processLabel": "拣选、补货暂存、移库暂存、异常暂存",
+    "enabled": "是",
+    "sortNo": 60,
+    "logs": [
+      {
+        "time": "2026-10-19 09:00",
+        "text": "容器台账统一：登记为容器类型「周转箱（60L）」",
+        "by": "陈明"
+      }
+    ],
+    "updatedAt": "2026-10-19 09:00",
+    "updatedBy": "陈明"
+  },
+  {
+    "typeCode": "tote-80",
+    "typeName": "周转箱（80L）",
+    "prefix": "CT",
+    "physicalClass": "周转箱",
+    "level": 1,
+    "loadable": "是",
+    "canContain": "否",
+    "allowedChildTypes": [],
+    "allowedChildTypesLabel": "",
+    "bindable": "否",
+    "assetTracked": "是",
+    "capacityL": 80,
+    "maxLoadKg": 40,
+    "stackLayers": 5,
+    "processes": [
+      "拣选",
+      "补货暂存",
+      "移库暂存",
+      "异常暂存"
+    ],
+    "processLabel": "拣选、补货暂存、移库暂存、异常暂存",
+    "enabled": "是",
+    "sortNo": 70,
+    "logs": [
+      {
+        "time": "2026-10-19 09:00",
+        "text": "容器台账统一：登记为容器类型「周转箱（80L）」",
+        "by": "陈明"
+      }
+    ],
+    "updatedAt": "2026-10-19 09:00",
+    "updatedBy": "陈明"
+  },
+  {
+    "typeCode": "tote-l",
+    "typeName": "周转箱（120L）",
+    "prefix": "CT",
+    "physicalClass": "周转箱",
+    "level": 1,
+    "loadable": "是",
+    "canContain": "否",
+    "allowedChildTypes": [],
+    "allowedChildTypesLabel": "",
+    "bindable": "否",
+    "assetTracked": "是",
+    "capacityL": 120,
+    "maxLoadKg": 50,
+    "stackLayers": 4,
+    "processes": [
+      "拣选",
+      "补货暂存",
+      "移库暂存",
+      "异常暂存"
+    ],
+    "processLabel": "拣选、补货暂存、移库暂存、异常暂存",
+    "enabled": "是",
+    "sortNo": 80,
+    "logs": [
+      {
+        "time": "2026-10-19 09:00",
+        "text": "容器台账统一：登记为容器类型「周转箱（120L）」",
+        "by": "陈明"
+      }
+    ],
+    "updatedAt": "2026-10-19 09:00",
+    "updatedBy": "陈明"
+  },
+  {
+    "typeCode": "pick-bin",
+    "typeName": "拣选筐",
+    "prefix": "CT",
+    "physicalClass": "拣选筐",
+    "level": 1,
+    "loadable": "是",
+    "canContain": "否",
+    "allowedChildTypes": [],
+    "allowedChildTypesLabel": "",
+    "bindable": "否",
+    "assetTracked": "是",
+    "capacityL": 30,
+    "maxLoadKg": 12,
+    "stackLayers": 5,
+    "processes": [
+      "拣选",
+      "待返库上架"
+    ],
+    "processLabel": "拣选、待返库上架",
+    "enabled": "是",
+    "sortNo": 90,
+    "logs": [
+      {
+        "time": "2026-10-19 09:00",
+        "text": "容器台账统一：登记为容器类型「拣选筐」",
+        "by": "陈明"
+      }
+    ],
+    "updatedAt": "2026-10-19 09:00",
+    "updatedBy": "陈明"
+  },
+  {
+    "typeCode": "carton-s",
+    "typeName": "纸皮箱（小）",
+    "prefix": "BOX",
+    "physicalClass": "纸皮箱",
+    "level": 1,
+    "loadable": "是",
+    "canContain": "否",
+    "allowedChildTypes": [],
+    "allowedChildTypesLabel": "",
+    "bindable": "否",
+    "assetTracked": "否",
+    "capacityL": 40,
+    "maxLoadKg": 15,
+    "stackLayers": 5,
+    "processes": [
+      "收货暂存",
+      "打包"
+    ],
+    "processLabel": "收货暂存、打包",
+    "enabled": "是",
+    "sortNo": 100,
+    "logs": [
+      {
+        "time": "2026-10-19 09:00",
+        "text": "容器台账统一：登记为容器类型「纸皮箱（小）」",
+        "by": "陈明"
+      }
+    ],
+    "updatedAt": "2026-10-19 09:00",
+    "updatedBy": "陈明"
+  },
+  {
+    "typeCode": "carton-l",
+    "typeName": "纸皮箱（大）",
+    "prefix": "BOX",
+    "physicalClass": "纸皮箱",
+    "level": 1,
+    "loadable": "是",
+    "canContain": "否",
+    "allowedChildTypes": [],
+    "allowedChildTypesLabel": "",
+    "bindable": "否",
+    "assetTracked": "否",
+    "capacityL": 80,
+    "maxLoadKg": 20,
+    "stackLayers": 4,
+    "processes": [
+      "收货暂存",
+      "打包"
+    ],
+    "processLabel": "收货暂存、打包",
+    "enabled": "是",
+    "sortNo": 110,
+    "logs": [
+      {
+        "time": "2026-10-19 09:00",
+        "text": "容器台账统一：登记为容器类型「纸皮箱（大）」",
+        "by": "陈明"
+      }
+    ],
+    "updatedAt": "2026-10-19 09:00",
+    "updatedBy": "陈明"
+  }
+]
