@@ -1,0 +1,67 @@
+[
+ {
+  "id": "DT-0001",
+  "fromWarehouse": "华东仓",
+  "toWarehouse": "华南仓",
+  "initiator": "陈明",
+  "createdAt": "2026-10-29 10:00",
+  "status": "待接收",
+  "lines": [
+   {
+    "hardwareId": "PDA-08",
+    "modelCode": "PDA-DT40",
+    "lineStatus": "待接收"
+   }
+  ]
+ },
+ {
+  "id": "DT-0002",
+  "fromWarehouse": "华东仓",
+  "toWarehouse": "华北仓",
+  "initiator": "陈明",
+  "createdAt": "2026-10-29 09:30",
+  "status": "待调出",
+  "lines": [
+   {
+    "hardwareId": "PDA-11",
+    "modelCode": "PDA-DT40",
+    "lineStatus": "待调出"
+   }
+  ]
+ },
+ {
+  "id": "DT-0003",
+  "fromWarehouse": "华南仓",
+  "toWarehouse": "华北仓",
+  "initiator": "陈明",
+  "createdAt": "2026-10-29 11:20",
+  "status": "待调出",
+  "lines": [
+   {
+    "hardwareId": "PHONE-03",
+    "modelCode": "AND-A15",
+    "lineStatus": "待调出"
+   },
+   {
+    "hardwareId": "PDA-12",
+    "modelCode": "PDA-DT40",
+    "lineStatus": "待调出"
+   }
+  ]
+ },
+ {
+  "id": "DT-0005",
+  "fromWarehouse": "华北仓",
+  "toWarehouse": "华东仓",
+  "initiator": "陈明",
+  "createdAt": "2026-10-28 16:40",
+  "status": "已完成",
+  "lines": [
+   {
+    "hardwareId": "PHONE-06",
+    "modelCode": "AND-A15",
+    "lineStatus": "已完成"
+   }
+  ]
+ }
+]
