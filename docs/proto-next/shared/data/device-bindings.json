@@ -1,0 +1,28 @@
+[
+ {
+  "id": "BD-0001",
+  "accountId": "EMP-090",
+  "accountName": "刘磊",
+  "deviceName": "手持终端 PDA-90",
+  "form": "手机",
+  "appUuid": "uuid-pda-90-a1b2c3",
+  "os": "Android",
+  "firstBindAt": "2026-10-29 08:00",
+  "lastLoginAt": "2026-10-29 09:12",
+  "status": "已启用",
+  "note": "员工自带手机。不进硬件档案，不占资产编号。"
+ },
+ {
+  "id": "BD-0002",
+  "accountId": "EMP-091",
+  "accountName": "刘艳",
+  "deviceName": "手持终端 PDA-91",
+  "form": "手机",
+  "appUuid": "uuid-pda-91-a1b2c3",
+  "os": "Android",
+  "firstBindAt": "2026-10-29 08:00",
+  "lastLoginAt": "2026-10-29 09:12",
+  "status": "已启用",
+  "note": "员工自带手机。不进硬件档案，不占资产编号。"
+ }
+]
