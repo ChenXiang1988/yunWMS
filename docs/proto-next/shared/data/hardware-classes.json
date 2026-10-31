@@ -1,0 +1,93 @@
+[
+ {
+  "code": "HW-PRINTER",
+  "name": "打印机",
+  "capability": "打印",
+  "channel": "本地",
+  "adapter": "c-lodop-v1",
+  "dispatchable": false,
+  "evidenceType": "标签号",
+  "fallback": "手写标签",
+  "note": "三形态接入：USB 接 PC、网口/WiFi 直连、云打印。后两者不依赖 PC。",
+  "surface": "peripheral",
+  "inScope": true
+ },
+ {
+  "code": "HW-PDA",
+  "name": "PDA",
+  "capability": "扫描、拍照",
+  "channel": "局域网",
+  "adapter": "pda-app-v1",
+  "dispatchable": false,
+  "evidenceType": "扫描流水",
+  "fallback": "手工录入",
+  "note": "含安卓手机与 PDA，同属作业终端。受管设备可读 IMEI，自带设备用应用 UUID。",
+  "surface": "device",
+  "inScope": true
+ },
+ {
+  "code": "HW-CAMERA",
+  "name": "摄像头",
+  "capability": "取证",
+  "channel": "厂商",
+  "adapter": "video-service-v1",
+  "dispatchable": false,
+  "evidenceType": "媒体号",
+  "fallback": "人工拍照",
+  "note": "走外部视频服务商接口，不自建监控管理。",
+  "surface": "peripheral",
+  "inScope": true
+ },
+ {
+  "code": "HW-SCALE",
+  "name": "称重机",
+  "capability": "称重",
+  "channel": "本地",
+  "adapter": "scale-driver-v1",
+  "dispatchable": false,
+  "evidenceType": "重量",
+  "fallback": "复核或称重",
+  "note": "串口或 USB 接 PC；称重前看校准状态。",
+  "surface": "peripheral",
+  "inScope": true
+ },
+ {
+  "code": "HW-AGV",
+  "name": "AGV",
+  "capability": "搬运",
+  "channel": "局域网",
+  "adapter": "agv-fleet-v1",
+  "dispatchable": true,
+  "evidenceType": "到达节点",
+  "fallback": "转人工叉车",
+  "note": "本期出界。仅保留历史数据，不纳入设备管理范围。",
+  "surface": "out",
+  "inScope": false
+ },
+ {
+  "code": "HW-PC",
+  "name": "PC",
+  "capability": "打印、扫码、称重、取证",
+  "channel": "PC 代理",
+  "adapter": "pc-agent-v1",
+  "dispatchable": true,
+  "evidenceType": "扫描流水、标签号、重量、媒体号",
+  "fallback": "人工复核",
+  "surface": "device",
+  "note": "工位主机；USB 形态打印机与固定外设的接入代理。",
+  "inScope": true
+ },
+ {
+  "code": "HW-SCANNER",
+  "name": "固定扫码枪",
+  "capability": "扫描",
+  "channel": "USB-HID",
+  "adapter": "hid-scanner-v1",
+  "dispatchable": false,
+  "evidenceType": "扫描流水",
+  "fallback": "手工录入",
+  "surface": "peripheral",
+  "note": "USB-HID 接 PC，不直连系统。",
+  "inScope": true
+ }
+]
